@@ -29,14 +29,11 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn draft(&self) -> UserSettings {
-        (self.page.draft())()
+        self.page.draft()
     }
 
     pub(crate) fn update_draft(&self, update: impl FnOnce(&mut UserSettings)) {
-        let mut draft = self.page.draft();
-        let mut next = draft();
-        update(&mut next);
-        draft.set(next);
+        self.page.edit(update);
     }
 
     pub(crate) fn custom_css(&self) -> String {

@@ -1,0 +1,13 @@
+{
+  "base_sha": "88b6abb32b992c7b19bb81ff5718ebb4cd8a6be1",
+  "workdir": "E:\\gitclone\\RSS-Reader",
+  "source_sha256": {
+    "crates/rssr-infra/src/config_sync/webdav.rs": "11097f659cf3be8287f94cb9858a3cb5212171729f4c44d69a46b7ddf0c21612",
+    "crates/rssr-infra/src/fetch/client/body_asset_localizer.rs": "06ceda39bf722dc6491331f3f4a34bfc85b6e9263cd2e71fbd8f5d54e87b7ff4",
+    "crates/rssr-infra/tests/support/request_capture.rs": "3d53c9a95d9fc8ca73a87bbb84a3bc7c7961d071c602e37b6d4ac56039fbd94f",
+    "crates/rssr-infra/tests/test_native_outbound_requests.rs": "6a88c6c98f668d750c89c3cc01ad3a2014da381ef9d63e6554514c39d8e52b12",
+    "crates/rssr-infra/tests/test_webdav_local_roundtrip.rs": "c84430ce3537f95554239c7eaf3f4c89cb677dd8435f08d798cf442d9e4f6832"
+  },
+  "note": "Checks ran with these working-tree contents before committing. Aggregate git HEAD field is the base, not a clean-baseline test.",
+  "implementation_commit": "0bad743876b1e150680b4aa43f1d34c49623c378"
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "name": "workspace-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 203.39,
+    "status": "passed"
+  },
+  {
+    "name": "wasm-check",
+    "command": [
+      "cargo",
+      "check",
+      "-p",
+      "rssr-app",
+      "--target",
+      "wasm32-unknown-unknown",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 74.59,
+    "status": "passed"
+  },
+  {
+    "name": "android-check",
+    "command": [
+      "cargo",
+      "check",
+      "-p",
+      "rssr-app",
+      "--target",
+      "aarch64-linux-android",
+      "--locked"
+    ],
+    "exit_code": 0,
+    "seconds": 77.96,
+    "status": "passed"
+  },
+  {
+    "name": "aggregate",
+    "command": [
+      "cargo",
+      "run",
+      "--manifest-path",
+      "scripts/release-ui/Cargo.toml",
+      "--locked",
+      "--target-dir",
+      "target/release-ui-runner",
+      "--",
+      "--no-serve",
+      "--bash",
+      "C:/Users/QQ/scoop/apps/git/current/bin/bash.exe",
+      "--log-dir",
+      "target/outbound-security/aggregate"
+    ],
+    "exit_code": 0,
+    "seconds": 157.88,
+    "status": "passed"
+  }
+]

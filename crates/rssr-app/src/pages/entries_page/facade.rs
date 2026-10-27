@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::ui::AppShellState;
 use rssr_domain::{EntrySummary, ReadFilter, StarredFilter};
+use time::OffsetDateTime;
 
 use super::{
     groups::{EntryCardRef, EntryGroupNavItem, EntryMonthGroup, EntrySourceGroup},
@@ -19,6 +20,8 @@ pub(crate) struct EntriesPageFacade {
     session: EntriesPageSession,
     snapshot: Arc<EntriesPageState>,
     presenter: Arc<EntriesPagePresenter>,
+    /// 列表查询所用的“现在”；批量已读预览必须与屏幕上的列表用同一个归档分界。
+    query_now: OffsetDateTime,
 }
 
 impl EntriesPageFacade {
@@ -42,7 +45,7 @@ impl EntriesPageFacade {
         self.session.preview_mark_read(self.snapshot.entry_query(
             self.session.feed_id(),
             search,
-            super::clock::current_time_utc(),
+            self.query_now,
         ));
     }
 
@@ -53,8 +56,9 @@ impl EntriesPageFacade {
         session: EntriesPageSession,
         snapshot: Arc<EntriesPageState>,
         presenter: Arc<EntriesPagePresenter>,
+        query_now: OffsetDateTime,
     ) -> Self {
-        Self { ui, session, snapshot, presenter }
+        Self { ui, session, snapshot, presenter, query_now }
     }
 
     pub(crate) fn entry_search(&self) -> String {
@@ -236,6 +240,18 @@ impl EntriesPageFacade {
         super::directory::DirectoryModel(Arc::clone(&self.presenter))
     }
 
+    /// 匹配的文章多于列表返回的上限。
+    pub(crate) fn entries_truncated(&self) -> bool {
+        self.presenter.truncated
+    }
+
+    pub(crate) fn truncated_entries_message(&self) -> String {
+        format!(
+            "只显示最新的 {} 篇文章，请用筛选或搜索缩小范围。",
+            rssr_application::MAX_LISTED_ENTRIES
+        )
+    }
+
     pub(crate) fn archived_entries_message(&self) -> String {
         format!(
             "当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。",
@@ -243,7 +259,7 @@ impl EntriesPageFacade {
         )
     }
 
-    pub(crate) fn source_filter_options(&self) -> &[(i64, String, String, u32)] {
+    pub(crate) fn source_filter_options(&self) -> &[(i64, String, String, u64)] {
         &self.presenter.source_filter_options
     }
 
@@ -260,6 +276,15 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn empty_entries_message(&self) -> String {
+        if self.has_source_filter()
+            && super::state::map_selected_feed_urls_to_ids(
+                &self.snapshot.feeds,
+                self.selected_feed_urls(),
+            )
+            .is_empty()
+        {
+            return "所选来源都已删除，可清除筛选后查看全部文章。".into();
+        }
         if self.has_active_filters() {
             return "当前筛选没有匹配的文章，可清除筛选后查看。".into();
         }

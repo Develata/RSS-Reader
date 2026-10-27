@@ -51,7 +51,7 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 | `data-action="entry-page-previous"` / `entry-page-next` | 既有 Entries reducer 更新并限制页号，保持筛选和分组，滚至新页起点 |
 | `data-action="open-reader-image"` / `close-reader-image` | `ImageViewerState::Closed / Open`，复用已渲染图片地址；Esc、背景或 Android back 同样关闭 |
 
-手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新继续使用现有 host 调度；host capability 内的共享 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
+手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新由 `rssr_infra::local_backend` 的循环调度；其中共享的 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
 
 订阅探测与刷新在 infra 共用 8 MiB 响应限制，按解压后的流及转码后的 UTF-8 文本检查，超限走既有失败反馈并保留文章。SQLite 与 Web 的 `EntryContent.updated_at` 只在正文记录（含哈希）变化时更新；订阅刷新时间与文章索引更新时间仍正常更新。Web 仅在正文记录变化时发布正文片，逐订阅完整提交及新增数语义保持不变。没有新增 UI 命令或 `data-*` 接口。
 
@@ -71,7 +71,7 @@ Reader session 以 `entry_id + load_generation` 校验异步 UI 结果，切换�
 
 返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
 
-位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读区内无修饰键的左右方向键切文、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
+位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读页上无修饰键的 J / K 与左右方向键切文（输入框与可编辑区域内、图片查看器打开时除外）、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
 
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词与文章筛选折叠偏好保留。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
 
@@ -100,11 +100,11 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 
 四个主要页面的主标题为 `h1`，应用自身的小节标题按层级递进；Reader 正文中的来源 HTML 保留内容标题语义，不作为应用导航层级改写。字号由稳定的 `data-slot` 样式控制。
 
-`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / 左右方向键说明和可见焦点。快捷键仍限定在阅读区，带修饰键或输入法组合中的事件放行。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
+`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / J / K / 左右方向键说明和可见焦点。快捷键监听整个阅读页，不要求焦点在阅读区（`hooks/reader_shortcuts.js`）；输入框与可编辑区域内、带修饰键、输入法组合中、自动重复以及图片查看器打开时的事件放行。底栏固定在视口底部，渲染在阅读页之外，以免主题的 `backdrop-filter` 困住 fixed 定位。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
 
 动态操作结果使用持续挂载的 `StatusBanner` live region：`role="status"`、`aria-live="polite"`、`aria-atomic="true"`。空消息区域保留在可访问树中但不占布局空间；加载/成功/错误更新文本时不抢焦点。静态空列表或归档说明不参与播报。颜色状态继续使用 `data-state="info|success|error"`，不把错误色自动映射成打断式通知。
 
-Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region 呈现，正文不因成功提示重排；错误仍为可见状态条。上一 / 下一未读按钮及方向快捷键只选择未读目标，无目标时按钮禁用并提供 title 说明；同订阅文章导航沿用独立按钮，不作为未读操作的回退。
+Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region 呈现，正文不因成功提示重排；错误仍为可见状态条。标记命令携带目标值（`SetRead` / `SetStarred`），结果区分已改变、本来就是与文章不存在；文章不存在时以错误色调的可见状态条提示。上一 / 下一未读按钮及方向快捷键只选择未读目标，无目标时按钮禁用并提供 title 说明；同订阅文章导航沿用独立按钮，不作为未读操作的回退。
 
 - 标记已读 / 未读
 - 切换收藏
@@ -150,16 +150,19 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 
 - `rssr-cli list-feeds`
 - `rssr-cli add-feed <url>`
-- `rssr-cli remove-feed <feed-id>`
+- `rssr-cli remove-feed <feed-id> [--keep-entries]`
 - `rssr-cli refresh --all`
 - `rssr-cli refresh --feed-id <id>`
 
 `refresh` 必须且只能指定其中一个目标；参数无效时在打开本地数据库前退出。
 
+`remove-feed` 默认连同该订阅的文章一起删除；`--keep-entries` 只删订阅、保留已抓取的文章。
+
 ### 配置交换相关
 
 - `rssr-cli export-config [--output <path>]`
-- `rssr-cli import-config <file>`
+- 文章页的来源筛选：没有所选来源表示全部订阅；所选来源都已删除时结果为空并提示，批量已读不会扩大到全部订阅。按订阅打开文章页时单独记住“上次打开的订阅”。
+- `rssr-cli import-config <file>`（读取当前配置指纹后立即替换；界面的导入则携带订阅页快照的指纹，配置在载入后被改过时拒绝并重新载入）
 - `rssr-cli export-opml [--output <path>]`
 - `rssr-cli import-opml <file>`
 - `rssr-cli push-webdav <endpoint> <remote-path>`
@@ -179,7 +182,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `rssr-cli mark-read --all [筛选参数]` 或 `--feed-id <id>`（可重复）；默认只预览，加 `--yes` 执行。
 - 筛选参数为 `--search`、`--read-filter all|unread|read`、`--starred-filter all|starred|unstarred`、`--archive-filter active|all|archived`。
 - `add-feed <url>` 同样接受网站首页；多个候选列出 URL 后非零退出。`--skip-refresh` 仍验证订阅，只跳过文章入库。
-- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。
+- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。只提交给出的参数（设置补丁），未给出的字段保持资料库中的值；合并、校验与保存在同一次写入中完成。自定义 CSS 的三个参数同时给出时，文件优先于 `--custom-css`，再优先于 `--clear-custom-css`。
 - 当前参数定义与执行入口均在 `crates/rssr-cli/src/main.rs`，不存在独立 `args.rs`。
 
 ## 页面级接口

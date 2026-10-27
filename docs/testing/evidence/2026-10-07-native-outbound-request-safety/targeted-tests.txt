@@ -1,0 +1,84 @@
+   Compiling rssr-infra v0.1.0 (E:\gitclone\RSS-Reader\crates\rssr-infra)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.76s
+     Running unittests src\lib.rs (target\debug\deps\rssr_infra-1bbb51878cd18560.exe)
+
+running 49 tests
+test application_adapters::refresh::tests::refresh_entry_mapping_performance_probe ... ignored, explicit refresh adapter microbenchmark
+test config_sync::webdav::tests::webdav_origin_uses_parsed_scheme_host_and_effective_port ... ok
+test db::sqlite_native::tests::content_database_path_uses_sibling_file ... ok
+test db::sqlite_native::tests::append_content_suffix_preserves_extension ... ok
+test db::sqlite_native::tests::content_url_preserves_all_memory_spellings ... ok
+test db::sqlite_native::tests::database_path_uses_project_subdirectory ... ok
+test db::sqlite_native::tests::local_data_dir_is_the_directory_holding_the_database ... ok
+test feed_normalization::tests::missing_content_warning_aggregation_keeps_total_count_and_samples ... ok
+test fetch::client::body_asset_localizer::tests::build_localization_plan_detects_responsive_images ... ok
+test fetch::client::body_asset_localizer::tests::body_asset_localizer_default_matches_new ... ok
+test config_sync::webdav::tests::remote_url_joins_endpoint_and_path ... ok
+test config_sync::webdav::tests::remote_url_treats_endpoint_as_collection_without_trailing_slash ... ok
+test config_sync::webdav::tests::endpoint_without_credentials_stays_anonymous ... ok
+test config_sync::webdav::tests::credentials_are_taken_from_endpoint_and_stripped_from_url ... ok
+test config_sync::webdav::tests::percent_encoded_credentials_are_decoded ... ok
+test db::tests::memory_classification_uses_url_components ... ok
+test fetch::client::body_asset_localizer::tests::image_redirect_rejects_downgrade_and_userinfo_at_any_hop ... ok
+test fetch::client::body_asset_localizer::tests::image_referer_serializes_only_http_origins ... ok
+test config_sync::webdav::tests::webdav_relative_paths_preserve_url_resolution_without_decoding ... ok
+test fetch::client::body_asset_localizer::tests::normalize_image_content_type_delegates_to_html_module ... ok
+test fetch::client::body_asset_localizer::tests::reader_localizer_has_wider_budget_than_background ... ok
+test fetch::client::feed_response::tests::classify_feed_response_status_separates_not_modified_from_body_reads ... ok
+test fetch::client::feed_response::tests::http_metadata_from_headers_extracts_valid_cache_headers ... ok
+test config_sync::webdav::tests::webdav_ambiguous_paths_fail_without_including_input_in_errors ... ok
+test html::live_display::tests::document_prefers_img_src_over_srcset_for_display_candidate ... ok
+test html::live_display::tests::document_collects_img_and_prefers_lazy_sources ... ok
+test html::live_display::tests::document_skips_wordpress_emoji_assets_without_consuming_slots ... ok
+test html::live_display::tests::document_skips_placeholder_assets_and_counts_unsupported_markup ... ok
+test html::live_display::tests::document_supports_picture_and_base_href ... ok
+test html::live_display::tests::document_supports_unquoted_attributes_and_source_data_srcset ... ok
+test html::live_display::tests::document_tracks_unresolved_relative_sources_without_base ... ok
+test html::live_display::tests::document_uses_wordpress_display_src_instead_of_full_size_srcset_candidate ... ok
+test html::live_display::tests::normalize_image_content_type_only_accepts_images ... ok
+test html::live_display::tests::normalize_html_for_live_display_canonicalizes_polluted_alt_entities ... ok
+test html::live_display::tests::normalize_html_for_live_display_collapses_wordpress_img_to_single_display_source ... ok
+test html::live_display::tests::resolve_asset_url_rejects_non_http_schemes ... ok
+test html::live_display::tests::normalize_html_for_live_display_promotes_lazy_sources_and_resolves_relative_urls ... ok
+test html::live_display::tests::resolve_asset_url_uses_document_base_for_relative_paths ... ok
+test html::reader::tests::detects_html_fragments_in_text_fields ... ok
+test html::live_display::tests::rewrite_html_updates_picture_and_img_targets_without_touching_other_tags ... ok
+test html::reader::tests::returns_none_when_nothing_displayable_survives ... ok
+test html::reader::tests::keeps_localized_data_url_images ... ok
+test html::reader::tests::replaces_wordpress_emoji_images_with_alt_text ... ok
+test html::reader::tests::resolves_relative_lazy_images_against_document_base ... ok
+test html::reader::tests::strips_scripts_and_event_handlers ... ok
+test fetch::client::body_asset_localizer::tests::localize_html_images_falls_back_to_live_remote_sources_when_html_is_too_large ... ok
+test db::sqlite_native::tests::memory_text_in_filename_keeps_disk_databases_separate ... ok
+test db::sqlite_native::tests::connect_creates_parent_directory_for_database_file ... ok
+test db::sqlite_native::tests::migration_lock_serializes_two_handles_for_the_same_database ... ok
+
+test result: ok. 48 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests\test_native_outbound_requests.rs (target\debug\deps\test_native_outbound_requests-8e0bf80dfb9a69af.exe)
+
+running 14 tests
+test webdav_rejected_paths_contact_neither_server ... ok
+test image_rejects_redirect_userinfo_before_contacting_target ... ok
+test webdav_method_changing_redirect_cannot_report_successful_upload ... ok
+test image_initial_referer_contains_only_article_origin ... ok
+test image_https_article_sends_no_referer_to_initial_http_image ... ok
+test webdav_redirect_userinfo_is_rejected_even_on_same_origin ... ok
+test image_preserves_mime_and_background_size_limits ... ok
+test image_redirects_never_rebuild_referer_from_signed_image_url ... ok
+test webdav_normal_paths_keep_authentication_method_and_body ... ok
+test image_redirect_loop_is_bounded ... ok
+test webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets ... ok
+test webdav_cross_origin_redirects_never_send_credentials_or_config ... ok
+test webdav_same_origin_redirects_preserve_put_and_get ... ok
+test webdav_download_keeps_four_mib_limit_and_not_found_semantics ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests\test_webdav_local_roundtrip.rs (target\debug\deps\test_webdav_local_roundtrip-65c540a1bb31b918.exe)
+
+running 1 test
+test local_webdav_roundtrip_restores_config_over_http_put_get ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

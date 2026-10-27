@@ -11,14 +11,14 @@ mod groups;
 pub(crate) mod intent;
 mod presenter;
 mod pull_refresh;
-mod reducer;
+pub(crate) mod reducer;
 mod session;
-mod state;
+pub(crate) mod state;
 
 use dioxus::prelude::*;
 
 use self::cards::render_entry_card_at;
-use self::clock::current_time_utc;
+use self::clock::{current_time_utc, use_sampled_clock};
 use self::controls::{render_entry_controls, render_entry_pagination_controls};
 use self::{
     facade::EntriesPageFacade,
@@ -63,7 +63,7 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 }
 
 fn entries_page_content(feed_id: Option<i64>) -> Element {
-    use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
+    let exit_hint = use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
 
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
@@ -198,6 +198,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             }
         }
         { pagination }
+        // Android 首页按一次返回后的提示（use_mobile_back_navigation）；与翻页条一样放在页面
+        // 面板之外。
+        if exit_hint() {
+            p { "data-layout": "exit-hint", role: "status", "再按一次返回键退出" }
+        }
     }
 }
 
@@ -220,20 +225,33 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         // `presenter_input()` 会克隆整份投影；`with` 直接借用（`from_input` 是纯函数）。
         presenter_input.with(|input| Arc::new(EntriesPagePresenter::from_input(input)))
     });
-    let facade =
-        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
+    // The page's read-only refresh follows the shell's (C4b item 2).
+    let library_revision = ui.library_revision();
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
-    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), current_time_utc());
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
-    let refresh_revision = ui.refresh_revision();
     let bulk_revision = state_snapshot.bulk_revision;
+    let requery_revision = state_snapshot.requery_revision;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
     let read_filter = state_snapshot.read_filter;
     let starred_filter = state_snapshot.starred_filter;
     let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
+    // 归档分界的“现在”只在挂载、手动刷新完成与查询条件变化时采样；状态提示、查询结果这类
+    // 普通重渲染不读时钟，否则 `EntryQuery` 每跨一秒就变化并重发查询（审计 A4）。
+    let query_now = use_sampled_clock(
+        state_snapshot.query_clock_trigger(feed_id, query_search.clone(), library_revision),
+        current_time_utc,
+    );
+    let facade = EntriesPageFacade::new(
+        ui,
+        session,
+        Arc::clone(&state_snapshot),
+        presenter.cloned(),
+        query_now,
+    );
+    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), query_now);
 
     use_reactive_side_effect(
         (
@@ -257,11 +275,24 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         }
     });
 
-    use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
+    use_reactive_task((feed_id, library_revision), move |_| session.bootstrap_or_reread());
+    // Once per opened subscription, not per refresh.
+    use_reactive_task(feed_id, move |feed_id| {
+        if let Some(feed_id) = feed_id {
+            session.remember_opened_feed(feed_id);
+        }
+    });
 
     use_reactive_task(
-        (feed_id, entries_ready, entry_query.clone(), refresh_revision, bulk_revision),
-        move |(_, entries_ready, entry_query, _, _)| {
+        (
+            feed_id,
+            entries_ready,
+            entry_query.clone(),
+            library_revision,
+            bulk_revision,
+            requery_revision,
+        ),
+        move |(_, entries_ready, entry_query, _, _, _)| {
             if entries_ready {
                 session.load_entries_query(entry_query);
             }

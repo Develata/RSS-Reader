@@ -3,3 +3,5 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        RSSR_BUILD_ID: ${RSSR_BUILD_ID:?Set RSSR_BUILD_ID to the source commit before building}

@@ -6,7 +6,7 @@
 
 - 页面负责：
   - 组织 UI
-  - 通过页面 facade/session 派发 `UiCommand`，由 runtime 调用 application 用例或 host capability
+  - 通过页面 facade/session 派发 `UiCommand`，由 runtime 经 `Backend` 接口调用
   - 管理页面局部状态
   - 绑定快捷键、目录、筛选、表单交互
 - 页面不负责：

@@ -31,11 +31,6 @@ pub struct Options {
     pub with_fixed_smokes: bool,
     #[arg(long)]
     pub full: bool,
-    /// Run deterministic local feed fixtures; exclude the external proxy probe explicitly.
-    #[arg(long)]
-    pub skip_external_feed: bool,
-    #[arg(long)]
-    pub no_serve: bool,
     #[arg(long, value_parser = nonempty_path)]
     pub log_dir: Option<PathBuf>,
     /// Print the execution plan as JSON without running tools or creating logs.
@@ -69,18 +64,15 @@ impl Options {
         if self.release { "release" } else { "debug" }
     }
     pub fn validate(&self) -> Result<(), String> {
-        if self.skip_external_feed && !self.full && !self.with_fixed_smokes {
-            return Err("--skip-external-feed requires --full or --with-fixed-smokes".into());
-        }
         if self.full || self.with_fixed_smokes {
             if self.port > 55524 {
-                return Err("--port must be <= 55524 with fixed smokes (small viewport uses port + 11 + 10000)".into());
+                return Err("--port must be <= 55524 with fixed smokes (the largest smoke uses port + 11, and its Chrome DevTools port adds 10000)".into());
             }
-            if self.web_port > 65524 {
-                return Err("--web-port must be <= 65524 with fixed smokes".into());
+            if self.web_port > 55524 {
+                return Err("--web-port must be <= 55524 with fixed smokes (the feed smoke uses web-port + 11, and its Chrome DevTools port adds 10000)".into());
             }
-        } else if self.with_rssr_web && self.web_port == 65535 {
-            return Err("--web-port must be <= 65534 with rssr-web browser smoke".into());
+        } else if self.with_rssr_web && self.web_port > 55534 {
+            return Err("--web-port must be <= 55534 with the rssr-web browser smoke (it uses web-port + 1, and its Chrome DevTools port adds 10000)".into());
         }
         Ok(())
     }
@@ -152,7 +144,7 @@ pub fn build(options: &Options) -> Vec<Step> {
         !options.skip_automated,
         "cargo",
         words(
-            "test --locked -p rssr-infra --test test_refresh_contract_harness --test test_subscription_contract_harness --test test_config_exchange_contract_harness",
+            "test --locked -p rssr-infra --test test_library_refresh_contract_harness --test test_library_subscription_contract_harness --test test_library_config_exchange_contract_harness",
         ),
         "automated-gates.log",
         None,
@@ -172,7 +164,7 @@ pub fn build(options: &Options) -> Vec<Step> {
         browser,
         "bash",
         words(
-            "scripts/run_wasm_contract_harness.sh wasm_refresh_contract_harness wasm_subscription_contract_harness wasm_config_exchange_contract_harness",
+            "scripts/run_wasm_contract_harness.sh test_library_refresh_contract_harness test_library_subscription_contract_harness test_library_config_exchange_contract_harness test_library_contracts test_library_entry_state_and_search test_library_queries test_library_refresh_tickets test_library_persistence_atomicity test_library_application_refresh_store_adapter test_library_settings_repository test_library_unicode_title_search test_opml_interop wasm_memory_store wasm_reader_html_contract_harness",
         ),
         "browser-contracts.log",
         None,
@@ -181,20 +173,14 @@ pub fn build(options: &Options) -> Vec<Step> {
     if options.release {
         build_args.push("--release".into());
     }
-    add(
-        "web-bundle",
-        "bundle",
-        web || fixed || !options.no_serve,
-        "dx",
-        build_args,
-        "web-build.log",
-        None,
-    );
+    add("web-bundle", "bundle", web || fixed, "dx", build_args, "web-build.log", None);
     let auth = web_auth(options);
     add(auth.name, auth.group, auth.enabled, auth.program, auth.args, auth.log, auth.port);
-    let smoke = |script: &str, port: u16, directory: &str| {
+    let smoke = |suite: &str, port: u16, directory: &str| {
         vec![
-            format!("scripts/{script}.sh"),
+            "scripts/run_server_web_regression.sh".into(),
+            "--suite".into(),
+            suite.into(),
             "--skip-build".into(),
             format!("--{}", options.profile()),
             "--port".into(),
@@ -208,65 +194,35 @@ pub fn build(options: &Options) -> Vec<Step> {
         "web",
         web && !fixed,
         "bash",
-        smoke(
-            "run_rssr_web_browser_feed_smoke",
-            options.web_port.saturating_add(1),
-            "rssr-web-browser-feed-smoke",
-        ),
+        smoke("feed-smoke", options.web_port.saturating_add(1), "server-web-feed-smoke"),
         "rssr-web-browser-feed-smoke.log",
         Some(options.web_port.saturating_add(1)),
     );
-    for (name, script, port, directory) in [
+    for (name, suite, port, directory) in [
         (
             "reader-theme-matrix",
-            "run_static_web_reader_theme_matrix",
+            "theme-matrix",
             options.port.saturating_add(10),
-            "static-web-reader-theme-matrix",
+            "server-web-theme-matrix",
         ),
-        (
-            "small-viewport",
-            "run_static_web_small_viewport_smoke",
-            options.port.saturating_add(11),
-            "static-web-small-viewport-smoke",
-        ),
-        (
-            "proxy-feed",
-            "run_rssr_web_proxy_feed_smoke",
-            options.web_port.saturating_add(10),
-            "rssr-web-proxy-feed-smoke",
-        ),
+        ("small-viewport", "regression", options.port.saturating_add(11), "server-web-regression"),
         (
             "fixed-browser-feed",
-            "run_rssr_web_browser_feed_smoke",
+            "feed-smoke",
             options.web_port.saturating_add(11),
-            "rssr-web-browser-feed-smoke",
+            "server-web-feed-smoke",
         ),
     ] {
         add(
             name,
             "fixed",
-            fixed && !(name == "proxy-feed" && options.skip_external_feed),
+            fixed,
             "bash",
-            smoke(script, port, directory),
+            smoke(suite, port, directory),
             "fixed-smokes.log",
             Some(port),
         );
     }
-    add(
-        "spa",
-        "spa",
-        !options.no_serve,
-        "bash",
-        vec![
-            "scripts/run_web_spa_regression_server.sh".into(),
-            "--skip-build".into(),
-            format!("--{}", options.profile()),
-            "--port".into(),
-            options.port.to_string(),
-        ],
-        "spa-server.log",
-        Some(options.port),
-    );
     steps
 }
 
@@ -276,6 +232,52 @@ mod tests {
     fn opts(args: &[&str]) -> Options {
         Options::try_parse_from(std::iter::once("release-ui").chain(args.iter().copied())).unwrap()
     }
+
+    // Fake CLI tools verify orchestration, but cannot detect renamed product test targets.
+    #[test]
+    fn planned_cargo_tests_exist_in_workspace() {
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+        let output = std::process::Command::new(env!("CARGO"))
+            .args(["metadata", "--locked", "--no-deps", "--format-version", "1", "--manifest-path"])
+            .arg(manifest)
+            .output()
+            .expect("read product workspace metadata with Cargo");
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let metadata: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let packages = metadata["packages"].as_array().unwrap();
+        let members = metadata["workspace_members"].as_array().unwrap();
+        for step in build(&opts(&["--full"]))
+            .into_iter()
+            .filter(|step| step.enabled && step.program == "cargo")
+        {
+            let package_name = &step
+                .args
+                .windows(2)
+                .find(|arg| arg[0] == "-p" || arg[0] == "--package")
+                .expect("planned Cargo step must select a package")[1];
+            let package = packages
+                .iter()
+                .find(|package| {
+                    package["name"] == *package_name && members.contains(&package["id"])
+                })
+                .unwrap_or_else(|| {
+                    panic!("{}: missing workspace package {package_name}", step.name)
+                });
+            for target_name in
+                step.args.windows(2).filter(|arg| arg[0] == "--test").map(|arg| &arg[1])
+            {
+                assert!(
+                    package["targets"].as_array().unwrap().iter().any(|target| {
+                        target["name"] == *target_name
+                            && target["kind"].as_array().unwrap().iter().any(|kind| kind == "test")
+                    }),
+                    "{}: {package_name} has no test target {target_name}",
+                    step.name
+                );
+            }
+        }
+    }
+
     #[test]
     fn argument_contract() {
         assert_eq!(opts(&[]).profile(), "debug");
@@ -292,17 +294,19 @@ mod tests {
         }
         assert!(Options::try_parse_from(["release-ui", "--unknown"]).is_err());
         assert!(opts(&["--full", "--port", "55525"]).validate().is_err());
-        assert!(opts(&["--full", "--web-port", "65525"]).validate().is_err());
-        assert!(opts(&["--with-rssr-web", "--web-port", "65535"]).validate().is_err());
-        assert!(opts(&["--full", "--port", "55524", "--web-port", "65524"]).validate().is_ok());
+        assert!(opts(&["--full", "--web-port", "55525"]).validate().is_err());
+        assert!(opts(&["--with-fixed-smokes", "--web-port", "55525"]).validate().is_err());
+        assert!(opts(&["--with-rssr-web", "--web-port", "55535"]).validate().is_err());
+        assert!(opts(&["--with-rssr-web", "--web-port", "55534"]).validate().is_ok());
+        assert!(opts(&["--full", "--port", "55524", "--web-port", "55524"]).validate().is_ok());
+        assert!(Options::try_parse_from(["release-ui", "--no-serve"]).is_err());
     }
     #[test]
     fn combinations_preserve_order_build_once_and_browser_deduplication() {
-        for mask in 0..128 {
+        for mask in 0..64 {
             let flags = [
                 "--skip-automated",
                 "--skip-build",
-                "--no-serve",
                 "--with-rssr-web",
                 "--with-browser-contracts",
                 "--with-fixed-smokes",
@@ -320,7 +324,7 @@ mod tests {
             let fixed = options.full || options.with_fixed_smokes;
             assert_eq!(
                 enabled.iter().filter(|s| s.name == "web-bundle").count(),
-                usize::from(web || fixed || !options.no_serve)
+                usize::from(web || fixed)
             );
             assert_eq!(
                 enabled
@@ -331,7 +335,7 @@ mod tests {
             );
             let bundle = enabled.iter().position(|s| s.name == "web-bundle");
             for (i, step) in enabled.iter().enumerate() {
-                if ["web", "fixed", "spa"].contains(&step.group) {
+                if ["web", "fixed"].contains(&step.group) {
                     assert!(bundle.unwrap() < i);
                 }
             }
@@ -350,21 +354,8 @@ mod tests {
                 "web-auth",
                 "reader-theme-matrix",
                 "small-viewport",
-                "proxy-feed",
-                "fixed-browser-feed",
-                "spa"
+                "fixed-browser-feed"
             ]
         );
-    }
-
-    #[test]
-    fn external_probe_is_only_excluded_by_explicit_selection() {
-        assert!(opts(&["--skip-external-feed"]).validate().is_err());
-        let options = opts(&["--full", "--skip-external-feed", "--no-serve"]);
-        assert!(options.validate().is_ok());
-        let steps = build(&options);
-        assert!(!steps.iter().find(|s| s.name == "proxy-feed").unwrap().enabled);
-        assert!(steps.iter().find(|s| s.name == "fixed-browser-feed").unwrap().enabled);
-        assert!(build(&opts(&["--full"])).iter().find(|s| s.name == "proxy-feed").unwrap().enabled);
     }
 }

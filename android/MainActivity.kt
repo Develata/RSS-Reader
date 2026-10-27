@@ -2,6 +2,7 @@ package dev.dioxus.main
 
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import java.nio.charset.StandardCharsets
@@ -12,6 +13,10 @@ class MainActivity : WryActivity() {
     private data class PendingThemeExport(val css: String)
 
     private var pendingThemeExport: PendingThemeExport? = null
+
+    // 返回键交给应用（use_mobile_back_navigation.rs）：页面内回到上一页或首页，首页上 5 秒内
+    // 按两次才退到后台。不沿 WebView 的历史后退：应用内跳转不进那份历史，它只记页内锚点。
+    override val handleBackNavigation: Boolean = false
 
     private val createThemeDocument = registerForActivityResult(
         ActivityResultContracts.CreateDocument("text/css")
@@ -51,6 +56,13 @@ class MainActivity : WryActivity() {
             enableEdgeToEdge()
         }
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = requestAppBack()
+        })
+    }
+
+    fun exitToBackground() {
+        runOnUiThread { moveTaskToBack(true) }
     }
 
     fun requestThemeCssExport(css: String, suggestedName: String) {
@@ -89,6 +101,8 @@ class MainActivity : WryActivity() {
     }
 
     private external fun completeThemeCssExport(status: Int, message: String)
+
+    private external fun requestAppBack()
 
     private companion object {
         const val STATUS_SUCCESS = 0

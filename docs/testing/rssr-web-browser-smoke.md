@@ -34,6 +34,8 @@ bash scripts/run_rssr_web_browser_smoke.sh
 - 默认推荐 feed：
   - `https://www.ruanyifeng.com/blog/atom.xml`
 
+正式 Web 的订阅与文章在服务器的临时资料库中；本页无需本地浏览器口令或 Web Locks。若使用 `--skip-build`，页面和服务器必须来自同一源码版本；改 commit 后重建页面。
+
 ## 常用参数
 
 ```bash
@@ -56,7 +58,7 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 7. 点击该卡片上的 `data-action="refresh-feed"`。
 8. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/entries/:entry_id` 阅读页。
 9. 打开 `/settings`，确认设置页在登录态下正常可达。
-10. 打开 `/logout`，确认会回到 `/login`。
+10. 打开 `/logout`，在确认页点“退出登录”，确认会回到 `/login`。
 
 ## 固定 selector / 期望
 
@@ -71,13 +73,13 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 - 添加 feed 后，新的 feed 卡片可见
 - 刷新后不应回到登录页，也不应出现明显错误壳
 - `/settings` 可达
-- `/logout` 后回到 `/login`
+- `/logout` 确认后回到 `/login`
 
 ## 与自动化 smoke 的分工
 
-登录后添加同源 fixture 订阅并完成首次刷新已由 `scripts/run_rssr_web_browser_feed_smoke.sh` 自动化，DOM 与截图使用同次加载的实际就绪状态。见 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)。
+登录后添加独立本地 fixture 订阅并完成首次刷新已由 `bash scripts/run_server_web_regression.sh --suite feed-smoke` 自动化，DOM 与截图使用同次加载的实际就绪状态。见 [浏览器 feed smoke](./rssr-web-browser-feed-smoke.md)。
 
-本页保留交互环境，用于真实远端 feed、登录/登出和页面观察。远端 DNS、代理与 CORS 结果不能由 fixture 代替；Chrome MCP 是可选控制工具，连接问题不代表这条链路没有自动化能力。
+本页保留交互环境，用于真实远端 feed、登录/登出和页面观察。服务器 DNS、出站策略与远端响应不能由 fixture 代替；Chrome MCP 是可选控制工具，连接问题不代表这条链路没有自动化能力。
 
 ## 结果记录
 
@@ -91,7 +93,7 @@ bash scripts/run_rssr_web_browser_smoke.sh --feed-url https://example.com/feed.x
 - `feed-url-input / add-feed / refresh-feed / feed-entries` 结果
 - `/settings` 结果
 - `/logout` 结果
-- 代理 feed 结果
+- 服务器抓取真实远端 feed 的结果
 - console 结果
 - 是否通过
 

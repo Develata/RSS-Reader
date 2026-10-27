@@ -218,7 +218,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
 /// 不改变「解析失败就不写入草稿」的既有行为。
 ///
 /// 记的是值而不是一个布尔，是为了让提示能自己失效：草稿被整体替换后
-/// （`SettingsPageSession::apply_loaded_settings` / `apply_saved_settings`，对应「从 WebDAV
+/// （`SettingsPageSession::apply_stored_settings` / `apply_saved_settings`，对应「从 WebDAV
 /// 拉取配置」与「回填未继续编辑的保存结果」），这里存的值与新草稿不再相等，提示自动不再显示。
 /// 用布尔的话，提示会残留在一个已经被换成合法值的输入框下面，说着「当前输入不是有效数字」。
 ///

@@ -1,0 +1,21 @@
+   Compiling rssr-web v0.1.0 (E:\gitclone\RSS-Reader\target\feed-proxy-isolation-20261007\worktree\crates\rssr-web)
+    Finished `test` profile [unoptimized] target(s) in 4.09s
+     Running unittests src\main.rs (target/build\debug\deps\rssr_web-903d77458d2c73d0.exe)
+
+running 1 test
+
+thread 'proxy::isolation_tests::responses_isolate_untrusted_content_without_changing_feed_data' (37580) panicked at crates\rssr-web\src\proxy\isolation_tests.rs:106:9:
+assertion `left == right` failed: html: untrusted documents must be sandboxed without exceptions
+  left: None
+ right: Some("sandbox; default-src 'none'; base-uri 'none'; form-action 'none'")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test proxy::isolation_tests::responses_isolate_untrusted_content_without_changing_feed_data ... FAILED
+
+failures:
+
+failures:
+    proxy::isolation_tests::responses_isolate_untrusted_content_without_changing_feed_data
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p rssr-web --bin rssr-web`

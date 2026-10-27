@@ -3,6 +3,8 @@ use time::OffsetDateTime;
 
 pub const DEFAULT_ENTRIES_PAGE_SIZE: u32 = 100;
 pub const MAX_ENTRIES_PAGE_SIZE: u32 = 200;
+/// 自定义 CSS 的上限（字节）：设置会随配置包、远程配置与 HTTP 响应传输。
+pub const MAX_CUSTOM_CSS_BYTES: usize = 64 * 1024;
 /// 自动归档阈值上限（100 年）。除了挡住无意义的输入，也保证归档分界永远落在
 /// `time::Date` 支持的年份区间内，见 [`crate::entry::is_entry_archived`]。
 pub const MAX_ARCHIVE_AFTER_MONTHS: u32 = 1200;
@@ -79,6 +81,18 @@ pub struct ConfigFeed {
     pub url: String,
     pub title: Option<String>,
     // 为了保留 OPML / 配置交换中的原始分组信息，仍然继续序列化该字段。
+    pub folder: Option<String>,
+}
+
+/// OPML 导出的一条订阅（审计 B6）。OPML 2.0 里 `text` 是显示的名称、`title` 来自订阅源，
+/// 所以导出要分开带两个名称：`name` 是显示名称（指定名称优先，否则源标题），`source_title` 是
+/// 订阅源自己的标题。配置包格式（v2）固定只有一个名称，仍用 [`ConfigFeed`]；导入只取一个
+/// 名称，也用 [`ConfigFeed`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpmlFeed {
+    pub url: String,
+    pub name: Option<String>,
+    pub source_title: Option<String>,
     pub folder: Option<String>,
 }
 

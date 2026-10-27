@@ -1,0 +1,93 @@
+   Compiling rssr-infra v0.1.0 (E:\gitclone\RSS-Reader\crates\rssr-infra)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.11s
+     Running tests\test_native_outbound_requests.rs (target\debug\deps\test_native_outbound_requests-8e0bf80dfb9a69af.exe)
+
+running 12 tests
+test image_https_article_sends_no_referer_to_initial_http_image ... FAILED
+test image_initial_referer_contains_only_article_origin ... FAILED
+test image_rejects_redirect_userinfo_before_contacting_target ... FAILED
+test webdav_method_changing_redirect_cannot_report_successful_upload ... FAILED
+test webdav_rejected_paths_contact_neither_server ... FAILED
+test webdav_cross_origin_redirects_never_send_credentials_or_config ... FAILED
+test webdav_same_origin_redirects_preserve_put_and_get ... FAILED
+test webdav_normal_paths_keep_authentication_method_and_body ... ok
+test webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets ... FAILED
+test image_redirect_loop_is_bounded ... ok
+test image_redirects_never_rebuild_referer_from_signed_image_url ... FAILED
+test webdav_download_keeps_four_mib_limit_and_not_found_semantics ... ok
+
+failures:
+
+---- image_https_article_sends_no_referer_to_initial_http_image stdout ----
+
+thread 'image_https_article_sends_no_referer_to_initial_http_image' (53296) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:69:5:
+assertion `left == right` failed
+  left: Some("https://example.test/private?token=article-secret")
+ right: None
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- image_initial_referer_contains_only_article_origin stdout ----
+
+thread 'image_initial_referer_contains_only_article_origin' (38240) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:34:5:
+assertion `left == right` failed
+  left: Some("http://fake-user:fake-password@example.test/private/article?token=article-secret#fragment-secret")
+ right: Some("http://example.test/")
+
+---- image_rejects_redirect_userinfo_before_contacting_target stdout ----
+
+thread 'image_rejects_redirect_userinfo_before_contacting_target' (44644) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:77:5:
+assertion failed: !localize(&source.url, None).await.contains("data:image/")
+
+---- webdav_method_changing_redirect_cannot_report_successful_upload stdout ----
+
+thread 'webdav_method_changing_redirect_cannot_report_successful_upload' (40192) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:189:9:
+accepted PUT redirect 303
+
+---- webdav_rejected_paths_contact_neither_server stdout ----
+
+thread 'webdav_rejected_paths_contact_neither_server' (43676) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:131:9:
+accepted unsafe path "http://127.0.0.1:62802/"
+
+---- webdav_cross_origin_redirects_never_send_credentials_or_config stdout ----
+
+thread 'webdav_cross_origin_redirects_never_send_credentials_or_config' (50472) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:170:54:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+---- webdav_same_origin_redirects_preserve_put_and_get stdout ----
+
+thread 'webdav_same_origin_redirects_preserve_put_and_get' (39688) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:158:13:
+assertion `left == right` failed
+  left: Some("http://127.0.0.1:62796/start")
+ right: None
+
+---- webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets stdout ----
+
+thread 'webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets' (49048) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:201:5:
+浠?WebDAV 涓嬭浇閰嶇疆澶辫触
+
+Caused by:
+    0: error following redirect for url (http://127.0.0.1:62799/loop?token=loop-secret)
+    1: too many redirects 浠?WebDAV 涓嬭浇閰嶇疆澶辫触: error following redirect for url (http://127.0.0.1:62799/loop?token=loop-secret): too many redirects
+
+---- image_redirects_never_rebuild_referer_from_signed_image_url stdout ----
+
+thread 'image_redirects_never_rebuild_referer_from_signed_image_url' (18880) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:57:9:
+assertion `left == right` failed
+  left: Some("http://127.0.0.1:62800/first?signature=first-secret")
+ right: Some("http://example.test/")
+
+
+failures:
+    image_https_article_sends_no_referer_to_initial_http_image
+    image_initial_referer_contains_only_article_origin
+    image_redirects_never_rebuild_referer_from_signed_image_url
+    image_rejects_redirect_userinfo_before_contacting_target
+    webdav_cross_origin_redirects_never_send_credentials_or_config
+    webdav_method_changing_redirect_cannot_report_successful_upload
+    webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets
+    webdav_rejected_paths_contact_neither_server
+    webdav_same_origin_redirects_preserve_put_and_get
+
+test result: FAILED. 3 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p rssr-infra --test test_native_outbound_requests`

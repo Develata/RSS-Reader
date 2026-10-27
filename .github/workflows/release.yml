@@ -41,9 +41,9 @@ jobs:
       # 打 tag 发布时签名密钥是硬要求。少了它整段签名逻辑连同 debug 密钥守卫都会被
       # `if: env.ANDROID_RELEASE_READY == 'true'` 跳过，然后安安静静发一个 debug APK——
       # 用户侧的表现就是这次事故本身（覆盖安装「校验失败」），而 CI 全绿。
-      # workflow_dispatch 仍允许降级，方便不碰密钥地验证其它平台。
-      - name: Require Android signing for tag releases
-        if: github.event_name == 'push' && env.ANDROID_RELEASE_READY != 'true'
+      # 手动恢复发布同样会创建正式 Release，也不能降级为 debug APK。
+      - name: Require Android signing for releases
+        if: env.ANDROID_RELEASE_READY != 'true'
         run: |
           echo "::error::tag 发布必须配置 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD"
           exit 1
@@ -368,9 +368,12 @@ jobs:
         uses: ./.github/actions/cleanup-github-runner
 
       - name: Install system dependencies
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          bash scripts/configure_ubuntu_apt.sh
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install -y \
             pkg-config \
             dpkg-dev \
             libgtk-3-dev \
@@ -424,9 +427,19 @@ jobs:
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
 
       - name: Install package and smoke-test ordinary-user startup
+        env:
+          RELEASE_CHECKS_SHA: ${{ github.workflow_sha }}
         run: |
           sudo apt-get install -y ./release-assets/RSS-Reader-linux-x86_64.deb
-          bash scripts/smoke_linux_deb_unprivileged.sh
+          # A dispatch can repair release checks while keeping the product at its tag.
+          # Read only the smoke script from this workflow's exact commit; never switch
+          # the product checkout or change the already-built package.
+          source_sha=$(git rev-parse HEAD)
+          git fetch --no-tags --depth=1 origin "$RELEASE_CHECKS_SHA"
+          git show "$RELEASE_CHECKS_SHA:scripts/smoke_linux_deb_unprivileged.sh" > "$RUNNER_TEMP/rssr-linux-package-smoke.sh"
+          test "$(git rev-parse HEAD)" = "$source_sha"
+          echo "Release source: $source_sha; smoke checks: $RELEASE_CHECKS_SHA"
+          bash "$RUNNER_TEMP/rssr-linux-package-smoke.sh"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
@@ -436,49 +449,23 @@ jobs:
           if-no-files-found: error
 
   build-web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ env.RELEASE_REF }}
+    uses: ./.github/workflows/web-packages.yml
+    with:
+      source_ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+      release_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      all_platforms: true
 
-      - name: Cleanup runner
-        uses: ./.github/actions/cleanup-github-runner
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Setup Dioxus CLI
-        uses: ./.github/actions/setup-dioxus-cli
-        with:
-          version: ${{ env.DIOXUS_CLI_VERSION }}
-
-      - name: Build web bundle
-        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir target/web-dist
-
-      - name: Archive web bundle
-        run: |
-          mkdir -p release-assets
-          tar -C target/web-dist -czf release-assets/RSS-Reader-web.tar.gz public
-
-      - name: Smoke-check web artifact
-        run: |
-          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep '^public/index.html$'
-          tar -tzf release-assets/RSS-Reader-web.tar.gz | grep -E '^public/assets/rssr-app_bg-.*\.wasm$'
-
-      - name: Upload web artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-web
-          path: release-assets/*
-          if-no-files-found: error
+  build-container:
+    needs: build-web
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      use_existing_package: true
+      source_sha: ${{ needs.build-web.outputs.source_sha }}
+      build_id: ${{ needs.build-web.outputs.build_id }}
+      image_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
   build-macos:
     runs-on: macos-latest
@@ -578,11 +565,13 @@ jobs:
       - build-linux
       - build-macos
       - build-web
+      - build-container
     steps:
       - name: Download release artifacts
         uses: actions/download-artifact@v8
         with:
           path: release-assets
+          pattern: '!*.dockerbuild'
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3

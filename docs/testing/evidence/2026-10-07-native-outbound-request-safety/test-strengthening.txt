@@ -1,0 +1,148 @@
+Test-only follow-up to 3b7fda50f204dbb16e62382edf94825bdc9be225. Production files unchanged.
+
+=== image-early-failure.txt ===
+running 1 test
+test image_redirect_loop_is_bounded ... FAILED
+
+failures:
+
+---- image_redirect_loop_is_bounded stdout ----
+
+thread 'image_redirect_loop_is_bounded' (32888) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:99:5:
+assertion `left == right` failed
+  left: 1
+ right: 11
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    image_redirect_loop_is_bounded
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p rssr-infra --test test_native_outbound_requests`
+
+=== webdav-early-failure.txt ===
+running 1 test
+test webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets ... FAILED
+
+failures:
+
+---- webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets stdout ----
+
+thread 'webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets' (41532) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:287:5:
+assertion `left == right` failed
+  left: 1
+ right: 11
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p rssr-infra --test test_native_outbound_requests`
+
+=== missing-basic-auth.txt ===
+running 1 test
+test webdav_same_origin_redirects_preserve_put_and_get ... FAILED
+
+failures:
+
+---- webdav_same_origin_redirects_preserve_put_and_get stdout ----
+
+thread 'webdav_same_origin_redirects_preserve_put_and_get' (11572) panicked at crates\rssr-infra\tests\test_native_outbound_requests.rs:213:13:
+assertion `left == right` failed
+  left: None
+ right: Some("Basic Zml4dHVyZSU0MHVzZXI6ZmFrZSUzQXBhc3N3b3Jk")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    webdav_same_origin_redirects_preserve_put_and_get
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p rssr-infra --test test_native_outbound_requests`
+
+=== regressions-final.log ===
+   Compiling rssr-infra v0.1.0 (E:\gitclone\RSS-Reader\crates\rssr-infra)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.93s
+     Running tests\test_native_outbound_requests.rs (target\debug\deps\test_native_outbound_requests-8e0bf80dfb9a69af.exe)
+
+running 14 tests
+test webdav_rejected_paths_contact_neither_server ... ok
+test image_initial_referer_contains_only_article_origin ... ok
+test image_rejects_redirect_userinfo_before_contacting_target ... ok
+test webdav_method_changing_redirect_cannot_report_successful_upload ... ok
+test image_https_article_sends_no_referer_to_initial_http_image ... ok
+test webdav_redirect_userinfo_is_rejected_even_on_same_origin ... ok
+test image_preserves_mime_and_background_size_limits ... ok
+test webdav_normal_paths_keep_authentication_method_and_body ... ok
+test image_redirects_never_rebuild_referer_from_signed_image_url ... ok
+test webdav_cross_origin_redirects_never_send_credentials_or_config ... ok
+test webdav_same_origin_redirects_preserve_put_and_get ... ok
+test image_redirect_loop_is_bounded ... ok
+test webdav_redirect_loop_is_bounded_and_errors_omit_url_secrets ... ok
+test webdav_download_keeps_four_mib_limit_and_not_found_semantics ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests\test_webdav_local_roundtrip.rs (target\debug\deps\test_webdav_local_roundtrip-65c540a1bb31b918.exe)
+
+running 1 test
+test local_webdav_roundtrip_restores_config_over_http_put_get ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+=== clippy.log ===
+   Compiling sqlx-macros v0.8.6
+    Checking sqlx v0.8.6
+    Checking rssr-infra v0.1.0 (E:\gitclone\RSS-Reader\crates\rssr-infra)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.67s
+
+=== validation.json ===
+[
+  {
+    "name": "regressions-final",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "rssr-infra",
+      "--test",
+      "test_native_outbound_requests",
+      "--test",
+      "test_webdav_local_roundtrip"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "-p",
+      "rssr-infra",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0
+  }
+]

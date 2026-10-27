@@ -1,0 +1,263 @@
+{
+  "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+  "product_commit": "c2e2278d78bf5244f6d4f681b3d6de6590770884",
+  "checks": {
+    "ci": {
+      "run": 39864068134,
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/39864068134",
+      "jobs": 35,
+      "conclusion": "success",
+      "acceptance_long": true,
+      "acceptance_scenarios": [
+        "2026-10-22T22:28:40.8727364Z pass proxy-origin-cookie-csrf (3 s)",
+        "2026-10-22T22:28:43.2022298Z pass proxy-redirects-api (2 s)",
+        "2026-10-22T22:28:45.8348210Z pass unknown-write-then-reread (3 s)",
+        "2026-10-22T22:28:54.1782937Z pass malformed-answers (8 s)",
+        "2026-10-22T22:29:26.4160718Z pass malformed-poll-backoff (32 s)",
+        "2026-10-22T22:29:27.5717371Z pass read-failure (1 s)",
+        "2026-10-22T22:29:29.4936886Z pass job-survives-page-switch (2 s)",
+        "2026-10-22T22:29:33.1900312Z pass reload-loses-the-job (4 s)",
+        "2026-10-22T22:29:36.0164083Z pass job-ends-after-the-page-was-left (3 s)",
+        "2026-10-22T22:29:46.2878741Z pass page-gone-stops-polling (10 s)",
+        "2026-10-22T22:29:56.8707260Z pass reread-triggers (11 s)",
+        "2026-10-22T22:30:00.2252723Z pass two-browsers (3 s)",
+        "2026-10-22T22:30:03.0561776Z pass build-mismatch-keeps-edits (3 s)",
+        "2026-10-22T22:30:04.6402568Z pass draft-storage-unavailable (2 s)",
+        "2026-10-22T22:30:07.4259315Z pass restored-draft-then-sign-in (3 s)",
+        "2026-10-22T22:30:12.7474427Z pass stopped-departure-restores-once (5 s)",
+        "2026-10-22T22:30:16.2391874Z pass stopped-departure-then-saved (3 s)",
+        "2026-10-22T22:30:52.7494769Z pass slow-departure-lands-late (37 s)",
+        "2026-10-22T22:31:00.0664522Z pass later-edit-not-kept-stays (7 s)",
+        "2026-10-22T22:31:03.3591319Z pass reader-recovers-without-localizing (3 s)",
+        "2026-10-22T22:31:05.3029850Z pass reader-malicious-body (2 s)",
+        "2026-10-22T22:31:07.8829922Z pass settings-read-fails-at-start (3 s)",
+        "2026-10-22T22:31:16.0603051Z pass startup-target-fails (8 s)",
+        "2026-10-22T22:31:22.6048275Z pass failures-and-unknowns-visible (7 s)",
+        "2026-10-22T22:31:24.2752613Z pass http-backend-only (2 s)",
+        "2026-10-22T22:31:27.1042339Z pass no-browser-periodic-refresh (3 s)",
+        "2026-10-22T22:32:04.2781838Z pass background-tab-time-limit (37 s)"
+      ],
+      "default_ui_job": 120124304752
+    },
+    "pages": {
+      "run": 39864073043,
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/39864073043",
+      "build": "success",
+      "deployment": "skipped",
+      "fresh_rss_snapshot_bytes": 356387,
+      "feeds": 2,
+      "articles": 6
+    },
+    "docker": {
+      "run": 39864123959,
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/39864123959",
+      "jobs": 7,
+      "conclusion": "success",
+      "publishing": false
+    }
+  },
+  "artifacts": {
+    "pages": [
+      {
+        "id": 12462823025,
+        "name": "pages-smoke-39864073043-1",
+        "digest": "sha256:c9518c876e1dc6a314b4adf2048deba83a9bd1626931e22e8e5a6d4c677e2fa3",
+        "size_in_bytes": 973771,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:22:37Z"
+      },
+      {
+        "id": 12462254338,
+        "name": "pages-rss-snapshot-39864073043-1",
+        "digest": "sha256:ad79b5a1251cc7758efb7134c82f28408977112f2472ae37117d09b7fae1fd17",
+        "size_in_bytes": 59207,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:22:35Z"
+      }
+    ],
+    "docker": [
+      {
+        "id": 12463945226,
+        "name": "web-package-check-macos-aarch64",
+        "digest": "sha256:3f573f7005f9c2982105db094b598af741191654880aba7e4c70cf2330755bb2",
+        "size_in_bytes": 1060,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463866484,
+        "name": "c6-container-check",
+        "digest": "sha256:6cf6dc933cab82e3133cc816ef246e6b94feb79acf449393031956c221b580ae",
+        "size_in_bytes": 3538,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463791678,
+        "name": "Develata~RSS-Reader~RKNY35.dockerbuild",
+        "digest": "sha256:a1092807df852d1ef7316bdecde9dd85b96b299e4f138db032c22aeefb7c72c6",
+        "size_in_bytes": 29878,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463751709,
+        "name": "web-package-check-macos-x86_64",
+        "digest": "sha256:19e1d86169e18b760ae4153563ccc69b1b8e03b48e8ae3b6f1cad10c245e00c9",
+        "size_in_bytes": 1066,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463740415,
+        "name": "web-package-public",
+        "digest": "sha256:cc2303cbd2d663f660f43b12daa481f88c69a88ec61bbcd4ca25ab8f1fef32de",
+        "size_in_bytes": 1096127,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463426662,
+        "name": "web-package-windows-x86_64",
+        "digest": "sha256:d2f38324ebc30ed5a9c637843f28739c036dfd5039afc69c70801804a47bdf45",
+        "size_in_bytes": 7247135,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463188226,
+        "name": "web-package-check-windows-x86_64",
+        "digest": "sha256:61d4f615b1930f5e20417c8ac985eda5e4675f541872bd6790f9b139314a4db3",
+        "size_in_bytes": 1016,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12463002621,
+        "name": "web-package-linux-x86_64",
+        "digest": "sha256:518d8ff27fedaa24c6025ec05d2fce3c610dc15834b0ca0411c55472dab59c3f",
+        "size_in_bytes": 14254349,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12462673408,
+        "name": "web-package-macos-aarch64",
+        "digest": "sha256:f979c537b43d6ea235e7b90aacbe33c2544b1619a5c58c76af8fc3fce1d9ffea",
+        "size_in_bytes": 7498973,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12462519251,
+        "name": "web-package-macos-x86_64",
+        "digest": "sha256:a7926d997714d393ca420057f66b1dca61fb6dc12bc72d1ec73cfec237dbe3bf",
+        "size_in_bytes": 7751995,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      },
+      {
+        "id": 12462389027,
+        "name": "web-package-check-linux-x86_64",
+        "digest": "sha256:42d27424414338c53be2949b749c4881a56acf085141db20519f27c7cd310f3f",
+        "size_in_bytes": 1023,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2027-01-20T22:19:43Z"
+      }
+    ],
+    "ci": [
+      {
+        "id": 12464080485,
+        "name": "ci-web-server",
+        "digest": "sha256:96fb8fa1853a78569de2417b90d2f1f3094ead4026e67e27cfef9025a907c66c",
+        "size_in_bytes": 9602395,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-25T22:25:09Z"
+      },
+      {
+        "id": 12463925372,
+        "name": "release-ui-runner-windows-latest",
+        "digest": "sha256:c3b35d0ca99250ec50c8b68fe1dd4a6be75eeab7658910325ec03c07eee492be",
+        "size_in_bytes": 447831,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-25T22:23:14Z"
+      },
+      {
+        "id": 12463921288,
+        "name": "ci-ui-newsprint",
+        "digest": "sha256:5483907070a25b041d68ccfbb6954ea2acb08b795d95a30a6b17c4363cc8641f",
+        "size_in_bytes": 3202316,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:26:38Z"
+      },
+      {
+        "id": 12463657730,
+        "name": "ci-ui-default",
+        "digest": "sha256:a4c29b788443a12572ed3811e1ac197c973659512d67577834e666773ca43a22",
+        "size_in_bytes": 7865565,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:32:04Z"
+      },
+      {
+        "id": 12463636676,
+        "name": "ci-web-public",
+        "digest": "sha256:10fab021ee62e02fcdc9458f4a2a398c0fd1d4331bb876ba6a1c0a8f55cf3ddf",
+        "size_in_bytes": 1095916,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-25T22:25:07Z"
+      },
+      {
+        "id": 12463387455,
+        "name": "ci-ui-amethyst-glass",
+        "digest": "sha256:f7d1b7b7363edc7a3b3ca8c8958566abe788771e0da1a801bb431c24704fcbd7",
+        "size_in_bytes": 4936419,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:27:43Z"
+      },
+      {
+        "id": 12462789287,
+        "name": "ci-ui-midnight-ledger",
+        "digest": "sha256:b65dfbe3bfebd9894228b471e3eff914ab54b8bac427572ebbce2f1b22f8cf1f",
+        "size_in_bytes": 4721973,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:27:46Z"
+      },
+      {
+        "id": 12462788368,
+        "name": "ci-wasm-contracts",
+        "digest": "sha256:5c407d4e7edebf6c3b4d90f37165347c8f7fcf2d4287e31ae919b30f1d4f5a87",
+        "size_in_bytes": 213326089,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-25T22:21:39Z"
+      },
+      {
+        "id": 12462549615,
+        "name": "ci-ui-atlas-sidebar",
+        "digest": "sha256:4d805b0f292f280008e984a2f16148012007eab2e5a51001b5aa53206bd855d0",
+        "size_in_bytes": 4900649,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-29T22:26:31Z"
+      },
+      {
+        "id": 12461829725,
+        "name": "release-ui-runner-ubuntu-latest",
+        "digest": "sha256:b800f3796dc15e3fe13628a3f1679f72f588f1f3998e3a733fc03e8084bdc998",
+        "size_in_bytes": 2316059,
+        "source_sha": "576cba434274b4b686480455db2f7f2811bd107a",
+        "expires_at": "2026-10-25T22:21:52Z"
+      }
+    ]
+  },
+  "provenance": "GitHub API metadata and workflow job logs; archive digests reported by GitHub, not locally downloaded or independently rehashed.",
+  "remaining": [
+    "independent final review",
+    "actual public Pages subpath acceptance"
+  ],
+  "main_merge_preview": {
+    "main": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+    "main_only_commits": 27,
+    "candidate_only_commits": 343,
+    "conflicting_paths": 65,
+    "merged": false
+  }
+}

@@ -6,7 +6,7 @@ pub fn EntryFilters(
     search: String,
     read_filter: ReadFilter,
     starred_filter: StarredFilter,
-    available_sources: Vec<(i64, String, String, u32)>,
+    available_sources: Vec<(i64, String, String, u64)>,
     selected_feed_urls: Vec<String>,
     on_search: EventHandler<String>,
     on_change_read_filter: EventHandler<ReadFilter>,

@@ -89,18 +89,19 @@ impl EntryRecord {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EntrySummary {
     pub id: i64,
     pub feed_id: i64,
     pub title: String,
     pub feed_title: String,
+    #[serde(with = "time::serde::rfc3339::option")]
     pub published_at: Option<OffsetDateTime>,
     pub is_read: bool,
     pub is_starred: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EntryNavigation {
     pub previous_unread_entry_id: Option<i64>,
     pub next_unread_entry_id: Option<i64>,
@@ -131,15 +132,25 @@ pub enum StarredFilter {
 /// 归档只看 `published_at`：没有发布时间的条目永远不算归档（与 [`is_entry_archived`] 一致）。
 /// 这个筛选此前是在页面层对全量结果做的内存过滤，意味着每次查询都要把已归档的文章也一并
 /// 读出来再丢掉；放进查询后由存储层直接筛掉，两个平台共用同一套语义。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// 分界必须是整秒：原生端按 RFC3339 文本比较，非整秒会与浏览器端的时间值比较不一致（B2-D7）。
+/// [`archive_cutoff_at`] 只产生整秒；外来输入由 [`crate::validate_entry_query`] 检查。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ArchiveFilter {
     /// 不施加归档约束。
     #[default]
     All,
     /// 只要未归档的：`published_at IS NULL OR published_at >= cutoff`。
-    ExcludeArchived { cutoff: OffsetDateTime },
+    ExcludeArchived {
+        #[serde(with = "time::serde::rfc3339")]
+        cutoff: OffsetDateTime,
+    },
     /// 只要已归档的：`published_at IS NOT NULL AND published_at < cutoff`，用于统计被隐藏的数量。
-    OnlyArchived { cutoff: OffsetDateTime },
+    OnlyArchived {
+        #[serde(with = "time::serde::rfc3339")]
+        cutoff: OffsetDateTime,
+    },
 }
 
 impl ArchiveFilter {
@@ -152,13 +163,15 @@ impl ArchiveFilter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EntryQuery {
     pub feed_id: Option<i64>,
     pub read_filter: ReadFilter,
     pub starred_filter: StarredFilter,
     pub archive_filter: ArchiveFilter,
-    pub feed_ids: Vec<i64>,
+    /// `None`: every subscription. `Some(ids)`: only these, so `Some(vec![])` matches nothing
+    /// (all the chosen sources are gone) rather than everything.
+    pub feed_ids: Option<Vec<i64>>,
     pub search_title: Option<String>,
     pub limit: Option<u32>,
 }
@@ -176,6 +189,14 @@ pub fn is_entry_archived(
     };
 
     published_at.to_offset(UtcOffset::UTC) < cutoff
+}
+
+/// A published time as the stores keep it: in whole seconds, like the archive cutoff
+/// ([`archive_cutoff_at`]). The SQLite store compares RFC 3339 text and the browser store compares
+/// time values; on whole seconds both orders agree (B2-D7). Dropping the fraction changes no
+/// comparison with a whole-second cutoff `c`: `t < c` exactly when `floor(t) < c`.
+pub fn stored_published_at(published_at: OffsetDateTime) -> OffsetDateTime {
+    published_at.replace_nanosecond(0).expect("zero nanoseconds are valid")
 }
 
 /// 返回归档分界时刻；当 `archive_after_months` 为 0，或大到把分界推出 `Date` 支持的年份区间时
@@ -296,13 +317,27 @@ mod tests {
     }
 }
 
-/// 冻结筛选条件与完整未读集合；分页限制在预览时清除。
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// 一次批量已读最多覆盖的未读文章数（v0.2 阶段 C）。预览与确认都携带完整的选择集，确认时
+/// 整份比较，所以选择集有上限：更大的选择一律拒绝（[`mark_read_selection_too_large`]），
+/// 不截断、不分批。
+pub const MAX_MARK_READ_SELECTION: usize = 10_000;
+
+/// 选择集超过 [`MAX_MARK_READ_SELECTION`] 时的错误；各平台、CLI 与服务器给出同一句话。
+pub fn mark_read_selection_too_large() -> crate::DomainError {
+    crate::DomainError::InvalidInput(format!(
+        "范围过大：一次最多将 {MAX_MARK_READ_SELECTION} 篇未读文章标为已读，请缩小筛选"
+    ))
+}
+
+/// 冻结筛选条件（含归档分界）与完整未读集合；分页限制在预览时清除。确认时用同一查询，在
+/// 同一写事务里比较完整集合，不一致就返回新的预览、不写入。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MarkReadPreview {
     pub query: EntryQuery,
     pub unread_entry_ids: Vec<i64>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum MarkReadOutcome {
     Applied { changed_count: u64 },
     SelectionChanged { preview: MarkReadPreview },

@@ -1,0 +1,258 @@
+{
+  "expectVulnerable": false,
+  "run": "E:\\gitclone\\RSS-Reader\\target\\feed-proxy-isolation-20261007\\worktree\\target\\evidence\\after-cleanup-fix\\run-n2xuSb",
+  "cases": [
+    {
+      "name": "html",
+      "context": "control",
+      "url": "http://127.0.0.1:59235/control?url=https%3A%2F%2Ffixture.example.invalid%2Fhtml",
+      "executed": true,
+      "read": "isolated-value-never-private",
+      "storage": "changed-by-fixture",
+      "canWrite": true
+    },
+    {
+      "name": "svg",
+      "context": "control",
+      "url": "http://127.0.0.1:59235/control?url=https%3A%2F%2Ffixture.example.invalid%2Fsvg",
+      "executed": true,
+      "read": "isolated-value-never-private",
+      "storage": "changed-by-fixture",
+      "canWrite": true
+    },
+    {
+      "name": "xhtml",
+      "context": "control",
+      "url": "http://127.0.0.1:59235/control?url=https%3A%2F%2Ffixture.example.invalid%2Fxhtml",
+      "executed": true,
+      "read": "isolated-value-never-private",
+      "storage": "changed-by-fixture",
+      "canWrite": true
+    },
+    {
+      "name": "html",
+      "context": "top-level",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fhtml",
+      "executed": false,
+      "read": null,
+      "storageError": "SecurityError",
+      "writeError": "SecurityError",
+      "stored": {
+        "sentinel": "isolated-value-never-private",
+        "read": null
+      }
+    },
+    {
+      "name": "svg",
+      "context": "top-level",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fsvg",
+      "executed": false,
+      "read": null,
+      "storageError": "SecurityError",
+      "writeError": "SecurityError",
+      "stored": {
+        "sentinel": "isolated-value-never-private",
+        "read": null
+      }
+    },
+    {
+      "name": "xhtml",
+      "context": "top-level",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fxhtml",
+      "executed": false,
+      "read": null,
+      "storageError": "SecurityError",
+      "writeError": "SecurityError",
+      "stored": {
+        "sentinel": "isolated-value-never-private",
+        "read": null
+      }
+    },
+    {
+      "name": "xml",
+      "context": "top-level",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fxml",
+      "executed": false,
+      "read": null,
+      "storageError": "SecurityError",
+      "writeError": "SecurityError",
+      "stored": {
+        "sentinel": "isolated-value-never-private",
+        "read": null
+      }
+    },
+    {
+      "name": "sniff",
+      "context": "top-level",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Fsniff",
+      "executed": false,
+      "read": null,
+      "storageError": "SecurityError",
+      "writeError": "SecurityError",
+      "stored": {
+        "sentinel": "isolated-value-never-private",
+        "read": null
+      }
+    },
+    {
+      "name": "error",
+      "context": "top-level",
+      "url": "http://127.0.0.1:59235/feed-proxy?url=https%3A%2F%2Ffixture.example.invalid%2Ferror",
+      "executed": false,
+      "read": null,
+      "storageError": "SecurityError",
+      "writeError": "SecurityError",
+      "stored": {
+        "sentinel": "isolated-value-never-private",
+        "read": null
+      }
+    },
+    {
+      "name": "html",
+      "context": "iframe",
+      "storageError": "SecurityError"
+    }
+  ],
+  "compatibility": [
+    {
+      "name": "rss.xml",
+      "status": 200,
+      "headers": {
+        "content-length": "266",
+        "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        "content-type": "application/rss+xml; charset=utf-8",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
+        "etag": "\"fixture-v1\"",
+        "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
+        "x-content-type-options": "nosniff",
+        "x-rssr-final-url": "https://fixture.example.invalid/rss.xml"
+      },
+      "byteLength": 266
+    },
+    {
+      "name": "atom.xml",
+      "status": 200,
+      "headers": {
+        "content-length": "293",
+        "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        "content-type": "application/atom+xml; charset=utf-8",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
+        "etag": "\"fixture-v1\"",
+        "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
+        "x-content-type-options": "nosniff",
+        "x-rssr-final-url": "https://fixture.example.invalid/atom.xml"
+      },
+      "byteLength": 293
+    },
+    {
+      "name": "latin.xml",
+      "status": 200,
+      "headers": {
+        "content-length": "260",
+        "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        "content-type": "application/rss+xml; charset=iso-8859-1",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
+        "etag": "\"fixture-v1\"",
+        "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
+        "x-content-type-options": "nosniff",
+        "x-rssr-final-url": "https://fixture.example.invalid/latin.xml"
+      },
+      "byteLength": 260
+    },
+    {
+      "name": "landing",
+      "status": 200,
+      "headers": {
+        "content-length": "671",
+        "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
+        "etag": "\"fixture-v1\"",
+        "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
+        "x-content-type-options": "nosniff",
+        "x-rssr-final-url": "https://fixture.example.invalid/moved/index.html"
+      },
+      "byteLength": 671
+    },
+    {
+      "name": "error",
+      "status": 404,
+      "headers": {
+        "content-length": "284",
+        "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
+        "etag": "\"fixture-v1\"",
+        "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
+        "x-content-type-options": "nosniff",
+        "x-rssr-final-url": "https://fixture.example.invalid/error"
+      },
+      "byteLength": 284
+    },
+    {
+      "name": "not-modified",
+      "status": 304,
+      "headers": {
+        "content-security-policy": "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+        "content-type": "application/rss+xml",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT",
+        "etag": "\"fixture-v1\"",
+        "last-modified": "Wed, 07 Oct 2026 00:00:00 GMT",
+        "x-content-type-options": "nosniff",
+        "x-rssr-final-url": "https://fixture.example.invalid/not-modified"
+      },
+      "byteLength": 0
+    },
+    {
+      "name": "oversized",
+      "status": 502,
+      "headers": {
+        "content-length": "47",
+        "content-type": "text/plain; charset=utf-8",
+        "date": "Wed, 07 Oct 2026 08:27:50 GMT"
+      },
+      "byteLength": 47
+    },
+    {
+      "name": "rss.xml",
+      "title": "RSS Fixture",
+      "add": true,
+      "refresh": true,
+      "entry": true,
+      "refreshResponseObserved": true
+    },
+    {
+      "name": "atom.xml",
+      "title": "Atom Fixture",
+      "add": true,
+      "refresh": true,
+      "entry": true,
+      "refreshResponseObserved": true
+    },
+    {
+      "name": "latin.xml",
+      "title": "Café Feed",
+      "add": true,
+      "refresh": true,
+      "entry": true,
+      "refreshResponseObserved": true
+    },
+    {
+      "name": "landing",
+      "title": "Discovered Feed",
+      "add": true,
+      "refresh": true,
+      "entry": true,
+      "refreshResponseObserved": true
+    }
+  ],
+  "base": "http://127.0.0.1:59235",
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/154.0.8037.93",
+    "revision": "@f89f3a4363808e117c592adedcf9947882ac3b79",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+    "jsVersion": "15.4.80.19"
+  },
+  "pass": true
+}

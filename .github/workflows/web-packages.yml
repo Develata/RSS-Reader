@@ -1,0 +1,199 @@
+name: Web packages
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: ''
+      release_tag:
+        type: string
+        default: ''
+      all_platforms:
+        type: boolean
+        default: true
+    outputs:
+      build_id:
+        value: ${{ jobs.source.outputs.build_id }}
+      source_sha:
+        value: ${{ jobs.source.outputs.sha }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DIOXUS_CLI_VERSION: 0.7.9
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.identity.outputs.sha }}
+      build_id: ${{ steps.identity.outputs.build_id }}
+      release_tag: ${{ steps.identity.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+      - id: identity
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "build_id=git-$sha" >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import os, tomllib
+          with open('Cargo.toml', 'rb') as source:
+              version = tomllib.load(source)['workspace']['package']['version']
+          tag = os.environ['REQUESTED_TAG'] or 'v' + version
+          assert tag and all(33 <= ord(c) <= 126 for c in tag)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('release_tag=' + tag + '\n')
+          PY
+
+  page:
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RSSR_BUILD_ID: ${{ needs.source.outputs.build_id }}
+      RELEASE_TAG: ${{ needs.source.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: web-package-page
+      - uses: ./.github/actions/setup-dioxus-cli
+        with:
+          version: ${{ env.DIOXUS_CLI_VERSION }}
+      - name: Build one page for all service packages
+        run: dx bundle --locked --platform web --package rssr-app --release --debug-symbols false --out-dir "$RUNNER_TEMP/rssr-distribution/web-dist"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-package-public
+          path: ${{ runner.temp }}/rssr-distribution/web-dist/public/
+          if-no-files-found: error
+
+  linux:
+    needs: [source, page]
+    runs-on: ubuntu-latest
+    # Build against the image's Debian baseline, not a newer hosted runner's glibc.
+    container: rust:1.99-bookworm
+    timeout-minutes: 60
+    env:
+      RSSR_BUILD_ID: ${{ needs.source.outputs.build_id }}
+      RELEASE_TAG: ${{ needs.source.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - name: Install packaging tools
+        run: |
+          apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update
+          apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y --no-install-recommends python3 pkg-config libssl-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: web-package-bookworm
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-package-public
+          path: ${{ runner.temp }}/rssr-distribution/web-dist/public
+      - name: Build the Linux service and CLI for the shared page
+        run: |
+          cargo build --locked --release -p rssr-web -p rssr-cli
+          python3 scripts/package_web.py create --binary target/release/rssr-web --public "$RUNNER_TEMP/rssr-distribution/web-dist/public" --build-id "$RSSR_BUILD_ID" --output "$RUNNER_TEMP/rssr-distribution/web-package/rssr-web-linux-x86_64.tar.gz"
+          # The image consumes this exact CLI and the archived service/page; no second build.
+          mkdir -p "$RUNNER_TEMP/rssr-distribution/web-package/image"
+          cp target/release/rssr-cli "$RUNNER_TEMP/rssr-distribution/web-package/image/rssr-cli"
+          (cd "$RUNNER_TEMP/rssr-distribution/web-package/image" && sha256sum rssr-cli > cli.sha256)
+      - name: Verify the extracted Linux distribution
+        run: |
+          python3 scripts/package_web.py unpack "$RUNNER_TEMP/rssr-distribution/web-package/rssr-web-linux-x86_64.tar.gz" "$RUNNER_TEMP/rssr-distribution/web-verify"
+          python3 scripts/smoke_web_package.py "$RUNNER_TEMP/rssr-distribution/web-verify" --logs "$RUNNER_TEMP/rssr-distribution/web-package-check"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-package-linux-x86_64
+          path: ${{ runner.temp }}/rssr-distribution/web-package/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: web-package-check-linux-x86_64
+          path: ${{ runner.temp }}/rssr-distribution/web-package-check/
+          if-no-files-found: ignore
+
+  native:
+    if: inputs.all_platforms
+    needs: [source, page]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            exe: .exe
+            archive: zip
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: macos-x86_64
+            exe: ''
+            archive: tar.gz
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-aarch64
+            exe: ''
+            archive: tar.gz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      RSSR_BUILD_ID: ${{ needs.source.outputs.build_id }}
+      RELEASE_TAG: ${{ needs.source.outputs.release_tag }}
+      PACKAGE_FILE: rssr-web-${{ matrix.platform }}.${{ matrix.archive }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: web-package-${{ matrix.target }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-package-public
+          path: ${{ runner.temp }}/rssr-distribution/web-dist/public
+      - name: Build and archive the matching service and page
+        run: |
+          cargo build --locked --release --target ${{ matrix.target }} -p rssr-web
+          python scripts/package_web.py create --binary target/${{ matrix.target }}/release/rssr-web${{ matrix.exe }} --public "$RUNNER_TEMP/rssr-distribution/web-dist/public" --build-id "$RSSR_BUILD_ID" --output "$RUNNER_TEMP/rssr-distribution/web-package/$PACKAGE_FILE"
+      - name: Verify the extracted native distribution
+        run: |
+          python scripts/package_web.py unpack "$RUNNER_TEMP/rssr-distribution/web-package/$PACKAGE_FILE" "$RUNNER_TEMP/rssr-distribution/web-verify"
+          python scripts/smoke_web_package.py "$RUNNER_TEMP/rssr-distribution/web-verify" --logs "$RUNNER_TEMP/rssr-distribution/web-package-check"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-package-${{ matrix.platform }}
+          path: ${{ runner.temp }}/rssr-distribution/web-package/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: web-package-check-${{ matrix.platform }}
+          path: ${{ runner.temp }}/rssr-distribution/web-package-check/
+          if-no-files-found: ignore

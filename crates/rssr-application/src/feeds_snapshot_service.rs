@@ -1,30 +1,36 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{FeedRepository, FeedSummary};
+use rssr_domain::{ConfigFingerprint, FeedSummary};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::library_queries::{FeedsOverview, LibraryQueryPort};
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FeedsSnapshotOutcome {
     pub feeds: Vec<FeedSummary>,
-    pub feed_count: usize,
-    pub entry_count: usize,
+    pub feed_count: u64,
+    pub entry_count: u64,
+    /// What a configuration import from this page expects to replace.
+    pub fingerprint: ConfigFingerprint,
 }
 
 #[derive(Clone)]
 pub struct FeedsSnapshotService {
-    feed_repository: Arc<dyn FeedRepository>,
+    queries: Arc<dyn LibraryQueryPort>,
 }
 
 impl FeedsSnapshotService {
-    pub fn new(feed_repository: Arc<dyn FeedRepository>) -> Self {
-        Self { feed_repository }
+    pub fn new(queries: Arc<dyn LibraryQueryPort>) -> Self {
+        Self { queries }
     }
 
+    /// The subscriptions and the configuration fingerprint from one read snapshot.
     pub async fn load_snapshot(&self) -> anyhow::Result<FeedsSnapshotOutcome> {
-        let feeds = self.feed_repository.list_summaries().await.context("读取订阅失败")?;
-        let feed_count = feeds.len();
-        let entry_count = feeds.iter().map(|feed| feed.entry_count as usize).sum();
-        Ok(FeedsSnapshotOutcome { feeds, feed_count, entry_count })
+        let FeedsOverview { feeds, fingerprint } =
+            self.queries.feeds_overview().await.context("读取订阅失败")?;
+        let feed_count = feeds.len() as u64;
+        let entry_count = feeds.iter().map(|feed| feed.entry_count).sum();
+        Ok(FeedsSnapshotOutcome { feeds, feed_count, entry_count, fingerprint })
     }
 }
 
@@ -35,6 +41,7 @@ mod tests {
     use rssr_domain::{Feed, FeedRepository, FeedSummary, NewFeedSubscription};
 
     use super::FeedsSnapshotService;
+    use crate::library_queries::test_support::RepositoryQueries;
 
     struct FeedRepositoryStub {
         summaries: Vec<FeedSummary>,
@@ -42,6 +49,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
+        async fn upsert_subscriptions(
+            &self,
+            new_feeds: &[rssr_domain::NewFeedSubscription],
+        ) -> rssr_domain::Result<Vec<rssr_domain::Feed>> {
+            let mut feeds = Vec::with_capacity(new_feeds.len());
+            for new_feed in new_feeds {
+                feeds.push(self.upsert_subscription(new_feed).await?);
+            }
+            Ok(feeds)
+        }
+
         async fn upsert_subscription(
             &self,
             _new_feed: &NewFeedSubscription,
@@ -68,10 +86,15 @@ mod tests {
         }
     }
     fn service(feeds: Vec<FeedSummary>) -> FeedsSnapshotService {
-        FeedsSnapshotService::new(Arc::new(FeedRepositoryStub { summaries: feeds }))
+        let queries = RepositoryQueries {
+            feeds: Some(Arc::new(FeedRepositoryStub { summaries: feeds })),
+            settings: Some(Arc::new(crate::settings_service::tests::MemorySettings::default())),
+            ..RepositoryQueries::default()
+        };
+        FeedsSnapshotService::new(Arc::new(queries))
     }
 
-    fn feed(id: i64, entry_count: u32) -> FeedSummary {
+    fn feed(id: i64, entry_count: u64) -> FeedSummary {
         FeedSummary {
             id,
             title: format!("Feed {id}"),

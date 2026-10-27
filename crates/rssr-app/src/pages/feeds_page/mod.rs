@@ -1,9 +1,9 @@
 mod facade;
 pub(crate) mod intent;
-mod reducer;
+pub(crate) mod reducer;
 mod sections;
 mod session;
-mod state;
+pub(crate) mod state;
 
 use dioxus::prelude::*;
 
@@ -49,12 +49,14 @@ pub fn FeedsPage() -> Element {
 fn use_feeds_page_workspace() -> FeedsPageFacade {
     let state = use_signal(state::FeedsPageState::new);
     let shell = use_context::<crate::ui::AppShellState>();
+    let theme = use_context::<crate::theme::ThemeController>();
     let query_generation = use_signal(|| 0);
-    let session = FeedsPageSession::new(state, shell, query_generation);
-    let refresh_revision = shell.refresh_revision();
+    let session = FeedsPageSession::new(state, shell, theme, query_generation);
+    // The page's read-only refresh: its own writes (reload_tick) and the shell's (C4b item 2).
+    let library_revision = shell.library_revision();
     let reload_tick = session.reload_tick();
 
-    use_reactive_task((reload_tick, refresh_revision), move |_| {
+    use_reactive_task((reload_tick, library_revision), move |_| {
         session.load_snapshot();
     });
 

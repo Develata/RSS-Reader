@@ -7,7 +7,6 @@ skip_build="false"
 log_dir=""
 username="smoke"
 password="smoke-pass-123"
-session_secret="rssr-web-browser-smoke-session-secret-0123456789"
 feed_url="https://www.ruanyifeng.com/blog/atom.xml"
 
 while [[ $# -gt 0 ]]; do
@@ -40,16 +39,12 @@ while [[ $# -gt 0 ]]; do
       password="${2:?missing password value}"
       shift 2
       ;;
-    --session-secret)
-      session_secret="${2:?missing session secret value}"
-      shift 2
-      ;;
     --feed-url)
       feed_url="${2:?missing feed url value}"
       shift 2
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--session-secret SECRET] [--feed-url URL]" >&2
+      echo "Usage: $0 [--port PORT] [--debug|--release] [--skip-build] [--log-dir DIR] [--username USER] [--password PASS] [--feed-url URL]" >&2
       exit 1
       ;;
   esac
@@ -62,7 +57,7 @@ fi
 mkdir -p "$log_dir"
 
 public_dir="target/dx/rssr-app/${profile}/web/public"
-auth_state_file="$log_dir/rssr-web-auth.json"
+data_dir="$log_dir/data"
 log_file="$log_dir/rssr-web.log"
 summary_file="$log_dir/summary.md"
 
@@ -105,7 +100,7 @@ cat >"$summary_file" <<EOF
 6. 点击该卡片上的 \`data-action="refresh-feed"\`。
 7. 如果页面出现文章，点击 `data-nav="feed-entries"` 进入文章页；如能进入阅读页，再补看 `/reader`。
 8. 打开 \`/settings\`，确认登录态下设置页可达。
-9. 访问 \`/logout\`，确认会回到 \`/login\`。
+9. 访问 \`/logout\`，在确认页点“退出登录”，确认会回到 \`/login\`。
 
 ## 固定 selector / 期望
 
@@ -131,12 +126,15 @@ cat >"$summary_file" <<EOF
 - 这条 smoke 当前仍是手工项，原因不是 selector 不稳定，而是当前仓库环境里的 Chrome MCP / DevTools 连接不稳定，尚未形成可重复的浏览器端 UI 自动化。
 EOF
 
+# The caller's deployment settings (public origin, seed credentials, environment, data directory;
+# any letter case, as Windows does not distinguish it) must not reach
+# this smoke service: only the variables set below apply.
+for variable in $(compgen -e | grep -iE '^(RSS_READER_WEB_.*|RSSR_DATA_DIR)$' || true); do unset "$variable"; done
 RSS_READER_WEB_BIND="127.0.0.1:${port}" \
 RSS_READER_WEB_STATIC_DIR="$public_dir" \
 RSS_READER_WEB_USERNAME="$username" \
 RSS_READER_WEB_PASSWORD="$password" \
-RSS_READER_WEB_SESSION_SECRET="$session_secret" \
-RSS_READER_WEB_AUTH_STATE_FILE="$auth_state_file" \
+RSSR_DATA_DIR="$data_dir" \
 cargo run -p rssr-web 2>&1 | tee "$log_file" &
 server_pid=$!
 

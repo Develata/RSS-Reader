@@ -1,7 +1,13 @@
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, PoisonError, Weak},
+};
 
 use anyhow::{Context, Result};
+use rssr_domain::{DomainError, FetchErrorKind};
 use time::OffsetDateTime;
+
+use crate::error::{ErrorKind, classify};
 use url::Url;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -16,6 +22,32 @@ pub struct RefreshTarget {
     pub url: Url,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
+    /// A store-issued ticket, or [`RefreshTicket::UNISSUED`] in a target list before fetching.
+    pub ticket: RefreshTicket,
+}
+
+/// A refresh's place in the persistent order of one subscription's refreshes, so that refreshes
+/// from different processes sharing a library (GUI, CLI, server) cannot overwrite a newer result
+/// with an older one.
+///
+/// The store keeps per subscription the highest ticket issued (I), published (P) and diagnosed
+/// (D), with `0 <= P <= D <= I`. A ticket is issued when the fetch starts, together with the
+/// validators sent and the P they belong to (`baseline`). At commit:
+/// - a fetched feed is published only if `issued > P`;
+/// - a 304 is recorded only if `baseline == P` (it confirms exactly the published version);
+/// - a failure is recorded only if `issued > D`.
+///
+/// Otherwise the commit is superseded and writes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RefreshTicket {
+    pub issued: i64,
+    pub baseline: i64,
+}
+
+impl RefreshTicket {
+    /// A listed target before a refresh starts. Stores refuse commits carrying this value;
+    /// activation and `begin_refresh` issue a ticket in their write transaction.
+    pub const UNISSUED: Self = Self { issued: 0, baseline: 0 };
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -52,10 +84,27 @@ pub struct FeedRefreshUpdate {
     pub feed: ParsedFeedUpdate,
 }
 
+/// A failed fetch of one subscription, as the store records it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RefreshFailure {
+    pub kind: FetchErrorKind,
+    /// Shown as recorded for fetch and parse failures; internal for storage ones.
     pub message: String,
     pub metadata: Option<RefreshHttpMetadata>,
+}
+
+impl RefreshFailure {
+    pub fn fetch(message: impl Into<String>, metadata: Option<RefreshHttpMetadata>) -> Self {
+        Self { kind: FetchErrorKind::Fetch, message: message.into(), metadata }
+    }
+
+    pub fn parse(message: impl Into<String>, metadata: Option<RefreshHttpMetadata>) -> Self {
+        Self { kind: FetchErrorKind::Parse, message: message.into(), metadata }
+    }
+
+    pub fn storage(message: impl Into<String>, metadata: Option<RefreshHttpMetadata>) -> Self {
+        Self { kind: FetchErrorKind::Storage, message: message.into(), metadata }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,9 +152,36 @@ pub enum RefreshFeedResult {
         inserted_count: u64,
         localization_entries: Vec<RefreshLocalizedEntry>,
     },
+    /// `message` is for the user: a storage or internal cause is a fixed text (logged in full
+    /// where it was classified).
     Failed {
+        kind: ErrorKind,
         message: String,
     },
+}
+
+impl RefreshFeedResult {
+    /// The failure an error stands for, classified before it becomes text.
+    fn failed(error: &anyhow::Error) -> Self {
+        let public = classify(error);
+        Self::Failed { kind: public.kind, message: public.message }
+    }
+
+    /// The failure a fetch reported: a remote failure shows its text, a storage one does not.
+    fn source_failed(failure: &RefreshFailure) -> Self {
+        match failure.kind {
+            FetchErrorKind::Fetch | FetchErrorKind::Parse => {
+                Self::Failed { kind: ErrorKind::Network, message: failure.message.clone() }
+            }
+            FetchErrorKind::Storage => {
+                tracing::warn!(error = %failure.message, "保存刷新结果失败");
+                Self::Failed {
+                    kind: ErrorKind::Storage,
+                    message: ErrorKind::Storage.generic_message().to_string(),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,35 +216,76 @@ impl RefreshFeedOutcome {
 
     pub fn failure_message(&self) -> Option<&str> {
         match &self.result {
-            RefreshFeedResult::Failed { message } => Some(message),
+            RefreshFeedResult::Failed { message, .. } => Some(message),
             _ => None,
         }
     }
 
-    pub fn failure_summary(&self) -> Option<RefreshFeedFailureSummary> {
-        self.failure_message().map(|message| RefreshFeedFailureSummary {
-            feed_id: self.feed_id,
-            url: self.url.clone(),
-            message: message.to_string(),
-        })
+    /// [`Self::failure_summary`] within the bounds of a result: the address and the message are
+    /// cut to [`crate::MAX_URL_BYTES`] and [`crate::MAX_MESSAGE_BYTES`] before they are copied.
+    pub fn bounded_failure_summary(&self) -> Option<RefreshFailureItem> {
+        match &self.result {
+            RefreshFeedResult::Failed { kind, message } => Some(RefreshFailureItem {
+                feed_id: self.feed_id,
+                url: crate::result_bounds::truncate_marked_str(&self.url, crate::MAX_URL_BYTES),
+                name: None,
+                kind: *kind,
+                message: crate::result_bounds::truncate_marked_str(
+                    message,
+                    crate::MAX_MESSAGE_BYTES,
+                ),
+            }),
+            _ => None,
+        }
     }
 
-    pub fn failure_line(&self) -> Option<String> {
-        self.failure_summary().map(|failure| failure.display_line())
+    /// The failure, without a name (the refresh does not read it).
+    pub fn failure_summary(&self) -> Option<RefreshFailureItem> {
+        match &self.result {
+            RefreshFeedResult::Failed { kind, message } => Some(RefreshFailureItem {
+                feed_id: self.feed_id,
+                url: self.url.clone(),
+                name: None,
+                kind: *kind,
+                message: message.clone(),
+            }),
+            _ => None,
+        }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RefreshFeedFailureSummary {
+/// A subscription whose refresh failed. The GUI and the CLI format it themselves.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RefreshFailureItem {
     pub feed_id: i64,
     pub url: String,
+    /// The subscription's display name when known; show the address otherwise.
+    pub name: Option<String>,
+    pub kind: ErrorKind,
+    /// For the user (see [`RefreshFeedResult::Failed`]).
     pub message: String,
 }
 
-impl RefreshFeedFailureSummary {
-    pub fn display_line(&self) -> String {
-        format!("{}: {}", self.url, self.message)
-    }
+/// What refreshing every subscription led to, as the user interface receives it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RefreshAllExecutionOutcome {
+    pub inserted_count: u64,
+    pub total_count: u64,
+    pub failed_count: u64,
+    /// Empty when everything succeeded; fewer than `total_count` is a partial success. Bounded
+    /// (`RefreshAllExecutionOutcome::bounded`): see `failures_truncated`.
+    pub failures: Vec<RefreshFailureItem>,
+    /// Some failures are not listed (too many, or too large to send): `failed_count` is the full
+    /// count.
+    #[serde(default)]
+    pub failures_truncated: bool,
+}
+
+/// What refreshing one subscription led to, as the user interface receives it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RefreshFeedExecutionOutcome {
+    pub inserted_count: u64,
+    pub failure: Option<RefreshFailureItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -178,6 +295,22 @@ pub struct RefreshAllOutcome {
 
 impl RefreshAllOutcome {
     pub fn summary(&self) -> RefreshAllSummary {
+        self.summarize(usize::MAX, RefreshFeedOutcome::failure_summary)
+    }
+
+    /// [`Self::summary`] for a result: at most `max_failures` failures listed (the first ones),
+    /// each built only when it is listed and within the bounds of a result
+    /// ([`RefreshFeedOutcome::bounded_failure_summary`]); the counts cover every subscription
+    /// (review C3-R2 R2-03, C3-R3 R3-02).
+    pub fn summary_listing(&self, max_failures: usize) -> RefreshAllSummary {
+        self.summarize(max_failures, RefreshFeedOutcome::bounded_failure_summary)
+    }
+
+    fn summarize(
+        &self,
+        max_failures: usize,
+        failure: fn(&RefreshFeedOutcome) -> Option<RefreshFailureItem>,
+    ) -> RefreshAllSummary {
         let mut summary =
             RefreshAllSummary { total_count: self.feeds.len(), ..RefreshAllSummary::default() };
 
@@ -190,7 +323,9 @@ impl RefreshAllOutcome {
                 RefreshFeedResult::NotModified => summary.not_modified_count += 1,
                 RefreshFeedResult::Failed { .. } => {
                     summary.failed_count += 1;
-                    if let Some(failure) = outcome.failure_summary() {
+                    if summary.failures.len() < max_failures
+                        && let Some(failure) = failure(outcome)
+                    {
                         summary.failures.push(failure);
                     }
                 }
@@ -216,12 +351,8 @@ impl RefreshAllOutcome {
         self.feeds.iter().filter(|outcome| outcome.failure_message().is_some()).collect()
     }
 
-    pub fn failure_summaries(&self) -> Vec<RefreshFeedFailureSummary> {
+    pub fn failure_summaries(&self) -> Vec<RefreshFailureItem> {
         self.summary().failures
-    }
-
-    pub fn joined_failure_lines(&self) -> Option<String> {
-        self.summary().joined_failure_lines()
     }
 }
 
@@ -232,26 +363,12 @@ pub struct RefreshAllSummary {
     pub updated_count: usize,
     pub not_modified_count: usize,
     pub failed_count: usize,
-    pub failures: Vec<RefreshFeedFailureSummary>,
+    pub failures: Vec<RefreshFailureItem>,
 }
 
 impl RefreshAllSummary {
     pub fn has_failures(&self) -> bool {
         self.failed_count > 0
-    }
-
-    pub fn joined_failure_lines(&self) -> Option<String> {
-        if self.failures.is_empty() {
-            None
-        } else {
-            Some(
-                self.failures
-                    .iter()
-                    .map(RefreshFeedFailureSummary::display_line)
-                    .collect::<Vec<_>>()
-                    .join(" | "),
-            )
-        }
     }
 }
 
@@ -264,12 +381,32 @@ pub trait FeedRefreshSourcePort: Send + Sync {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RefreshCommitOutcome {
     pub inserted_count: u64,
+    /// A newer refresh (possibly in another process) already published or diagnosed this
+    /// subscription; nothing was written.
+    pub superseded: bool,
 }
 
 #[async_trait::async_trait]
 pub trait RefreshStorePort: Send + Sync {
     async fn list_targets(&self) -> Result<Vec<RefreshTarget>>;
     async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>>;
+
+    /// Starts a refresh: the current target with a newly issued [`RefreshTicket`], or `None`
+    /// when the subscription is gone or no longer in `expected_generation`. Called right before
+    /// the fetch, so ticket order is fetch-start order.
+    ///
+    /// The default delegates to a store whose `get_target` already issues tickets. Stores
+    /// with a separate read-only lookup override it to issue here. A production target returned
+    /// from either path must carry an issued ticket.
+    async fn begin_refresh(
+        &self,
+        feed_id: i64,
+        expected_generation: Option<i64>,
+    ) -> Result<Option<RefreshTarget>> {
+        Ok(self.get_target(feed_id).await?.filter(|target| {
+            expected_generation.is_none_or(|generation| generation == target.generation)
+        }))
+    }
     /// 返回真实新增索引数；批次内的计数需等 end_batch 成功后才可发布。
     async fn commit(
         &self,
@@ -280,9 +417,9 @@ pub trait RefreshStorePort: Send + Sync {
     /// 打开一个写入批次：批次期间的 [`RefreshStorePort::commit`] 只需保证改动对后续读取可见，
     /// 真正的落盘可以推迟到 [`RefreshStorePort::end_batch`]。
     ///
-    /// 默认空实现。事务型存储（SQLite）每次 `commit` 就已经落盘，没有可推迟的东西；
-    /// 需要整片重写的存储（浏览器 `localStorage`）才靠它把「每个订阅重写一次全库」压成
-    /// 「整轮重写一次」。
+    /// 默认空实现。当前全部宿主共用 SQLite，每次 `commit` 就已提交；Pages 的内存库
+    /// 立即对本页后续查询可见，原生文件库按连接的持久化设置提交。
+    /// 想把整轮写入合并成一次的存储才需要实现它。
     ///
     /// **不变量**：批次一旦打开，必须以 `end_batch` 或 `abort_batch` 收尾。
     /// 这一条由 `refresh_all` 里的 [`RefreshBatchGuard`] 强制，不靠调用方自觉。
@@ -311,8 +448,8 @@ pub trait RefreshStorePort: Send + Sync {
 /// 光靠「`begin_batch` 与 `end_batch` 之间不写 `?`」是不够的：Web 端刷新任务是
 /// Dioxus 作用域绑定的 `spawn`（`rssr-app` 的 `spawn_projected_ui_command`），
 /// 用户在刷新途中离开订阅页，组件一卸载整个 future 就被 drop，`end_batch` 永远等不到。
-/// 那样批次会永久停在打开状态，此后**批次外**的提交（单订阅刷新、添加订阅的首刷）
-/// 全都只改内存不落盘，而且不报错——正是最难被发现的那种丢数据。
+/// 对推迟落盘的实现，批次会永久停在打开状态，此后**批次外**的提交（单订阅刷新、添加
+/// 订阅的首刷）全都只改内存不落盘，而且不报错——正是最难被发现的那种丢数据。
 ///
 /// 守卫不设「解除」开关：`abort_batch` 要求幂等，正常收尾后再调一次是空操作，
 /// 这样就不存在「已解除但还没 `end_batch`」的窗口。
@@ -326,29 +463,72 @@ impl Drop for RefreshBatchGuard<'_> {
     }
 }
 
+/// Serializes overlapping work for one subscription within this process. Other subscriptions
+/// do not wait. Correctness across processes and for prepared responses is decided entirely
+/// by the store's I/P/D tickets; this lock never spans a database transaction over a fetch.
+#[derive(Default)]
+struct FeedRefreshLocks {
+    locks: std::sync::Mutex<HashMap<i64, Weak<tokio::sync::Mutex<()>>>>,
+}
+
+impl FeedRefreshLocks {
+    fn lock_for(&self, feed_id: i64) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = self.locks.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(lock) = locks.get(&feed_id).and_then(Weak::upgrade) {
+            return lock;
+        }
+        locks.retain(|_, lock| lock.strong_count() > 0);
+        let lock = Arc::new(tokio::sync::Mutex::new(()));
+        locks.insert(feed_id, Arc::downgrade(&lock));
+        lock
+    }
+}
+
 #[derive(Clone)]
 pub struct RefreshService {
     source: Arc<dyn FeedRefreshSourcePort>,
     store: Arc<dyn RefreshStorePort>,
+    feed_locks: Arc<FeedRefreshLocks>,
 }
 
 impl RefreshService {
     pub fn new(source: Arc<dyn FeedRefreshSourcePort>, store: Arc<dyn RefreshStorePort>) -> Self {
-        Self { source, store }
+        Self { source, store, feed_locks: Arc::default() }
     }
 
     /// 复用添加订阅时已获取的 feed，首次入库不再发起第二次请求。
+    ///
+    /// 订阅激活后、首刷拿到锁之前，后台刷新可能已经把更新的内容落库；那时预抓取的结果
+    /// 已经过时，不再写入，按“未变化”返回（审计 A1）。
+    /// Writes the response fetched while adding the subscription. The subscription is saved by
+    /// then: a failed write is this refresh's failure, not the add's (B2-D5).
     pub async fn apply_prepared_update(
         &self,
         target: RefreshTarget,
         update: FeedRefreshUpdate,
-    ) -> Result<RefreshFeedOutcome> {
-        self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await
+    ) -> RefreshFeedOutcome {
+        let lock = self.feed_locks.lock_for(target.feed_id);
+        let _serialized = lock.lock().await;
+        // Activation already issued this prepared response's ticket in the same transaction.
+        let (feed_id, url) = (target.feed_id, target.url.to_string());
+        match self.apply_source_output(target, FeedRefreshSourceOutput::Updated(update)).await {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                RefreshFeedOutcome { feed_id, url, result: RefreshFeedResult::failed(&error) }
+            }
+        }
     }
 
     pub async fn refresh_feed(&self, feed_id: i64) -> Result<RefreshFeedOutcome> {
-        let target = self.store.get_target(feed_id).await?.context("订阅不存在")?;
-        self.refresh_target(target).await
+        let lock = self.feed_locks.lock_for(feed_id);
+        let _serialized = lock.lock().await;
+        // 在锁内读取目标：排在前一次刷新之后的请求要带上它刚写入的校验器。
+        let target = self
+            .store
+            .begin_refresh(feed_id, None)
+            .await?
+            .ok_or(rssr_domain::DomainError::NotFound)?;
+        self.fetch_and_apply(target).await
     }
 
     /// 刷新全部订阅。
@@ -389,10 +569,10 @@ impl RefreshService {
             return;
         };
 
-        let message = format!("刷新结果写入本地存储失败: {error}");
+        let failed = RefreshFeedResult::failed(&error.context("刷新结果写入本地存储失败"));
         for outcome in outcomes.iter_mut() {
             if !matches!(outcome.result, RefreshFeedResult::Failed { .. }) {
-                outcome.result = RefreshFeedResult::Failed { message: message.clone() };
+                outcome.result = failed.clone();
             }
         }
     }
@@ -463,12 +643,11 @@ impl RefreshService {
                     }
                     Err(join_error) => {
                         if let Some((feed_id, url)) = pending.remove(&join_error.id()) {
+                            let error = anyhow::Error::new(join_error).context("刷新任务意外结束");
                             outcomes.push(RefreshFeedOutcome {
                                 feed_id,
                                 url,
-                                result: RefreshFeedResult::Failed {
-                                    message: format!("刷新任务意外结束: {join_error}"),
-                                },
+                                result: RefreshFeedResult::failed(&error),
                             });
                         }
                     }
@@ -489,23 +668,36 @@ impl RefreshService {
 
         match self.refresh_target(target).await {
             Ok(outcome) => outcome,
-            Err(error) => RefreshFeedOutcome {
-                feed_id,
-                url,
-                result: RefreshFeedResult::Failed { message: error.to_string() },
-            },
+            Err(error) => {
+                RefreshFeedOutcome { feed_id, url, result: RefreshFeedResult::failed(&error) }
+            }
         }
     }
 
-    async fn refresh_target(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
+    async fn refresh_target(&self, listed: RefreshTarget) -> Result<RefreshFeedOutcome> {
+        let lock = self.feed_locks.lock_for(listed.feed_id);
+        let _serialized = lock.lock().await;
+        // 订阅列表是锁外取的快照。排在别的刷新之后时，要带上它刚写入的校验器：拿旧校验器
+        // 换来的 304 只确认旧表示，会把旧 ETag 与新正文配在一起（RFC 9110 §13.1.2）。
+        // 期间被删除或重新订阅的不在这一轮刷新。
+        let target = match self.store.begin_refresh(listed.feed_id, Some(listed.generation)).await?
+        {
+            Some(current) => current,
+            None => {
+                return Err(DomainError::Conflict("订阅已删除或已重新订阅".to_string()).into());
+            }
+        };
+        self.fetch_and_apply(target).await
+    }
+
+    /// 调用方必须持有该订阅的刷新锁。
+    async fn fetch_and_apply(&self, target: RefreshTarget) -> Result<RefreshFeedOutcome> {
         let source_output = match self.source.refresh(&target).await {
             Ok(output) => output,
-            Err(error) => FeedRefreshSourceOutput::Failed(RefreshFailure {
-                message: error.to_string(),
-                metadata: None,
-            }),
+            Err(error) => {
+                FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(error.to_string(), None))
+            }
         };
-
         self.apply_source_output(target, source_output).await
     }
 
@@ -519,6 +711,7 @@ impl RefreshService {
                 self.store
                     .commit(&target, RefreshCommit::NotModified { metadata: metadata.clone() })
                     .await?;
+                // A superseded 304 changed nothing either; both read as "not modified".
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
@@ -531,6 +724,14 @@ impl RefreshService {
                     build_localization_entries(&update.feed.entries, target.generation);
                 let committed =
                     self.store.commit(&target, RefreshCommit::Updated { update }).await?;
+                if committed.superseded {
+                    // A newer refresh already published; this response is not the stored one.
+                    return Ok(RefreshFeedOutcome {
+                        feed_id: target.feed_id,
+                        url: target.url.to_string(),
+                        result: RefreshFeedResult::NotModified,
+                    });
+                }
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
@@ -542,13 +743,22 @@ impl RefreshService {
                 })
             }
             FeedRefreshSourceOutput::Failed(failure) => {
-                self.store
+                let committed = self
+                    .store
                     .commit(&target, RefreshCommit::Failed { failure: failure.clone() })
                     .await?;
+                if committed.superseded {
+                    // A newer refresh already succeeded or was diagnosed; this failure is stale.
+                    return Ok(RefreshFeedOutcome {
+                        feed_id: target.feed_id,
+                        url: target.url.to_string(),
+                        result: RefreshFeedResult::NotModified,
+                    });
+                }
                 Ok(RefreshFeedOutcome {
                     feed_id: target.feed_id,
                     url: target.url.to_string(),
-                    result: RefreshFeedResult::Failed { message: failure.message },
+                    result: RefreshFeedResult::source_failed(&failure),
                 })
             }
         }
@@ -631,6 +841,7 @@ mod tests {
             url: Url::parse(url).expect("valid url"),
             etag: Some("etag".to_string()),
             last_modified: Some("last-modified".to_string()),
+            ticket: Default::default(),
         }
     }
 
@@ -669,24 +880,60 @@ mod tests {
         let outcome = super::RefreshFeedOutcome {
             feed_id: 9,
             url: "https://example.com/feed.xml".to_string(),
-            result: super::RefreshFeedResult::Failed { message: "boom".to_string() },
+            result: super::RefreshFeedResult::Failed {
+                kind: crate::ErrorKind::Network,
+                message: "boom".to_string(),
+            },
         };
 
         assert!(!outcome.is_success());
         assert_eq!(outcome.failure_message(), Some("boom"));
-        assert_eq!(outcome.failure_line(), Some("https://example.com/feed.xml: boom".to_string()));
-        assert_eq!(
-            outcome.failure_summary(),
-            Some(super::RefreshFeedFailureSummary {
-                feed_id: 9,
-                url: "https://example.com/feed.xml".to_string(),
-                message: "boom".to_string(),
-            })
-        );
+        let failure = outcome.failure_summary().expect("failure");
+        assert_eq!((failure.feed_id, failure.url.as_str()), (9, "https://example.com/feed.xml"));
+        assert_eq!((failure.name, failure.message.as_str()), (None, "boom"));
+        assert_eq!(failure.kind, crate::ErrorKind::Network);
+    }
+
+    /// Listing at most some failures builds only those; the counts cover every subscription.
+    #[test]
+    fn a_summary_lists_at_most_the_failures_asked_for() {
+        let outcome = super::RefreshAllOutcome {
+            feeds: (0..5)
+                .map(|feed_id| super::RefreshFeedOutcome {
+                    feed_id,
+                    url: format!("https://example.com/{feed_id}.xml"),
+                    result: super::RefreshFeedResult::Failed {
+                        kind: crate::ErrorKind::Network,
+                        message: "boom".to_string(),
+                    },
+                })
+                .collect(),
+        };
+        let summary = outcome.summary_listing(2);
+        assert_eq!((summary.total_count, summary.failed_count), (5, 5));
+        let listed: Vec<_> = summary.failures.iter().map(|failure| failure.feed_id).collect();
+        assert_eq!(listed, [0, 1]);
+        assert_eq!(outcome.summary().failures.len(), 5);
+
+        // Listed failures are cut to the bounds of a result; the full summary keeps them whole.
+        let long = super::RefreshAllOutcome {
+            feeds: vec![super::RefreshFeedOutcome {
+                feed_id: 1,
+                url: format!("https://example.com/{}", "u".repeat(10 * crate::MAX_URL_BYTES)),
+                result: super::RefreshFeedResult::Failed {
+                    kind: crate::ErrorKind::Network,
+                    message: "m".repeat(10 * crate::MAX_MESSAGE_BYTES),
+                },
+            }],
+        };
+        let listed = &long.summary_listing(1).failures[0];
+        assert!(listed.url.len() <= crate::MAX_URL_BYTES);
+        assert!(listed.message.len() <= crate::MAX_MESSAGE_BYTES);
+        assert_eq!(long.summary().failures[0].message.len(), 10 * crate::MAX_MESSAGE_BYTES);
     }
 
     #[test]
-    fn refresh_all_summary_counts_results_and_formats_failures() {
+    fn refresh_all_summary_counts_results_and_lists_failures() {
         let outcome = super::RefreshAllOutcome {
             feeds: vec![
                 super::RefreshFeedOutcome {
@@ -706,7 +953,10 @@ mod tests {
                 super::RefreshFeedOutcome {
                     feed_id: 3,
                     url: "https://example.com/three.xml".to_string(),
-                    result: super::RefreshFeedResult::Failed { message: "boom".to_string() },
+                    result: super::RefreshFeedResult::Failed {
+                        kind: crate::ErrorKind::Network,
+                        message: "boom".to_string(),
+                    },
                 },
             ],
         };
@@ -722,10 +972,8 @@ mod tests {
         assert_eq!(summary.failures[0].feed_id, 3);
         assert_eq!(outcome.updated_count(), 1);
         assert_eq!(outcome.not_modified_count(), 1);
-        assert_eq!(
-            outcome.joined_failure_lines(),
-            Some("https://example.com/three.xml: boom".to_string())
-        );
+        assert_eq!(summary.failures[0].url, "https://example.com/three.xml");
+        assert_eq!(summary.failures[0].message, "boom");
     }
 
     #[tokio::test]
@@ -798,10 +1046,10 @@ mod tests {
         });
         let service = RefreshService::new(
             Arc::new(SourceStub {
-                outputs: Mutex::new(vec![FeedRefreshSourceOutput::Failed(RefreshFailure {
-                    message: "抓取订阅失败".to_string(),
-                    metadata: None,
-                })]),
+                outputs: Mutex::new(vec![FeedRefreshSourceOutput::Failed(RefreshFailure::fetch(
+                    "抓取订阅失败",
+                    None,
+                ))]),
             }),
             store.clone(),
         );
@@ -924,6 +1172,7 @@ mod tests {
             self.record(&format!("commit:{}", target.feed_id));
             Ok(crate::RefreshCommitOutcome {
                 inserted_count: u64::from(matches!(_commit, RefreshCommit::Updated { .. })),
+                superseded: false,
             })
         }
 
@@ -939,7 +1188,9 @@ mod tests {
         async fn end_batch(&self) -> Result<()> {
             self.record("end");
             match &self.end_batch_error {
-                Some(message) => anyhow::bail!("{message}"),
+                Some(message) => {
+                    return Err(rssr_domain::DomainError::Persistence(message.to_string()).into());
+                }
                 None => Ok(()),
             }
         }
@@ -1026,11 +1277,10 @@ mod tests {
         assert_eq!(outcome.summary().inserted_count, 0);
         for feed in &outcome.feeds {
             match &feed.result {
-                super::RefreshFeedResult::Failed { message } => {
-                    assert!(
-                        message.contains("存储配额已满"),
-                        "失败原因要带上真正的写入错误：{message}"
-                    );
+                // A storage cause is classified and shown as the fixed text; the detail is logged.
+                super::RefreshFeedResult::Failed { kind, message } => {
+                    assert_eq!(*kind, crate::ErrorKind::Storage);
+                    assert_eq!(message, crate::ErrorKind::Storage.generic_message());
                 }
                 other => panic!("批次没写成功时不该报成功：{other:?}"),
             }
@@ -1073,10 +1323,7 @@ mod tests {
             Arc::new(SourceStub {
                 outputs: Mutex::new(vec![
                     FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()),
-                    FeedRefreshSourceOutput::Failed(RefreshFailure {
-                        message: "boom".to_string(),
-                        metadata: None,
-                    }),
+                    FeedRefreshSourceOutput::Failed(RefreshFailure::fetch("boom", None)),
                 ]),
             }),
             Arc::new(StoreStub {
@@ -1093,5 +1340,146 @@ mod tests {
 
         assert_eq!(outcome.not_modified_count(), 1);
         assert_eq!(outcome.failures().len(), 1);
+    }
+
+    const WATCHDOG: std::time::Duration = std::time::Duration::from_secs(10);
+
+    async fn within<T>(what: &str, future: impl std::future::Future<Output = T>) -> T {
+        tokio::time::timeout(WATCHDOG, future)
+            .await
+            .unwrap_or_else(|_| panic!("watchdog: {what} did not finish"))
+    }
+
+    /// 同一订阅的第二次刷新要等第一次提交后才开始抓取；其他订阅不受影响（审计 A1）。
+    /// 第二次请求直接轮询一次，确认它停在锁上；所有等待都有看门狗，回归成全局锁也不会挂起。
+    #[tokio::test]
+    async fn refreshes_of_one_feed_run_one_at_a_time_without_blocking_other_feeds() {
+        struct GatedSource {
+            calls: Mutex<Vec<i64>>,
+            first_started: tokio::sync::Notify,
+            release_first: tokio::sync::Notify,
+        }
+
+        #[async_trait::async_trait]
+        impl FeedRefreshSourcePort for GatedSource {
+            async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+                let first = {
+                    let mut calls = self.calls.lock().expect("lock calls");
+                    calls.push(target.feed_id);
+                    calls.len() == 1
+                };
+                if first {
+                    self.first_started.notify_one();
+                    self.release_first.notified().await;
+                }
+                Ok(FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()))
+            }
+        }
+
+        let source = Arc::new(GatedSource {
+            calls: Mutex::new(Vec::new()),
+            first_started: tokio::sync::Notify::new(),
+            release_first: tokio::sync::Notify::new(),
+        });
+        let store = Arc::new(StoreStub {
+            targets: vec![
+                sample_target(1, "https://example.com/1.xml"),
+                sample_target(2, "https://example.com/2.xml"),
+            ],
+            commits: Mutex::new(Vec::new()),
+        });
+        let service = RefreshService::new(source.clone(), store.clone());
+        let first = tokio::spawn({
+            let service = service.clone();
+            async move { service.refresh_feed(1).await }
+        });
+        within("first fetch to start", source.first_started.notified()).await;
+
+        let mut second = std::pin::pin!(service.refresh_feed(1));
+        let polled =
+            std::future::poll_fn(|cx| std::task::Poll::Ready(second.as_mut().poll(cx))).await;
+        assert!(polled.is_pending(), "the second refresh of feed 1 must wait for the first");
+        within("refresh of another feed", service.refresh_feed(2))
+            .await
+            .expect("another feed is not blocked");
+        assert_eq!(*source.calls.lock().expect("lock calls"), [1, 2]);
+
+        source.release_first.notify_one();
+        within("first refresh", first).await.expect("join first").expect("first refresh");
+        within("second refresh", second).await.expect("second refresh");
+        assert_eq!(*source.calls.lock().expect("lock calls"), [1, 2, 1]);
+        let committed = store
+            .commits
+            .lock()
+            .expect("lock commits")
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        assert_eq!(committed, [2, 1, 1]);
+    }
+
+    // Prepared-response ordering and lost acknowledgements are tested against the actual
+    // SQL store in test_library_refresh_tickets on native and WASM. The obsolete in-process
+    // sequence stubs intentionally no longer define a second publication rule.
+
+    /// `refresh_all` 的目标列表是锁外快照：等锁之后要用存储里最新的校验器发请求；期间被
+    /// 删除或重新订阅的订阅不在这一轮刷新（独立评审）。
+    #[tokio::test]
+    async fn refresh_all_requests_with_the_validators_stored_when_it_gets_the_lock() {
+        struct MovingStore {
+            listed: Vec<RefreshTarget>,
+            current: Vec<RefreshTarget>,
+        }
+
+        #[async_trait::async_trait]
+        impl RefreshStorePort for MovingStore {
+            async fn list_targets(&self) -> Result<Vec<RefreshTarget>> {
+                Ok(self.listed.clone())
+            }
+
+            async fn get_target(&self, feed_id: i64) -> Result<Option<RefreshTarget>> {
+                Ok(self.current.iter().find(|target| target.feed_id == feed_id).cloned())
+            }
+
+            async fn commit(
+                &self,
+                _target: &RefreshTarget,
+                _commit: RefreshCommit,
+            ) -> Result<crate::RefreshCommitOutcome> {
+                Ok(Default::default())
+            }
+        }
+
+        struct RecordingSource(Mutex<Vec<(i64, Option<String>)>>);
+
+        #[async_trait::async_trait]
+        impl FeedRefreshSourcePort for RecordingSource {
+            async fn refresh(&self, target: &RefreshTarget) -> Result<FeedRefreshSourceOutput> {
+                self.0.lock().expect("lock").push((target.feed_id, target.etag.clone()));
+                Ok(FeedRefreshSourceOutput::NotModified(RefreshHttpMetadata::default()))
+            }
+        }
+
+        let listed = vec![
+            sample_target(1, "https://example.com/1.xml"),
+            sample_target(2, "https://example.com/2.xml"),
+            sample_target(3, "https://example.com/3.xml"),
+        ];
+        let mut current = listed.clone();
+        current[0].etag = Some("stored-after-listing".into());
+        current[1].generation += 1;
+        current.remove(2);
+        let source = Arc::new(RecordingSource(Mutex::new(Vec::new())));
+        let outcome =
+            RefreshService::new(source.clone(), Arc::new(MovingStore { listed, current }))
+                .refresh_all(RefreshAllInput { max_concurrency: 1 })
+                .await
+                .expect("refresh all");
+
+        assert_eq!(
+            *source.0.lock().expect("lock"),
+            [(1, Some("stored-after-listing".to_string()))]
+        );
+        assert_eq!(outcome.failures().len(), 2);
     }
 }

@@ -1,33 +1,47 @@
+use std::{cell::Cell, rc::Rc};
+
 use dioxus::prelude::*;
 
 use crate::{pages::reader_page::ReaderPageSession, router::AppRoute};
 
-pub fn use_reader_shortcuts(session: ReaderPageSession) -> Callback<KeyboardEvent> {
+/// 阅读页快捷键：J 或 → 下一篇未读，K 或 ← 上一篇未读，M 切换已读，F 切换收藏。
+///
+/// 监听整个页面，而不是只在阅读区有焦点时生效：此前挂在阅读区上，页面刚打开、点过阅读区
+/// 以外的地方、或焦点所在的按钮变成禁用后，按键都没有反应。哪些按键交给浏览器（输入框里、
+/// 带修饰键、组字中、图片查看器打开时）由 reader_shortcuts.js 判断。
+pub fn use_reader_shortcuts(session: ReaderPageSession) {
     let navigator = use_navigator();
-
-    use_callback(move |event: KeyboardEvent| {
-        // 带修饰键的组合交给浏览器/系统：否则 Ctrl+F（查找）会命中下面的 "f" 分支去切换收藏，
-        // Ctrl+←/→ 之类的组合也会被当成翻页。
-        if !event.modifiers().is_empty() || event.is_composing() {
-            return;
-        }
-
-        let key = event.key().to_string().to_lowercase();
-
-        match key.as_str() {
-            "arrowleft" => {
-                if let Some(target) = session.previous_entry_target() {
-                    navigator.push(AppRoute::ReaderPage { entry_id: target });
-                }
+    // 每次渲染都换成最新的 session：换文章时组件不重建，页面监听只建一次。
+    let handle = use_callback(move |action: String| match action.as_str() {
+        "previous" => {
+            if let Some(target) = session.previous_entry_target() {
+                navigator.push(AppRoute::ReaderPage { entry_id: target });
             }
-            "arrowright" => {
-                if let Some(target) = session.next_entry_target() {
-                    navigator.push(AppRoute::ReaderPage { entry_id: target });
-                }
-            }
-            "m" => session.toggle_read(true),
-            "f" => session.toggle_starred(true),
-            _ => {}
         }
-    })
+        "next" => {
+            if let Some(target) = session.next_entry_target() {
+                navigator.push(AppRoute::ReaderPage { entry_id: target });
+            }
+        }
+        "read" => session.toggle_read(true),
+        "star" => session.toggle_starred(true),
+        _ => {}
+    });
+    let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
+    let cleanup = Rc::clone(&bridge);
+    use_drop(move || {
+        if let Some(eval) = cleanup.get() {
+            let _ = eval.send(());
+        }
+    });
+    use_future(move || {
+        let bridge = Rc::clone(&bridge);
+        async move {
+            let mut eval = document::eval(include_str!("reader_shortcuts.js"));
+            bridge.set(Some(eval));
+            while let Ok(action) = eval.recv::<String>().await {
+                handle.call(action);
+            }
+        }
+    });
 }

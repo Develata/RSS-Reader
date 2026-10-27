@@ -31,6 +31,23 @@ pub struct AddSubscriptionLifecycleOutcome {
     pub first_refresh: Option<RefreshFeedOutcome>,
 }
 
+/// What adding a subscription led to, as the user interface receives it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AddSubscriptionOutcome {
+    /// The address is a page listing several feeds; the user picks one.
+    NeedsSelection {
+        page_url: url::Url,
+        candidates: Vec<crate::FeedDiscoveryCandidate>,
+    },
+    SavedAndRefreshed,
+    /// Saved, but its first refresh failed: the subscription exists and later refreshes may
+    /// succeed.
+    SavedRefreshFailed {
+        failure: crate::RefreshFailureItem,
+    },
+}
+
 #[derive(Clone)]
 pub struct SubscriptionWorkflow {
     pub(crate) feed_service: FeedService,
@@ -101,14 +118,15 @@ impl SubscriptionWorkflow {
         prepared: crate::PreparedSubscription,
     ) -> Result<AddSubscriptionLifecycleOutcome> {
         input.subscription.url = prepared.url.to_string();
-        if input.subscription.title.is_none() {
-            input.subscription.title = prepared.update.feed.title.clone();
-        }
+        // Activation publishes the subscription and issues the prepared response's ticket
+        // atomically, before another refresh can start for this generation.
         let activated = self
             .feed_service
             .activate_subscription_with_site(
                 &input.subscription,
                 prepared.update.feed.site_url.clone(),
+                // 探测到的标题是源标题，不能当作用户指定的名称，否则以后刷新就跟不上源改名。
+                prepared.update.feed.title.clone(),
             )
             .await?;
         let target = RefreshTarget {
@@ -117,9 +135,10 @@ impl SubscriptionWorkflow {
             url: activated.feed.url.clone(),
             etag: activated.feed.etag.clone(),
             last_modified: activated.feed.last_modified.clone(),
+            ticket: activated.ticket,
         };
         let first_refresh = if input.refresh_after_add {
-            Some(self.refresh_service.apply_prepared_update(target, prepared.update).await?)
+            Some(self.refresh_service.apply_prepared_update(target, prepared.update).await)
         } else {
             None
         };
@@ -156,6 +175,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
+        async fn upsert_subscriptions(
+            &self,
+            new_feeds: &[rssr_domain::NewFeedSubscription],
+        ) -> rssr_domain::Result<Vec<rssr_domain::Feed>> {
+            let mut feeds = Vec::with_capacity(new_feeds.len());
+            for new_feed in new_feeds {
+                feeds.push(self.upsert_subscription(new_feed).await?);
+            }
+            Ok(feeds)
+        }
+
         async fn upsert_subscription(
             &self,
             new_feed: &NewFeedSubscription,
@@ -167,6 +197,7 @@ mod tests {
                 id,
                 url: new_feed.url.clone(),
                 title: new_feed.title.clone(),
+                source_title: new_feed.source_title.clone(),
                 site_url: None,
                 description: None,
                 icon_url: None,
@@ -202,6 +233,13 @@ mod tests {
     struct ActivationStub {
         next_id: Mutex<i64>,
         generation: i64,
+        received: Mutex<Vec<NewFeedSubscription>>,
+    }
+
+    impl ActivationStub {
+        fn new(next_id: i64) -> Self {
+            Self { next_id: Mutex::new(next_id), generation: 0, received: Mutex::new(Vec::new()) }
+        }
     }
 
     #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -211,6 +249,7 @@ mod tests {
             &self,
             new_feed: NewFeedSubscription,
         ) -> Result<ActivatedSubscription> {
+            self.received.lock().expect("lock received").push(new_feed.clone());
             let mut next_id = self.next_id.lock().expect("lock activation id");
             let id = *next_id;
             *next_id += 1;
@@ -218,7 +257,9 @@ mod tests {
                 feed: Feed {
                     id,
                     url: new_feed.url,
-                    title: new_feed.title,
+                    // 与真实适配器一样返回显示名称：指定名称优先，否则源标题。
+                    title: new_feed.title.or_else(|| new_feed.source_title.clone()),
+                    source_title: new_feed.source_title.clone(),
                     site_url: new_feed.site_url,
                     description: None,
                     icon_url: None,
@@ -233,6 +274,7 @@ mod tests {
                     updated_at: OffsetDateTime::UNIX_EPOCH,
                 },
                 generation: self.generation,
+                ticket: Default::default(),
             })
         }
     }
@@ -289,6 +331,8 @@ mod tests {
 
     struct StoreStub {
         targets: Vec<RefreshTarget>,
+        /// Fails every content write, as a full disk would.
+        fail_commits: bool,
     }
 
     #[async_trait::async_trait]
@@ -306,6 +350,9 @@ mod tests {
             _target: &RefreshTarget,
             _commit: crate::RefreshCommit,
         ) -> Result<crate::RefreshCommitOutcome> {
+            if self.fail_commits {
+                return Err(rssr_domain::DomainError::Persistence("disk full".into()).into());
+            }
             Ok(Default::default())
         }
     }
@@ -315,13 +362,30 @@ mod tests {
         targets: Vec<RefreshTarget>,
         removal: Arc<RemovalStub>,
     ) -> SubscriptionWorkflow {
+        workflow_with_activation(Arc::new(ActivationStub::new(next_id)), targets, removal)
+    }
+
+    fn workflow_with_activation(
+        activation: Arc<ActivationStub>,
+        targets: Vec<RefreshTarget>,
+        removal: Arc<RemovalStub>,
+    ) -> SubscriptionWorkflow {
+        workflow_over(activation, StoreStub { targets, fail_commits: false }, removal)
+    }
+
+    fn workflow_over(
+        activation: Arc<ActivationStub>,
+        store: StoreStub,
+        removal: Arc<RemovalStub>,
+    ) -> SubscriptionWorkflow {
+        let next_id = *activation.next_id.lock().expect("lock activation id");
         SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub { next_id: Mutex::new(next_id) }),
-                Arc::new(ActivationStub { next_id: Mutex::new(next_id), generation: 0 }),
+                activation,
                 removal,
             ),
-            crate::RefreshService::new(Arc::new(SourceStub), Arc::new(StoreStub { targets })),
+            crate::RefreshService::new(Arc::new(SourceStub), Arc::new(store)),
             Arc::new(SourceStub),
         )
     }
@@ -336,6 +400,7 @@ mod tests {
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 etag: None,
                 last_modified: None,
+                ticket: Default::default(),
             }],
             Arc::new(RemovalStub::default()),
         );
@@ -373,6 +438,69 @@ mod tests {
         assert_eq!(outcome.first_refresh, None);
     }
 
+    /// 探测到的标题是源标题，不能填进用户指定的名称，否则以后刷新就跟不上源改名（审计 B6）。
+    #[tokio::test]
+    async fn add_keeps_the_probed_title_apart_from_the_chosen_name() {
+        for chosen in [None, Some("我的名称")] {
+            let activation = Arc::new(ActivationStub::new(7));
+            let workflow = workflow_with_activation(
+                activation.clone(),
+                Vec::new(),
+                Arc::new(RemovalStub::default()),
+            );
+            workflow
+                .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                    subscription: crate::AddSubscriptionInput {
+                        url: "https://example.com/feed.xml".to_string(),
+                        title: chosen.map(str::to_string),
+                        folder: None,
+                    },
+                    refresh_after_add: false,
+                })
+                .await
+                .expect("add without refresh");
+
+            let received = activation.received.lock().expect("lock received");
+            assert_eq!(received.len(), 1);
+            assert_eq!(received[0].title.as_deref(), chosen, "only the chosen name");
+            assert_eq!(received[0].source_title.as_deref(), Some("Example"), "probed title");
+        }
+    }
+
+    /// Saved but its first write failed: the add succeeds with the saved subscription and a
+    /// failed first refresh, not an error that would hide that the subscription exists.
+    #[tokio::test]
+    async fn a_failed_first_write_keeps_the_saved_subscription() {
+        let workflow = workflow_over(
+            Arc::new(ActivationStub::new(4)),
+            StoreStub { targets: Vec::new(), fail_commits: true },
+            Arc::new(RemovalStub::default()),
+        );
+
+        let outcome = workflow
+            .add_subscription_lifecycle(AddSubscriptionLifecycleInput {
+                subscription: crate::AddSubscriptionInput {
+                    url: "https://example.com/feed.xml".to_string(),
+                    title: None,
+                    folder: None,
+                },
+                refresh_after_add: true,
+            })
+            .await
+            .expect("the subscription is saved");
+
+        assert_eq!(outcome.feed.id, 4);
+        let refresh = outcome.first_refresh.expect("first refresh outcome");
+        assert_eq!(refresh.feed_id, 4);
+        assert_eq!(
+            refresh.result,
+            crate::RefreshFeedResult::Failed {
+                kind: crate::ErrorKind::Storage,
+                message: crate::ErrorKind::Storage.generic_message().to_string(),
+            }
+        );
+    }
+
     #[tokio::test]
     async fn add_lifecycle_can_run_first_refresh() {
         let workflow = workflow(
@@ -383,6 +511,7 @@ mod tests {
                 url: Url::parse("https://example.com/feed.xml").expect("valid url"),
                 etag: None,
                 last_modified: None,
+                ticket: Default::default(),
             }],
             Arc::new(RemovalStub::default()),
         );
@@ -441,11 +570,12 @@ mod tests {
             url: Url::parse("https://example.com/prepared.xml").unwrap(),
             etag: None,
             last_modified: None,
+            ticket: Default::default(),
         };
         let workflow = SubscriptionWorkflow::new(
             crate::FeedService::new(
                 Arc::new(FeedRepositoryStub { next_id: Mutex::new(5) }),
-                Arc::new(ActivationStub { next_id: Mutex::new(5), generation: 7 }),
+                Arc::new(ActivationStub { generation: 7, ..ActivationStub::new(5) }),
                 Arc::new(RemovalStub::default()),
             ),
             crate::RefreshService::new(

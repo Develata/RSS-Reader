@@ -1,8 +1,10 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use reqwest::{Client, StatusCode, header};
+use reqwest::{Client, StatusCode, header, redirect};
 use url::Url;
+
+use crate::outbound::OutboundPolicy;
 
 const WEBDAV_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const WEBDAV_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -12,6 +14,7 @@ const MAX_REMOTE_CONFIG_BYTES: usize = 4 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub struct WebDavConfigSync {
     client: Client,
+    policy: OutboundPolicy,
     /// 已剥离 userinfo 的端点。凭据单独存放，避免被拼进日志或错误信息里。
     pub endpoint: Url,
     pub remote_path: String,
@@ -34,15 +37,50 @@ impl WebDavConfigSync {
     /// 之所以走 URL 而不是新增配置项：端点本身是设置页的会话内状态，既不写盘也不进配置包，
     /// 把密码放在这里不会被 `export_config` 导出，也不会被推到远端。
     pub fn new(endpoint: impl AsRef<str>, remote_path: impl Into<String>) -> Result<Self> {
+        Self::with_policy(endpoint, remote_path, OutboundPolicy::Unrestricted)
+    }
+
+    /// [`Self::new`] under `policy`: the endpoint, its resolution and every redirect are checked.
+    pub fn with_policy(
+        endpoint: impl AsRef<str>,
+        remote_path: impl Into<String>,
+        policy: OutboundPolicy,
+    ) -> Result<Self> {
         let mut endpoint = Url::parse(endpoint.as_ref()).context("无效的 WebDAV endpoint")?;
+        anyhow::ensure!(
+            matches!(endpoint.scheme(), "http" | "https"),
+            "WebDAV endpoint 必须使用 HTTP(S)"
+        );
         let credentials = take_url_credentials(&mut endpoint);
 
+        policy.check_url(&endpoint)?;
+
         Ok(Self {
-            client: Client::builder()
+            client: policy
+                .client_builder()
+                .user_agent(crate::fetch::client::user_agent())
                 .timeout(WEBDAV_REQUEST_TIMEOUT)
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
+                .referer(false)
+                .redirect(policy.redirect(|attempt| {
+                    // reqwest 0.12.28 preserves GET/PUT on 301/302/307/308, but
+                    // 303 turns PUT into GET. Reject 303 for this shared client.
+                    if attempt.status() == StatusCode::SEE_OTHER {
+                        return attempt.error("WebDAV method-changing redirect rejected");
+                    }
+                    if !attempt
+                        .previous()
+                        .first()
+                        .is_some_and(|initial| same_webdav_origin(initial, attempt.url()))
+                    {
+                        return attempt.error("WebDAV redirect must keep the endpoint origin");
+                    }
+                    redirect::Policy::limited(10).redirect(attempt)
+                }))
                 .build()
-                .unwrap_or_else(|_| Client::new()),
+                .map_err(reqwest::Error::without_url)
+                .context("创建 WebDAV 客户端失败")?,
+            policy,
             endpoint,
             remote_path: remote_path.into(),
             credentials,
@@ -50,24 +88,41 @@ impl WebDavConfigSync {
     }
 
     pub fn remote_url(&self) -> Result<Url> {
+        // Reject URL references that can replace the authority, including parser
+        // normalization of backslashes and whitespace. Never decode path bytes.
+        let path = self.remote_path.as_str();
+        anyhow::ensure!(
+            path.trim() == path
+                && !path.chars().any(|ch| ch.is_control() || ch == '\\')
+                && !path.starts_with("//"),
+            "WebDAV remote path 必须是相对路径"
+        );
+        // Preserve the existing single leading slash, relative to the collection.
+        let path = path.strip_prefix('/').unwrap_or(path);
+        anyhow::ensure!(Url::parse(path).is_err(), "WebDAV remote path 不能是绝对 URL");
+
         let mut collection = self.endpoint.clone();
         if !collection.path().ends_with('/') {
             collection.set_path(&format!("{}/", collection.path()));
         }
 
-        collection
-            .join(self.remote_path.trim_start_matches('/'))
-            .context("拼接 WebDAV 远端路径失败")
+        let target = collection.join(path).context("拼接 WebDAV 远端路径失败")?;
+        anyhow::ensure!(
+            same_webdav_origin(&self.endpoint, &target),
+            "WebDAV remote path 必须保持 endpoint 的 origin"
+        );
+        Ok(target)
     }
 
     pub async fn upload_text(&self, body: &str) -> Result<()> {
         let response = self
-            .authenticated(self.client.put(self.remote_url()?))
+            .authenticated(self.client.put(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
             .header(header::CONTENT_TYPE, "application/json")
             .body(body.to_string())
             .send()
             .await
+            .map_err(reqwest::Error::without_url)
             .context("上传配置到 WebDAV 失败")?;
 
         if response.status().is_success() {
@@ -79,10 +134,11 @@ impl WebDavConfigSync {
 
     pub async fn download_text(&self) -> Result<Option<String>> {
         let mut response = self
-            .authenticated(self.client.get(self.remote_url()?))
+            .authenticated(self.client.get(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
             .send()
             .await
+            .map_err(reqwest::Error::without_url)
             .context("从 WebDAV 下载配置失败")?;
 
         if response.status() == StatusCode::NOT_FOUND {
@@ -95,7 +151,11 @@ impl WebDavConfigSync {
 
         // 边下边累计，不把任意大小的远端响应整个读进内存。
         let mut buffered = Vec::new();
-        while let Some(chunk) = response.chunk().await.context("读取 WebDAV 配置响应失败")?
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(reqwest::Error::without_url)
+            .context("读取 WebDAV 配置响应失败")?
         {
             anyhow::ensure!(
                 buffered.len() + chunk.len() <= MAX_REMOTE_CONFIG_BYTES,
@@ -107,6 +167,13 @@ impl WebDavConfigSync {
         Ok(Some(String::from_utf8(buffered).context("WebDAV 配置响应不是有效 UTF-8")?))
     }
 
+    /// The remote URL, checked against the outbound policy before it is requested.
+    fn checked_remote_url(&self) -> Result<Url> {
+        let url = self.remote_url()?;
+        self.policy.check_url(&url)?;
+        Ok(url)
+    }
+
     fn authenticated(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
         match &self.credentials {
             Some(credentials) => {
@@ -115,6 +182,13 @@ impl WebDavConfigSync {
             None => request,
         }
     }
+}
+
+fn same_webdav_origin(endpoint: &Url, target: &Url) -> bool {
+    matches!(endpoint.scheme(), "http" | "https")
+        && target.username().is_empty()
+        && target.password().is_none()
+        && endpoint.origin() == target.origin()
 }
 
 /// 取出并清除 URL 上的 userinfo。用户名为空视为没有提供凭据。
@@ -147,7 +221,78 @@ fn unauthorized_hint(status: StatusCode) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::WebDavConfigSync;
+    use super::{WebDavConfigSync, same_webdav_origin};
+    use url::Url;
+
+    #[test]
+    fn webdav_origin_uses_parsed_scheme_host_and_effective_port() {
+        for (endpoint, target, allowed) in [
+            ("https://DAV.example:443/base", "https://dav.example/other", true),
+            ("http://dav.example:80/base", "http://dav.example/other", true),
+            ("https://[2001:db8::1]:443/a", "https://[2001:0db8:0:0:0:0:0:1]/b", true),
+            ("https://dav.example/a", "https://%64av.example/b", true),
+            ("https://dav.example/a", "http://dav.example:443/b", false),
+            ("https://dav.example/a", "https://dav.example:8443/b", false),
+            ("https://dav.example/a", "https://dav.example.evil.test/b", false),
+            ("https://dav.example/a", "https://fake:secret@dav.example/b", false),
+            ("https://dav.example/a", "https://:secret@dav.example/b", false),
+            ("file:///a", "file:///b", false),
+        ] {
+            assert_eq!(
+                same_webdav_origin(&Url::parse(endpoint).unwrap(), &Url::parse(target).unwrap()),
+                allowed
+            );
+        }
+    }
+
+    #[test]
+    fn webdav_relative_paths_preserve_url_resolution_without_decoding() {
+        for base in ["https://dav.example/base%20dir", "https://dav.example/base%20dir/"] {
+            for (path, suffix) in [
+                ("/state.json", "/base%20dir/state.json"),
+                ("a/../state.json", "/base%20dir/state.json"),
+                ("../state.json", "/state.json"),
+                ("%2e%2e/state.json", "/state.json"),
+                (
+                    "%2F%2Fevil.test/%5C%40%3F%23%252F.json",
+                    "/base%20dir/%2F%2Fevil.test/%5C%40%3F%23%252F.json",
+                ),
+                ("my config.json?version=1#local", "/base%20dir/my%20config.json?version=1#local"),
+                ("?version=1", "/base%20dir/?version=1"),
+                ("#local", "/base%20dir/#local"),
+            ] {
+                let sync = WebDavConfigSync::new(base, path).unwrap();
+                assert_eq!(
+                    sync.remote_url().unwrap().as_str(),
+                    format!("https://dav.example{suffix}")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn webdav_ambiguous_paths_fail_without_including_input_in_errors() {
+        for path in [
+            "https://fake:secret@evil.test/state",
+            "https:evil.test",
+            "/https://evil.test/state",
+            "//evil.test/state",
+            "///evil.test/state",
+            "\\\\evil.test\\state",
+            "/\\evil.test/state",
+            " https://evil.test/state",
+            "state.json ",
+            "\u{a0}//evil.test/state",
+            "ht\ttps://evil.test/state",
+            "state\n.json",
+            "state\0.json",
+            "state\\name.json",
+        ] {
+            let sync = WebDavConfigSync::new("https://dav.example/base/", path).unwrap();
+            let error = sync.remote_url().expect_err("reject unsafe reference");
+            assert!(!format!("{error:#}").contains(path));
+        }
+    }
 
     #[test]
     fn remote_url_joins_endpoint_and_path() {

@@ -1,0 +1,167 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-10-23T12:09:41.401177+00:00",
+  "releaseId": 421785578,
+  "releaseUrl": "https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0",
+  "productSource": "43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+  "workflowSource": "52b5e9fc9de57767cd0e533ce9d826949139ffb8",
+  "releaseRun": 39948069776,
+  "assets": [
+    {
+      "name": "RSS-Reader-android-arm64-v8a-release.aab",
+      "size": 16975829,
+      "sha256": "576c44b74793b93099b5c8dc534a7a39db940eca636cde878d4ba37069903b25",
+      "ciArtifactId": 12498879410,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-android-arm64-v8a-release.aab"
+    },
+    {
+      "name": "RSS-Reader-android-arm64-v8a-release.apk",
+      "size": 16603829,
+      "sha256": "550782a6c67d5ad2bf7f1222657d86207087ba0fbaac1e1f8353608a420cc92b",
+      "ciArtifactId": 12498879410,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-android-arm64-v8a-release.apk"
+    },
+    {
+      "name": "RSS-Reader-linux-x86_64.deb",
+      "size": 8324976,
+      "sha256": "88a25f7c5b027dd96ee186dc0931bf2c1e9fce672ca79e84517ab504ba600389",
+      "ciArtifactId": 12499770648,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-linux-x86_64.deb"
+    },
+    {
+      "name": "RSS-Reader-macos-aarch64.tar.gz",
+      "size": 8134186,
+      "sha256": "dd87d026f7c9326d4719b89f02247c1eda97cbbad5c9cac09ac416f279f40566",
+      "ciArtifactId": 12498942633,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-macos-aarch64.tar.gz"
+    },
+    {
+      "name": "RSS-Reader-macos-x86_64.tar.gz",
+      "size": 8400909,
+      "sha256": "4fcbe0350e829f69efb7916ca9de496cb4578754bf388ea28aa082be630eb43d",
+      "ciArtifactId": 12498723052,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-macos-x86_64.tar.gz"
+    },
+    {
+      "name": "RSS-Reader-windows-x86_64.zip",
+      "size": 7991014,
+      "sha256": "ce83c46a84e2aa93b4ebd42fea512f2c5aac66f35b89510bb317bbc793693122",
+      "ciArtifactId": 12498963662,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-windows-x86_64.zip"
+    },
+    {
+      "name": "rssr-cli-linux-x86_64.tar.gz",
+      "size": 6124876,
+      "sha256": "de8372285f721ba6eb546248692e0c641909880cb052b6e57b095e7d5efe51ac",
+      "ciArtifactId": 12499770648,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-linux-x86_64.tar.gz"
+    },
+    {
+      "name": "rssr-cli-macos-aarch64.tar.gz",
+      "size": 5417709,
+      "sha256": "ee3415f67ff2150977737b7918207b291f0ece061268103e1b4f9fffc4b01086",
+      "ciArtifactId": 12498942633,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-macos-aarch64.tar.gz"
+    },
+    {
+      "name": "rssr-cli-macos-x86_64.tar.gz",
+      "size": 5640747,
+      "sha256": "af7ab782b8c24488d52b4ed4572160dfe14c128ac6a9df14cccc2e1cceeb7d69",
+      "ciArtifactId": 12498723052,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-macos-x86_64.tar.gz"
+    },
+    {
+      "name": "rssr-cli-windows-x86_64.zip",
+      "size": 5352179,
+      "sha256": "a895f0cd06ee8437bdd4a3b8796c08d38e6932fe3a2ba54c039b8fd74ebc3d8b",
+      "ciArtifactId": 12498963662,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-windows-x86_64.zip"
+    },
+    {
+      "name": "rssr-web-linux-x86_64.tar.gz",
+      "size": 8152263,
+      "sha256": "7df5183d10fa24dd5b496496a7eabf4e24e0df71625a857ee8b93a7a268d8493",
+      "ciArtifactId": 12499241991,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-linux-x86_64.tar.gz"
+    },
+    {
+      "name": "rssr-web-macos-aarch64.tar.gz",
+      "size": 7525646,
+      "sha256": "13eeffcabe50f476e37bca2636209b3297ca26dd3c14b4ea691ac74025cbf862",
+      "ciArtifactId": 12498629559,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-macos-aarch64.tar.gz"
+    },
+    {
+      "name": "rssr-web-macos-x86_64.tar.gz",
+      "size": 7766549,
+      "sha256": "4079453e470b3ef9d7ab61ce0e38c89c9fc519a06f93aae48d6b66ad86196c39",
+      "ciArtifactId": 12498744396,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-macos-x86_64.tar.gz"
+    },
+    {
+      "name": "rssr-web-windows-x86_64.zip",
+      "size": 7263230,
+      "sha256": "0227a184566ce525c21ef2e3f4d57a1eb350820bb87e4b52dc9a7290e8cf369e",
+      "ciArtifactId": 12498534739,
+      "publicUrl": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-windows-x86_64.zip"
+    }
+  ],
+  "webPackages": [
+    {
+      "platform": "linux-x86_64",
+      "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+      "binary": "rssr-web",
+      "files": {
+        "public/assets/rssr-app-dxhbc8bf7ab13713d91.js": "ca09ee7ea43d719be509411ec84926575e539566a888ccdde6ba1b26a27e0650",
+        "public/assets/rssr-app_bg-dxhe1dddf45883c33ad.wasm": "62534da1dba1fac7d6e6c335cbaf6a79f26ffcff38a96b9ff94d1c84823924ac",
+        "public/index.html": "90911df9599f40a37b966286040bf34121cdfac1c0fdab7b6aa9d979a1507fdd",
+        "rssr-web": "8d5216413ae5893abe53e077c07c3f982eb99146f5dae77e188c2e1223059707"
+      }
+    },
+    {
+      "platform": "windows-x86_64",
+      "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+      "binary": "rssr-web.exe",
+      "files": {
+        "public/assets/rssr-app-dxhbc8bf7ab13713d91.js": "ca09ee7ea43d719be509411ec84926575e539566a888ccdde6ba1b26a27e0650",
+        "public/assets/rssr-app_bg-dxhe1dddf45883c33ad.wasm": "62534da1dba1fac7d6e6c335cbaf6a79f26ffcff38a96b9ff94d1c84823924ac",
+        "public/index.html": "90911df9599f40a37b966286040bf34121cdfac1c0fdab7b6aa9d979a1507fdd",
+        "rssr-web.exe": "cc7f31857df1cb3c908ae8488c22e174378a18d7f4fde9567057885f56941203"
+      }
+    },
+    {
+      "platform": "macos-x86_64",
+      "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+      "binary": "rssr-web",
+      "files": {
+        "public/assets/rssr-app-dxhbc8bf7ab13713d91.js": "ca09ee7ea43d719be509411ec84926575e539566a888ccdde6ba1b26a27e0650",
+        "public/assets/rssr-app_bg-dxhe1dddf45883c33ad.wasm": "62534da1dba1fac7d6e6c335cbaf6a79f26ffcff38a96b9ff94d1c84823924ac",
+        "public/index.html": "90911df9599f40a37b966286040bf34121cdfac1c0fdab7b6aa9d979a1507fdd",
+        "rssr-web": "f6f5327613de0372492fa0c2463e3f21475a8bf943d1da41d1f0709663e3d057"
+      }
+    },
+    {
+      "platform": "macos-aarch64",
+      "build_id": "git-43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321",
+      "binary": "rssr-web",
+      "files": {
+        "public/assets/rssr-app-dxhbc8bf7ab13713d91.js": "ca09ee7ea43d719be509411ec84926575e539566a888ccdde6ba1b26a27e0650",
+        "public/assets/rssr-app_bg-dxhe1dddf45883c33ad.wasm": "62534da1dba1fac7d6e6c335cbaf6a79f26ffcff38a96b9ff94d1c84823924ac",
+        "public/index.html": "90911df9599f40a37b966286040bf34121cdfac1c0fdab7b6aa9d979a1507fdd",
+        "rssr-web": "5385d67659cfc868f05374851d363d839ab66d32af72442cc195a0ec0cb4a4d3"
+      }
+    }
+  ],
+  "macos": [
+    {
+      "platform": "macos-x86_64",
+      "bundleVersion": "0.2.0",
+      "appAndCliMachOArchitecture": "pass"
+    },
+    {
+      "platform": "macos-aarch64",
+      "bundleVersion": "0.2.0",
+      "appAndCliMachOArchitecture": "pass"
+    }
+  ]
+}

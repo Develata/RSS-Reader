@@ -1,11 +1,8 @@
 use crate::router::AppRoute;
 use dioxus_router::Navigator;
 
-#[cfg(all(test, not(target_arch = "wasm32"), not(target_os = "android")))]
-use dioxus::desktop::tao;
 #[cfg(target_os = "android")]
 use dioxus::mobile::{
-    tao,
     tao::event::{Event as TaoEvent, WindowEvent as TaoWindowEvent},
     use_window, use_wry_event_handler,
 };
@@ -24,56 +21,18 @@ impl Drop for BackCaptureGuard {
     }
 }
 
-#[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
-fn is_back_navigation_key(
-    state: tao::event::ElementState,
-    repeat: bool,
-    physical_key: tao::keyboard::KeyCode,
-    logical_key: &tao::keyboard::Key<'_>,
-) -> bool {
-    use tao::{
-        event::ElementState,
-        keyboard::{Key, KeyCode},
-    };
+/// 首页上第一次按返回后，等第二次按下的时长；过了就收起提示，重新计。
+#[cfg(target_os = "android")]
+const EXIT_CONFIRM_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
 
-    state == ElementState::Pressed
-        && !repeat
-        && matches!(
-            (physical_key, logical_key),
-            (KeyCode::BrowserBack, _) | (_, Key::BrowserBack | Key::GoBack | Key::Escape)
-        )
-}
-
-/// The toolbar and native back key share history/fallback policy.
+/// The toolbar back button: the previous page, or `fallback_route` when there is none.
+///
+/// Synchronous on every platform. The click is a DOM event, and `reading_position.js` records the
+/// reading position in its capture phase before the route changes, so there is nothing to wait
+/// for. On Android the button used to wait for a further capture round trip like the system key;
+/// after returning to a reader through Home it then stayed unresponsive for seconds (the cause of
+/// that stall was not pinned down).
 pub(crate) fn navigate_back(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
-    #[cfg(target_os = "android")]
-    {
-        if !navigator.can_go_back()
-            && !fallback_route
-                .as_ref()
-                .is_some_and(|target| history().current_route() != target.to_string())
-        {
-            return false;
-        }
-        if BACK_CAPTURE_PENDING.replace(true) {
-            return true;
-        }
-        let guard = BackCaptureGuard;
-        let route = history().current_route();
-        spawn(async move {
-            let _guard = guard;
-            crate::ui::reading_position::capture_current_position().await;
-            if history().current_route() == route {
-                finish_back_navigation(navigator, fallback_route);
-            }
-        });
-        true
-    }
-    #[cfg(not(target_os = "android"))]
-    finish_back_navigation(navigator, fallback_route)
-}
-
-fn finish_back_navigation(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
     if navigator.can_go_back() {
         navigator.go_back();
         return true;
@@ -87,8 +46,39 @@ fn finish_back_navigation(navigator: Navigator, fallback_route: Option<AppRoute>
     false
 }
 
-pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) {
-    use_mobile_back_navigation_with_dismiss(fallback_route, || false);
+/// The Android system back key. No DOM event records the reading position, so it is captured first
+/// (at most 500 ms); presses while waiting merge, and the request is dropped if the route changed
+/// meanwhile.
+#[cfg(target_os = "android")]
+fn navigate_back_after_capture(navigator: Navigator, fallback_route: Option<AppRoute>) -> bool {
+    if !navigator.can_go_back()
+        && !fallback_route
+            .as_ref()
+            .is_some_and(|target| history().current_route() != target.to_string())
+    {
+        return false;
+    }
+    if BACK_CAPTURE_PENDING.replace(true) {
+        return true;
+    }
+    let guard = BackCaptureGuard;
+    let route = history().current_route();
+    spawn(async move {
+        let _guard = guard;
+        crate::ui::reading_position::capture_current_position().await;
+        if history().current_route() == route {
+            navigate_back(navigator, fallback_route);
+        }
+    });
+    true
+}
+
+/// 页面上的 Android 系统返回键：回到上一页，没有上一页就去 `fallback_route`。
+///
+/// `fallback_route` 为 `None` 的是首页：第一次按返回只显示“再按一次退出”（返回的信号为真），
+/// 5 秒内仍在首页再按一次，应用退到后台；首页不沿历史后退。其他平台上不做任何事，信号恒为假。
+pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) -> Signal<bool> {
+    use_back_navigation(fallback_route, || false)
 }
 
 /// Reader overlays get first refusal, without adding a second native navigation path.
@@ -96,8 +86,20 @@ pub(crate) fn use_mobile_back_navigation_with_dismiss(
     fallback_route: Option<AppRoute>,
     dismiss: impl Fn() -> bool + 'static,
 ) {
+    use_back_navigation(fallback_route, dismiss);
+}
+
+fn use_back_navigation(
+    fallback_route: Option<AppRoute>,
+    dismiss: impl Fn() -> bool + 'static,
+) -> Signal<bool> {
+    let exit_hint = use_signal(|| false);
+
     #[cfg(target_os = "android")]
     {
+        let mut exit_hint = exit_hint;
+        // 每次显示提示加一；到时只收起自己那一次的提示。
+        let mut hint_round = use_signal(|| 0_u64);
         let navigator = use_navigator();
         let window = use_window();
 
@@ -110,91 +112,98 @@ pub(crate) fn use_mobile_back_navigation_with_dismiss(
             });
         };
 
-        use_wry_event_handler(move |event, _| {
-            let navigate_within_app =
-                || dismiss() || navigate_back(navigator, fallback_route.clone());
+        // tao 在 Android 上不送按键与关窗事件（输入队列未接通），系统返回键由 MainActivity
+        // 经 JNI 转来，见下方 `android`；这里只在回到前台时恢复窗口。
+        use_wry_event_handler(move |event, _| match event {
+            TaoEvent::Resumed => {
+                // 退到后台再回来，之前那次“再按一次”不再算数。
+                exit_hint.set(false);
+                restore_window_interactivity();
+            }
+            TaoEvent::WindowEvent { event: TaoWindowEvent::Focused(true), .. } => {
+                restore_window_interactivity();
+            }
+            _ => {}
+        });
 
-            match event {
-                TaoEvent::WindowEvent {
-                    event: TaoWindowEvent::KeyboardInput { event, .. },
-                    ..
-                } => {
-                    if !is_back_navigation_key(
-                        event.state,
-                        event.repeat,
-                        event.physical_key,
-                        &event.logical_key,
-                    ) {
-                        return;
+        let on_back = use_callback(move |()| {
+            if dismiss() {
+                return;
+            }
+            if fallback_route.is_some() {
+                navigate_back_after_capture(navigator, fallback_route.clone());
+            } else if exit_hint() {
+                exit_hint.set(false);
+                android::move_task_to_back();
+            } else {
+                exit_hint.set(true);
+                let round = hint_round() + 1;
+                hint_round.set(round);
+                spawn(async move {
+                    tokio::time::sleep(EXIT_CONFIRM_WINDOW).await;
+                    if hint_round() == round {
+                        exit_hint.set(false);
                     }
-
-                    let _ = navigate_within_app();
-                }
-                TaoEvent::WindowEvent { event: TaoWindowEvent::CloseRequested, .. } => {
-                    if !navigate_within_app() {
-                        return;
-                    }
-
-                    restore_window_interactivity();
-                }
-                TaoEvent::Resumed => restore_window_interactivity(),
-                TaoEvent::WindowEvent { event: TaoWindowEvent::Focused(true), .. } => {
-                    restore_window_interactivity();
-                }
-                _ => {}
+                });
+            }
+        });
+        use_future(move || async move {
+            loop {
+                android::BACK_REQUESTS.notified().await;
+                on_back.call(());
             }
         });
     }
 
     #[cfg(not(target_os = "android"))]
     let _ = (fallback_route, dismiss);
+
+    exit_hint
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod tests {
-    use super::*;
-    use tao::{
-        event::ElementState,
-        keyboard::{Key, KeyCode, NativeKeyCode},
+#[cfg(target_os = "android")]
+mod android {
+    use std::{
+        panic::{AssertUnwindSafe, catch_unwind},
+        sync::LazyLock,
     };
 
-    #[test]
-    fn android_browser_back_uses_logical_key_and_fires_only_on_initial_press() {
-        // Tao represents Android KEYCODE_BACK as an unidentified physical key,
-        // paired with the BrowserBack logical key.
-        let physical_key = KeyCode::Unidentified(NativeKeyCode::Android(4));
-        assert!(is_back_navigation_key(
-            ElementState::Pressed,
-            false,
-            physical_key,
-            &Key::BrowserBack,
-        ));
-        assert!(!is_back_navigation_key(
-            ElementState::Released,
-            false,
-            physical_key,
-            &Key::BrowserBack,
-        ));
-        assert!(!is_back_navigation_key(
-            ElementState::Pressed,
-            true,
-            physical_key,
-            &Key::BrowserBack,
-        ));
+    use anyhow::Context;
+    use jni::{JNIEnv, JavaVM, objects::JObject};
+    use tokio::sync::Notify;
+
+    /// 系统返回键。MainActivity 不让 WebView 沿它自己的历史后退（应用内跳转不进那份历史，
+    /// 它只记页内锚点，后退只会无声地弹掉锚点），而是经 JNI 通知这里，由当前页面处理。
+    /// 只唤醒已经在等的页面：换页途中按下的那一次丢掉，不会留到下一页才生效。
+    pub(super) static BACK_REQUESTS: LazyLock<Notify> = LazyLock::new(Notify::new);
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_dev_dioxus_main_MainActivity_requestAppBack(
+        _env: JNIEnv,
+        _activity: JObject,
+    ) {
+        if catch_unwind(AssertUnwindSafe(|| BACK_REQUESTS.notify_waiters())).is_err() {
+            tracing::error!("Android 返回键 JNI 回调发生 panic，已阻止其跨越 FFI 边界");
+        }
     }
 
-    #[test]
-    fn preserves_existing_back_keys_without_consuming_unrelated_input() {
-        let unknown = KeyCode::Unidentified(NativeKeyCode::Unidentified);
-        for (physical, logical) in [
-            (KeyCode::BrowserBack, Key::Unidentified(NativeKeyCode::Unidentified)),
-            (unknown, Key::GoBack),
-            (unknown, Key::Escape),
-        ] {
-            assert!(is_back_navigation_key(ElementState::Pressed, false, physical, &logical));
+    /// 首页上确认退出：Activity 退到后台而不结束，与 Android 12 起根 Activity 的默认返回
+    /// 一致，也不会在下次打开时再起一个应用实例。
+    pub(super) fn move_task_to_back() {
+        if let Err(error) = call_exit_to_background() {
+            tracing::error!("无法让应用退到后台：{error:#}");
         }
-        for logical in [Key::Enter, Key::Character("r"), Key::BrowserForward] {
-            assert!(!is_back_navigation_key(ElementState::Pressed, false, unknown, &logical));
-        }
+    }
+
+    fn call_exit_to_background() -> anyhow::Result<()> {
+        let context = ndk_context::android_context();
+        let vm =
+            unsafe { JavaVM::from_raw(context.vm().cast()) }.context("无法访问 Android JavaVM")?;
+        let mut env =
+            vm.attach_current_thread().context("无法把返回键处理线程附加到 Android JavaVM")?;
+        let activity = unsafe { JObject::from_raw(context.context().cast()) };
+        env.call_method(&activity, "exitToBackground", "()V", &[])
+            .context("无法调用 MainActivity.exitToBackground")?;
+        Ok(())
     }
 }

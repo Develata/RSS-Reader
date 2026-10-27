@@ -1,0 +1,2316 @@
+{
+  "status": "pass",
+  "scope": "Targeted confirmation of final deployed bundle: both formula formats, real titles/body/original links, correct new assets. Full interaction suite passed on identical product sources in deployment 699dcf6; this is not a second full suite.",
+  "sourceSha": "52b5e9fc9de57767cd0e533ce9d826949139ffb8",
+  "pagesRun": 39948302751,
+  "checkedAt": "2026-10-23T11:55:32.860Z",
+  "browser": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/155.0.0.0 Safari/537.36",
+  "probeSha256": "6072932e39ad66542b177fa3c432e06a114886bd0d0faa5853a3bae648bca7b6",
+  "fetchedAt": "2026-10-23 11:45:59.535165753 +00:00:00",
+  "articles": [
+    {
+      "index": 6,
+      "readyMs": 103607.30000001192,
+      "title": "Simple and critical zeros of the Riemann zeta-function",
+      "original": "https://terrytao.wordpress.com/2026/10/22/simple-and-critical-zeros-of-the-riemann-zeta-function/",
+      "bodyLength": 12196,
+      "math": [],
+      "images": [
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bs%3D%5Csigma%2Bit%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 71,
+          "width": 71
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Csigma%2Ct%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 22,
+          "width": 22
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho+%3D+%5Cbeta+%2B+i+%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 75,
+          "width": 75
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta%2C+%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 26,
+          "width": 26
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0+%3C+%5Cbeta+%3C+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 69,
+          "width": 69
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5CRe%28s%29%3D1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 78,
+          "width": 78
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B3%5Ccdot+10%5E%7B12%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 48,
+          "width": 48
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0+%3C+%5Cgamma+%5Cle+3%5Ccdot+10%5E%7B12%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 110,
+          "width": 110
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta+%3D+1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 56,
+          "width": 56
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma+%3E0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 39,
+          "width": 39
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bm_%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 20,
+          "width": 20
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 9,
+          "width": 9
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Ckappa_0%5Es+%3A%3D%5Climinf_%7BT+%5Crightarrow+%5Cinfty%7D+%5Cfrac%7BN_0%5Es%28T%29%7D%7BN%28T%29%7D.+%5C+%5C+%5C+%5C+%5C+%281%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 189,
+          "width": 189
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 38,
+          "width": 38
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 9,
+          "width": 9
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0+%3C+%5Cgamma+%5Cle+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 73,
+          "width": 73
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN_0%5Es%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 44,
+          "width": 44
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 38,
+          "width": 38
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bm_%7B%5Crho%7D%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 50,
+          "width": 50
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta%3D1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 56,
+          "width": 56
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN_0%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 43,
+          "width": 43
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Ckappa_0%3A%3D%5Climinf_%7BT+%5Crightarrow+%5Cinfty%7D+%5Cfrac%7BN_0%28T%29%7D%7BN%28T%29%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 141,
+          "width": 141
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 38,
+          "width": 38
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++N%28T%29%5Csim+%28T%2F2%5Cpi%29%5Clog+T+%5Cqquad+%5Ctext%7Bas%7D%5Cquad+T%5Crightarrow+%5Cinfty.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 272,
+          "width": 272
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bf%28x%29%5Csim+g%28x%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 82,
+          "width": 82
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Clim_%7Bx%5Crightarrow+%5Cinfty%7D+f%28x%29%2Fg%28x%29+%3D+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 155,
+          "width": 155
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bg%28x%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 28,
+          "width": 28
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 15,
+          "width": 15
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 15,
+          "width": 15
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bc%3E0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 37,
+          "width": 37
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN_0%28T%29%3E+c+N%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 111,
+          "width": 111
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bc%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 7,
+          "width": 7
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B1%2F15000000%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 79,
+          "width": 79
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN_0%28T%29%3E+%5Ctfrac%7B1%7D%7B3%7DN%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 113,
+          "width": 113
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B1%2F3%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 23,
+          "width": 23
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.3474%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 45,
+          "width": 45
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B2%2F5%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 24,
+          "width": 24
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B5%2F12%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 32,
+          "width": 32
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0+%3E%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 33,
+          "width": 33
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es+%3E%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 33,
+          "width": 33
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.3474%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 45,
+          "width": 45
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.3474%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 45,
+          "width": 45
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.4088%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 45,
+          "width": 45
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.401%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 36,
+          "width": 36
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.417293%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 61,
+          "width": 61
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0.407511%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 60,
+          "width": 60
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B2%2F3%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 24,
+          "width": 24
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BF%28%5Calpha%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 35,
+          "width": 35
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++N_0%5Es%28T%29%3D%5Csum_%7B%5Csubstack%7B0%3C%5Cgamma+%5Cle+T%5C%5C%5Crho+%5Ctext%7B+simple%7D%7D%7D1+%5Cge+%5Csum_%7B0+%3C+%5Cgamma+%5Cle+T%7D%5Cleft%28+2-m_%7B%5Crho%7D%5Cright%29.+%5C+%5C+%5C+%5C+%5C+%282%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 300,
+          "width": 300
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B1%5Cle+c+%3C+2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 66,
+          "width": 66
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Csum+m_%7B%5Crho%7D+%5Cle+c+N%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 108,
+          "width": 108
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BN_0%5Es%28T%29+%2F+N%28T%29+%5Cge+2+-+c+%3E0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 179,
+          "width": 179
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B0+%3C+%5Cgamma+%5Cle+T%7Dm_%7B%5Crho%7D+%3D+%5Csum_%7B%5Csubstack%7B0+%3C+%5Cgamma%2C%5Cgamma%27%5Cle+T%5C%5C+%5Cgamma+%3D+%5Cgamma%27%7D%7D1.+%5C+%5C+%5C+%5C+%5C+%283%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 199,
+          "width": 199
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 9,
+          "width": 9
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma%27%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 13,
+          "width": 13
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Br%28u%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 28,
+          "width": 28
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Csubstack%7B0+%3C+%5Cgamma%2C%5Cgamma%27%5Cle+T%5C%5C+%5Cgamma+%3D+%5Cgamma%27%7D%7D1+%5Cle+%5Csum_%7B0%3C+%5Cgamma%2C%5Cgamma%27+%5Cle+T%7Dr%5Cleft%28%5Cfrac%7B%5Cgamma-%5Cgamma%27%7D%7B2%5Cpi%2F%5Clog+T%7D+%5Cright%29%2C+%5C+%5C+%5C+%5C+%5C+%284%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 301,
+          "width": 301
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Br%280%29%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 57,
+          "width": 57
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0%5Cle+r%28u%29%3C1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 89,
+          "width": 89
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bu%5Cne+0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 39,
+          "width": 39
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma-%5Cgamma%27%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 43,
+          "width": 43
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B2%5Cpi%2F%5Clog+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 65,
+          "width": 65
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BT%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 12,
+          "width": 12
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Br%28u%29%5Cin+L%5E1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 66,
+          "width": 66
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Chat%7Br%7D%28%5Calpha%29+%3D+%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7Dr%28u%29e%5E%7B2%5Cpi+i+%5Calpha+u%7D%5C%2Cdu.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 179,
+          "width": 179
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Chat%7Br%7D%28%5Calpha%29+%5Cin+L%5E1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 67,
+          "width": 67
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++r%28u%29%3D%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7D%5Chat%7Br%7D%28%5Calpha%29e%5E%7B-2%5Cpi+i+%5Calpha+u%7D%5C%2C+d%5Calpha.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 190,
+          "width": 190
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Br%28u%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 28,
+          "width": 28
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Csubstack%7B0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T+%5C%5C+%5Cgamma+%3D+%5Cgamma%27%7D%7D1+%5Cle+%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7D%5Chat%7Br%7D%28%5Calpha%29%5Csum_%7B0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T%7DT%5E%7Bi%5Calpha%28%5Cgamma-%5Cgamma%27%29%7D%5C%2Cd%5Calpha.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 294,
+          "width": 294
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cbegin%7Barray%7D%7Bc%7D+F%28%5Calpha%29%3DF%28%5Calpha%2CT%29+%3A%3D+%5CBig%28%5Cfrac%7BT%7D%7B2%5Cpi%7D%5Clog+T%5CBig%29%5E%7B-1%7D%5Csum_%7B0%3C%5Cgamma%2C%5Cgamma%27+%5Cle+T%7D+T%5E%7Bi%5Calpha%28%5Cgamma-%5Cgamma%27%29%7D+w%28%5Cgamma-%5Cgamma%27%29%2C+%5C%5C+%5Ctext%7Bwhere%7D+%5Cquad+w%28u%29+%3A%3D+%5Cfrac%7B4%7D%7B4%2Bu%5E2%7D.+%5Cend%7Barray%7D+%5C+%5C+%5C+%5C+%5C+%285%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 491,
+          "width": 491
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bw%280%29%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 62,
+          "width": 62
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bw%28u%29%3C1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 63,
+          "width": 63
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bu%5Cne+0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 39,
+          "width": 39
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BF%28%5Calpha%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 35,
+          "width": 35
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BT%5Crightarrow+%5Cinfty%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 54,
+          "width": 54
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++F%28%5Calpha%29+%3D+%5Calpha+%2B+o%281%29+%2B+%281%2Bo%281%29%29T%5E%7B-2%5Calpha%7D%5Clog+T+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 280,
+          "width": 280
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0%5Cle+%5Calpha+%5Cle+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 70,
+          "width": 70
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Calpha%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 39,
+          "width": 39
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bw%28u%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 32,
+          "width": 32
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cfrac%7BN_0%5Es%28T%29%7D%7BN%28T%29%7D%5Cgtrapprox+2+-+%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7D%5Chat%7Br%7D%28%5Calpha%29F%28%5Calpha%29%5C%2Cd%5Calpha.+%5C+%5C+%5C+%5C+%5C+%286%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 270,
+          "width": 270
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ctext%7Bsupp%7D%28%5Chat%7Br%7D%29%5Csubseteq+%5B-1%2C1%5D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 120,
+          "width": 120
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++r%28u%29+%3D+%5Cleft%28%5Cfrac%7B%5Csin+%5Cpi+u%7D%7B%5Cpi+u%7D+%5Cright%29%5E2%2C+%5Cqquad+%5Chat%7Br%7D%28%5Calpha%29%3D%5Cmax%5C%7B1-%7C%5Calpha%7C%2C0%5C%7D+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 333,
+          "width": 333
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T%7D%5Cleft%28%5Cfrac%7B%5Csin%28%5Ctfrac%7B1%7D%7B2%7D%28%5Cgamma-%5Cgamma%27%29%5Clog+T%29%7D%7B%5Ctfrac%7B1%7D%7B2%7D%28%5Cgamma-%5Cgamma%27%29%5Clog+T%7D+%5Cright%29%5E2w%28%5Cgamma-%5Cgamma%27%29+%5Csim+%5Cfrac%7B4%7D%7B3%7D%5Cfrac%7BT%7D%7B2%5Cpi%7D%5Clog+T.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 392,
+          "width": 392
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cfrac%7BN_0%5Es%28T%29%7D%7BN%28T%29%7D+%5Cgtrapprox+2+-+%5Cfrac%7B4%7D%7B3%7D+%3D+%5Cfrac%7B2%7D%7B3%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 146,
+          "width": 146
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B2%2F3%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 24,
+          "width": 24
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho+%3D+1%2F2%2B%5Cdelta%2Bi%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 117,
+          "width": 117
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%7C%5Cdelta%7C%3C1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 62,
+          "width": 62
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta%3D1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 56,
+          "width": 56
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bm_%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 20,
+          "width": 20
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 9,
+          "width": 9
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 9,
+          "width": 9
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma%3D%5Cgamma%27%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 45,
+          "width": 45
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bj%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 8,
+          "width": 8
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BH%28j%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 34,
+          "width": 34
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bs%3D%5Csigma+%2B+ij%2C+0+%3C%5Csigma+%3C+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 148,
+          "width": 148
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BH%28j%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 34,
+          "width": 34
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bm_%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 20,
+          "width": 20
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho%3D1%2F2%2Bij%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 88,
+          "width": 88
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BH%28%5Cgamma%29%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 66,
+          "width": 66
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bt%3D%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 37,
+          "width": 37
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 36,
+          "width": 36
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 27,
+          "width": 27
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BT+%3C+%5Cgamma+%5Cle+2T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 85,
+          "width": 85
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 36,
+          "width": 36
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cmathcal%7BH%7D%28k%29%3A%3D%5C%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%3A+H%28%5Cgamma%29%3Dk%5C%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 230,
+          "width": 230
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BS%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 11,
+          "width": 11
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 36,
+          "width": 36
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BC%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 9,
+          "width": 9
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 36,
+          "width": 36
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cmathcal%7BH%7D%281%29+%5Csubset+%5Cmathcal%7BS%7D%5Ccap+%5Cmathcal%7BC%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 101,
+          "width": 101
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%7C%5Cmathcal%7BS%7D%5Ccap+%5Cmathcal%7BC%7D%7C%5Cge+%5Csum_%7B%5Csubstack%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%5C%5CH%28%5Cgamma%29%3D1%7D%7D1%5Cge+%5Csum_%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%7D%282-H%28%5Cgamma%29%29.+%5C+%5C+%5C+%5C+%5C+%287%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 313,
+          "width": 313
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%7DH%28%5Cgamma%29+%3D+%5Csum_%7B%5Csubstack%7B%5Crho%2C%5Crho%27%5C%5C+0%3C+%5Cgamma%2C+%5Cgamma%27+%5Cle+T%5C%5C%5Cgamma%3D%5Cgamma%27%7D%7D1.+%5C+%5C+%5C+%5C+%5C+%288%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 217,
+          "width": 217
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Crho%2C%5Crho%27%5Cin+%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 85,
+          "width": 85
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%7C%5Cbeta-%5Cbeta%27%7C%3C+b%2F%5Clog+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 128,
+          "width": 128
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0%3Cb%3C1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 66,
+          "width": 66
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bb%3D0.001%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 65,
+          "width": 65
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es+%3E+0.67250%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 91,
+          "width": 91
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es+%3E+0.67250%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 91,
+          "width": 91
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BK%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 15,
+          "width": 15
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Csubstack%7B%5Crho%2C%5Crho%27%5C%5C+0%3C+%5Cgamma%2C+%5Cgamma%27+%5Cle+T%5C%5C%5Cgamma%3D%5Cgamma%27%7D%7D1+%5Cle+%5Csum_%7B%5Csubstack%7B%5Crho%2C%5Crho%27%5C%5C0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T%7D%7DK%5Cleft%28%5Cfrac%7Bi%28%5Crho-%5Crho%27%29%7D%7B2%5Cpi%2F%5Clog+T%7D+%5Cright%29.+%5C+%5C+%5C+%5C+%5C+%289%29&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 305,
+          "width": 305
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BK%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 15,
+          "width": 15
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 13,
+          "width": 13
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cge+2%5Csum_%7Bz%5Cin+%5Cmathcal%7BZ%7D%7D1-%5Csum_%7Bz%2Cs%5Cin%5Cmathcal%7BZ%7D%7DK%28z-s%29%5E2+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 187,
+          "width": 187
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BK%28z-s%29%5E2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 70,
+          "width": 70
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 36,
+          "width": 36
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B0%3C%5Cgamma+%5Cle+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 73,
+          "width": 73
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cmathcal%7BZ%7D_T%3A%3D+%5Cleft+%5C%7B%5Cfrac%7Bi%28%5Crho-1%2F2%29%7D%7B2%5Cpi%2F%5Clog+T%7D%3A+0+%3C+%5Cgamma+%5Cle+T%5Cright%5C%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 241,
+          "width": 241
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bz%5Cin+%5Cmathcal%7BZ%7D_T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 50,
+          "width": 50
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cbar%7Bz%7D%5Cin+%5Cmathcal%7BZ%7D_T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 50,
+          "width": 50
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7Bm_%7B%5Cbar%7Bz%7D%7D%3Dm_%7Bz%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 63,
+          "width": 63
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta%3D1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 56,
+          "width": 56
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7BK%28z-s%29%5E2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 70,
+          "width": 70
+        },
+        {
+          "src": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+          "complete": true,
+          "naturalWidth": 15,
+          "width": 15
+        }
+      ],
+      "resources": [
+        {
+          "name": "https://develata.me/RSS-Reader/assets/rssr-app-dxh5929bb2e32562889.js",
+          "duration": 605.3999999761581,
+          "encodedBodySize": 15041
+        },
+        {
+          "name": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxhe04ac47218921d27.wasm",
+          "duration": 101776.80000001192,
+          "encodedBodySize": 1894215
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "readyMs": 94863.19999998808,
+      "title": "2026-10-23 · 平方之后为何更简单",
+      "original": "https://develata.me/daily/math/2026-10-23",
+      "bodyLength": 11366,
+      "math": [
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 10,
+          "height": 8
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 96.125,
+          "height": 19.328125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 16.703125,
+          "height": 11.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 43.4375,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 70.5,
+          "height": 11.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 67.578125,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 55.671875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 77.875,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 69.96875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 38.828125,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 48.140625,
+          "height": 14.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 97.71875,
+          "height": 23.8125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 55.671875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 74.0625,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 67.125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 41.53125,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 55.671875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 24,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 39.40625,
+          "height": 16.125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 36.53125,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 61.265625,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 103.84375,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 16.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 54.140625,
+          "height": 14.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 43.4375,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 41.09375
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 49.4375,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 74.875,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 121.25,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 69.96875,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 56.265625,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 155.203125,
+          "height": 19.328125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 40.4375,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 177.71875,
+          "height": 23.8125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 105.140625,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 28
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 37,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 39.625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 23.828125,
+          "height": 14
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 106.796875,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 39.4375,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 115.5,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 54.140625,
+          "height": 14.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 62
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 178.046875,
+          "height": 19.328125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 41.4375,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 18.703125,
+          "height": 11.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 85.4375,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 40.4375,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 120.0625,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 39.53125,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 37.703125,
+          "height": 15.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 41.4375,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 85.703125,
+          "height": 15
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 72.53125,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 36.40625,
+          "height": 19.328125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 22.828125,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 58.65625,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 35.53125,
+          "height": 14.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 120.8125,
+          "height": 21.125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 29.703125,
+          "height": 18.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 57.390625,
+          "height": 19.078125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 76.59375,
+          "height": 15.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 31.703125,
+          "height": 16.125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 24.703125,
+          "height": 16.125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 40.4375,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 16.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 110.109375,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 56.15625,
+          "height": 12.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 108.546875,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 65.296875,
+          "height": 15.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 87.59375,
+          "height": 15.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 170.796875,
+          "height": 16.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 81.140625,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 40.4375,
+          "height": 13
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 54.140625,
+          "height": 14.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 12
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 176.359375,
+          "height": 16.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 35,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 35.625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 9,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 49.140625,
+          "height": 14.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 76.59375,
+          "height": 15.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 146.765625,
+          "height": 25.203125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 24.203125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 25.203125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 101.421875,
+          "height": 18.6875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 172.859375,
+          "height": 25.8125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 15.703125,
+          "height": 16.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 690.5,
+          "height": 63
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 8
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 75.84375,
+          "height": 17.6875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 42.140625,
+          "height": 16.6875
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 173.0625,
+          "height": 24.203125
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 39.4375,
+          "height": 11
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 74.265625,
+          "height": 16
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 34.4375,
+          "height": 15
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 8,
+          "height": 8
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 29.703125,
+          "height": 18.515625
+        },
+        {
+          "namespace": "http://www.w3.org/1998/Math/MathML",
+          "width": 12,
+          "height": 8
+        }
+      ],
+      "images": [],
+      "resources": [
+        {
+          "name": "https://develata.me/RSS-Reader/assets/rssr-app-dxh5929bb2e32562889.js",
+          "duration": 2800.100000023842,
+          "encodedBodySize": 15041
+        },
+        {
+          "name": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxhe04ac47218921d27.wasm",
+          "duration": 90433.5,
+          "encodedBodySize": 1894215
+        }
+      ]
+    }
+  ],
+  "responses": [
+    {
+      "url": "https://develata.me/RSS-Reader/entries/6?final-7cb83b2=1",
+      "status": 404,
+      "type": "Document",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxh5929bb2e32562889.js",
+      "status": 200,
+      "type": "Script",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://develata.me/favicon.ico",
+      "status": 404,
+      "type": "Other",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxhe04ac47218921d27.wasm",
+      "status": 200,
+      "type": "Fetch",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta%2C+%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bs%3D%5Csigma%2Bit%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0+%3C+%5Cbeta+%3C+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Czeta%28s%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Crho+%3D+%5Cbeta+%2B+i+%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Csigma%2Ct%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5CRe%28s%29%3D1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta+%3D+1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0+%3C+%5Cgamma+%5Cle+3%5Ccdot+10%5E%7B12%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bm_%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B3%5Ccdot+10%5E%7B12%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Ckappa_0%5Es+%3A%3D%5Climinf_%7BT+%5Crightarrow+%5Cinfty%7D+%5Cfrac%7BN_0%5Es%28T%29%7D%7BN%28T%29%7D.+%5C+%5C+%5C+%5C+%5C+%281%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Crho%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma+%3E0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BN%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0+%3C+%5Cgamma+%5Cle+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BN_0%5Es%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bm_%7B%5Crho%7D%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cbeta%3D1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BN_0%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Ckappa_0%3A%3D%5Climinf_%7BT+%5Crightarrow+%5Cinfty%7D+%5Cfrac%7BN_0%28T%29%7D%7BN%28T%29%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++N%28T%29%5Csim+%28T%2F2%5Cpi%29%5Clog+T+%5Cqquad+%5Ctext%7Bas%7D%5Cquad+T%5Crightarrow+%5Cinfty.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bf%28x%29%5Csim+g%28x%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Clim_%7Bx%5Crightarrow+%5Cinfty%7D+f%28x%29%2Fg%28x%29+%3D+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bg%28x%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bc%3E0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BN_0%28T%29%3E+c+N%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bc%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0.3474%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BN_0%28T%29%3E+%5Ctfrac%7B1%7D%7B3%7DN%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B1%2F15000000%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B1%2F3%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B2%2F5%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B5%2F12%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0.4088%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0+%3E%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es+%3E%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0.401%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0.417293%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0.407511%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B2%2F3%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BF%28%5Calpha%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B1%5Cle+c+%3C+2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++N_0%5Es%28T%29%3D%5Csum_%7B%5Csubstack%7B0%3C%5Cgamma+%5Cle+T%5C%5C%5Crho+%5Ctext%7B+simple%7D%7D%7D1+%5Cge+%5Csum_%7B0+%3C+%5Cgamma+%5Cle+T%7D%5Cleft%28+2-m_%7B%5Crho%7D%5Cright%29.+%5C+%5C+%5C+%5C+%5C+%282%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BN_0%5Es%28T%29+%2F+N%28T%29+%5Cge+2+-+c+%3E0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Csum+m_%7B%5Crho%7D+%5Cle+c+N%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B0+%3C+%5Cgamma+%5Cle+T%7Dm_%7B%5Crho%7D+%3D+%5Csum_%7B%5Csubstack%7B0+%3C+%5Cgamma%2C%5Cgamma%27%5Cle+T%5C%5C+%5Cgamma+%3D+%5Cgamma%27%7D%7D1.+%5C+%5C+%5C+%5C+%5C+%283%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Br%28u%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Csubstack%7B0+%3C+%5Cgamma%2C%5Cgamma%27%5Cle+T%5C%5C+%5Cgamma+%3D+%5Cgamma%27%7D%7D1+%5Cle+%5Csum_%7B0%3C+%5Cgamma%2C%5Cgamma%27+%5Cle+T%7Dr%5Cleft%28%5Cfrac%7B%5Cgamma-%5Cgamma%27%7D%7B2%5Cpi%2F%5Clog+T%7D+%5Cright%29%2C+%5C+%5C+%5C+%5C+%5C+%284%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma%27%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0%5Cle+r%28u%29%3C1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Br%280%29%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bu%5Cne+0%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma-%5Cgamma%27%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B2%5Cpi%2F%5Clog+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BT%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Chat%7Br%7D%28%5Calpha%29+%3D+%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7Dr%28u%29e%5E%7B2%5Cpi+i+%5Calpha+u%7D%5C%2Cdu.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Chat%7Br%7D%28%5Calpha%29+%5Cin+L%5E1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Csubstack%7B0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T+%5C%5C+%5Cgamma+%3D+%5Cgamma%27%7D%7D1+%5Cle+%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7D%5Chat%7Br%7D%28%5Calpha%29%5Csum_%7B0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T%7DT%5E%7Bi%5Calpha%28%5Cgamma-%5Cgamma%27%29%7D%5C%2Cd%5Calpha.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++r%28u%29%3D%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7D%5Chat%7Br%7D%28%5Calpha%29e%5E%7B-2%5Cpi+i+%5Calpha+u%7D%5C%2C+d%5Calpha.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Br%28u%29%5Cin+L%5E1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cbegin%7Barray%7D%7Bc%7D+F%28%5Calpha%29%3DF%28%5Calpha%2CT%29+%3A%3D+%5CBig%28%5Cfrac%7BT%7D%7B2%5Cpi%7D%5Clog+T%5CBig%29%5E%7B-1%7D%5Csum_%7B0%3C%5Cgamma%2C%5Cgamma%27+%5Cle+T%7D+T%5E%7Bi%5Calpha%28%5Cgamma-%5Cgamma%27%29%7D+w%28%5Cgamma-%5Cgamma%27%29%2C+%5C%5C+%5Ctext%7Bwhere%7D+%5Cquad+w%28u%29+%3A%3D+%5Cfrac%7B4%7D%7B4%2Bu%5E2%7D.+%5Cend%7Barray%7D+%5C+%5C+%5C+%5C+%5C+%285%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++F%28%5Calpha%29+%3D+%5Calpha+%2B+o%281%29+%2B+%281%2Bo%281%29%29T%5E%7B-2%5Calpha%7D%5Clog+T+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bw%28u%29%3C1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BT%5Crightarrow+%5Cinfty%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bw%280%29%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0%5Cle+%5Calpha+%5Cle+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bw%28u%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Calpha%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cfrac%7BN_0%5Es%28T%29%7D%7BN%28T%29%7D%5Cgtrapprox+2+-+%5Cint_%7B-%5Cinfty%7D%5E%7B%5Cinfty%7D%5Chat%7Br%7D%28%5Calpha%29F%28%5Calpha%29%5C%2Cd%5Calpha.+%5C+%5C+%5C+%5C+%5C+%286%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Ctext%7Bsupp%7D%28%5Chat%7Br%7D%29%5Csubseteq+%5B-1%2C1%5D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++r%28u%29+%3D+%5Cleft%28%5Cfrac%7B%5Csin+%5Cpi+u%7D%7B%5Cpi+u%7D+%5Cright%29%5E2%2C+%5Cqquad+%5Chat%7Br%7D%28%5Calpha%29%3D%5Cmax%5C%7B1-%7C%5Calpha%7C%2C0%5C%7D+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T%7D%5Cleft%28%5Cfrac%7B%5Csin%28%5Ctfrac%7B1%7D%7B2%7D%28%5Cgamma-%5Cgamma%27%29%5Clog+T%29%7D%7B%5Ctfrac%7B1%7D%7B2%7D%28%5Cgamma-%5Cgamma%27%29%5Clog+T%7D+%5Cright%29%5E2w%28%5Cgamma-%5Cgamma%27%29+%5Csim+%5Cfrac%7B4%7D%7B3%7D%5Cfrac%7BT%7D%7B2%5Cpi%7D%5Clog+T.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%7C%5Cdelta%7C%3C1%2F2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cfrac%7BN_0%5Es%28T%29%7D%7BN%28T%29%7D+%5Cgtrapprox+2+-+%5Cfrac%7B4%7D%7B3%7D+%3D+%5Cfrac%7B2%7D%7B3%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Crho+%3D+1%2F2%2B%5Cdelta%2Bi%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cgamma%3D%5Cgamma%27%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bj%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BH%28j%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bs%3D%5Csigma+%2B+ij%2C+0+%3C%5Csigma+%3C+1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bt%3D%5Cgamma%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Crho%3D1%2F2%2Bij%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BH%28%5Cgamma%29%3D1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BT+%3C+%5Cgamma+%5Cle+2T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BS%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cmathcal%7BH%7D%28k%29%3A%3D%5C%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%3A+H%28%5Cgamma%29%3Dk%5C%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cmathcal%7BH%7D%281%29+%5Csubset+%5Cmathcal%7BS%7D%5Ccap+%5Cmathcal%7BC%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BC%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%7C%5Cbeta-%5Cbeta%27%7C%3C+b%2F%5Clog+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%7C%5Cmathcal%7BS%7D%5Ccap+%5Cmathcal%7BC%7D%7C%5Cge+%5Csum_%7B%5Csubstack%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%5C%5CH%28%5Cgamma%29%3D1%7D%7D1%5Cge+%5Csum_%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%7D%282-H%28%5Cgamma%29%29.+%5C+%5C+%5C+%5C+%5C+%287%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Crho+%5Cin+%5Cmathcal%7BZ%7D%28T%29%7DH%28%5Cgamma%29+%3D+%5Csum_%7B%5Csubstack%7B%5Crho%2C%5Crho%27%5C%5C+0%3C+%5Cgamma%2C+%5Cgamma%27+%5Cle+T%5C%5C%5Cgamma%3D%5Cgamma%27%7D%7D1.+%5C+%5C+%5C+%5C+%5C+%288%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Crho%2C%5Crho%27%5Cin+%5Cmathcal%7BZ%7D%28T%29%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0%3Cb%3C1%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bb%3D0.001%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BK%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Ckappa_0%5Es+%3E+0.67250%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Csum_%7B%5Csubstack%7B%5Crho%2C%5Crho%27%5C%5C+0%3C+%5Cgamma%2C+%5Cgamma%27+%5Cle+T%5C%5C%5Cgamma%3D%5Cgamma%27%7D%7D1+%5Cle+%5Csum_%7B%5Csubstack%7B%5Crho%2C%5Crho%27%5C%5C0%3C%5Cgamma%2C%5Cgamma%27%5Cle+T%7D%7DK%5Cleft%28%5Cfrac%7Bi%28%5Crho-%5Crho%27%29%7D%7B2%5Cpi%2F%5Clog+T%7D+%5Cright%29.+%5C+%5C+%5C+%5C+%5C+%289%29&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cge+2%5Csum_%7Bz%5Cin+%5Cmathcal%7BZ%7D%7D1-%5Csum_%7Bz%2Cs%5Cin%5Cmathcal%7BZ%7D%7DK%28z-s%29%5E2+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7BK%28z-s%29%5E2%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cmathcal%7BZ%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B0%3C%5Cgamma+%5Cle+T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%5Cdisplaystyle++%5Cmathcal%7BZ%7D_T%3A%3D+%5Cleft+%5C%7B%5Cfrac%7Bi%28%5Crho-1%2F2%29%7D%7B2%5Cpi%2F%5Clog+T%7D%3A+0+%3C+%5Cgamma+%5Cle+T%5Cright%5C%7D.+&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7B%5Cbar%7Bz%7D%5Cin+%5Cmathcal%7BZ%7D_T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bz%5Cin+%5Cmathcal%7BZ%7D_T%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://s0.wp.com/latex.php?latex=%7Bm_%7B%5Cbar%7Bz%7D%7D%3Dm_%7Bz%7D%7D&bg=ffffff&fg=000000&s=0&c=20201002",
+      "status": 200,
+      "type": "Image",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/entries/1?final-7cb83b2=1",
+      "status": 404,
+      "type": "Document",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app-dxh5929bb2e32562889.js",
+      "status": 200,
+      "type": "Script",
+      "protocol": "h2",
+      "fromDiskCache": false
+    },
+    {
+      "url": "https://develata.me/RSS-Reader/assets/rssr-app_bg-dxhe04ac47218921d27.wasm",
+      "status": 200,
+      "type": "Fetch",
+      "protocol": "h2",
+      "fromDiskCache": false
+    }
+  ],
+  "failures": [],
+  "network": []
+}

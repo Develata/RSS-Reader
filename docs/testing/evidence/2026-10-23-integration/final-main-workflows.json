@@ -1,0 +1,378 @@
+{
+  "sourceSha": "7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+  "checkedAt": "2026-10-23T09:51:31.735Z",
+  "runs": [
+    {
+      "runId": 39932187742,
+      "sha": "7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/39932187742",
+      "createdAt": "2026-10-23T09:29:05Z",
+      "updatedAt": "2026-10-23T09:37:47Z",
+      "jobs": [
+        {
+          "id": 120342924018,
+          "name": "release-ui-runner (windows-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:11Z",
+          "completedAt": "2026-10-23T09:32:56Z"
+        },
+        {
+          "id": 120342924237,
+          "name": "workspace",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:08Z",
+          "completedAt": "2026-10-23T09:29:25Z"
+        },
+        {
+          "id": 120342924238,
+          "name": "android-smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:09Z",
+          "completedAt": "2026-10-23T09:33:41Z"
+        },
+        {
+          "id": 120342924264,
+          "name": "test-tools",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:08Z",
+          "completedAt": "2026-10-23T09:29:38Z"
+        },
+        {
+          "id": 120342924287,
+          "name": "format",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:08Z",
+          "completedAt": "2026-10-23T09:29:24Z"
+        },
+        {
+          "id": 120342924388,
+          "name": "web-smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:09Z",
+          "completedAt": "2026-10-23T09:32:06Z"
+        },
+        {
+          "id": 120342924563,
+          "name": "release-ui-runner (ubuntu-latest)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:09Z",
+          "completedAt": "2026-10-23T09:30:36Z"
+        },
+        {
+          "id": 120343053313,
+          "name": "wasm-contract-build",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:27Z",
+          "completedAt": "2026-10-23T09:30:27Z"
+        },
+        {
+          "id": 120343053399,
+          "name": "native-module (rssr-cli)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:28Z",
+          "completedAt": "2026-10-23T09:30:05Z"
+        },
+        {
+          "id": 120343053442,
+          "name": "native-module (rssr-application)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:28Z",
+          "completedAt": "2026-10-23T09:29:56Z"
+        },
+        {
+          "id": 120343053468,
+          "name": "native-module (rssr-domain)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:59Z",
+          "completedAt": "2026-10-23T09:30:23Z"
+        },
+        {
+          "id": 120343053499,
+          "name": "native-module (rssr-infra)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:59Z",
+          "completedAt": "2026-10-23T09:32:13Z"
+        },
+        {
+          "id": 120343053520,
+          "name": "native-module (rssr-api)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:27Z",
+          "completedAt": "2026-10-23T09:29:57Z"
+        },
+        {
+          "id": 120343053532,
+          "name": "native-module (rssr-app)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:27Z",
+          "completedAt": "2026-10-23T09:31:49Z"
+        },
+        {
+          "id": 120343053697,
+          "name": "native-module (rssr-web)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:30:08Z",
+          "completedAt": "2026-10-23T09:31:28Z"
+        },
+        {
+          "id": 120343472084,
+          "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:31:42Z",
+          "completedAt": "2026-10-23T09:33:10Z"
+        },
+        {
+          "id": 120343472099,
+          "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:30:30Z",
+          "completedAt": "2026-10-23T09:31:39Z"
+        },
+        {
+          "id": 120343472108,
+          "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:30:30Z",
+          "completedAt": "2026-10-23T09:31:03Z"
+        },
+        {
+          "id": 120343472109,
+          "name": "wasm-browser-contract (wasm_memory_store)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:35:21Z",
+          "completedAt": "2026-10-23T09:37:15Z"
+        },
+        {
+          "id": 120343472140,
+          "name": "wasm-browser-contract (test_library_contracts)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:30:30Z",
+          "completedAt": "2026-10-23T09:32:12Z"
+        },
+        {
+          "id": 120343472149,
+          "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:33:17Z",
+          "completedAt": "2026-10-23T09:33:52Z"
+        },
+        {
+          "id": 120343472174,
+          "name": "wasm-browser-contract (test_library_settings_repository)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:33:13Z",
+          "completedAt": "2026-10-23T09:33:44Z"
+        },
+        {
+          "id": 120343472188,
+          "name": "wasm-browser-contract (test_opml_interop)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:33:55Z",
+          "completedAt": "2026-10-23T09:35:43Z"
+        },
+        {
+          "id": 120343472205,
+          "name": "wasm-browser-contract (test_library_unicode_title_search)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:33:47Z",
+          "completedAt": "2026-10-23T09:35:18Z"
+        },
+        {
+          "id": 120343472210,
+          "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:31:05Z",
+          "completedAt": "2026-10-23T09:31:42Z"
+        },
+        {
+          "id": 120343472231,
+          "name": "wasm-browser-contract (test_library_queries)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:31:45Z",
+          "completedAt": "2026-10-23T09:32:32Z"
+        },
+        {
+          "id": 120343472297,
+          "name": "wasm-browser-contract (test_library_refresh_tickets)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:32:35Z",
+          "completedAt": "2026-10-23T09:35:19Z"
+        },
+        {
+          "id": 120343472522,
+          "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:32:14Z",
+          "completedAt": "2026-10-23T09:33:15Z"
+        },
+        {
+          "id": 120343474070,
+          "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:35:23Z",
+          "completedAt": "2026-10-23T09:37:40Z"
+        },
+        {
+          "id": 120344150061,
+          "name": "web-ui (amethyst-glass)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:33:33Z",
+          "completedAt": "2026-10-23T09:34:52Z"
+        },
+        {
+          "id": 120344150119,
+          "name": "web-ui (midnight-ledger)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:33:34Z",
+          "completedAt": "2026-10-23T09:34:52Z"
+        },
+        {
+          "id": 120344150203,
+          "name": "web-ui (default)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:32:10Z",
+          "completedAt": "2026-10-23T09:37:26Z"
+        },
+        {
+          "id": 120344150264,
+          "name": "web-ui (atlas-sidebar)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:32:09Z",
+          "completedAt": "2026-10-23T09:33:31Z"
+        },
+        {
+          "id": 120344150345,
+          "name": "web-ui (newsprint)",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:32:09Z",
+          "completedAt": "2026-10-23T09:33:31Z"
+        },
+        {
+          "id": 120346394182,
+          "name": "lint-and-test",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:37:43Z",
+          "completedAt": "2026-10-23T09:37:46Z"
+        }
+      ]
+    },
+    {
+      "runId": 39932187988,
+      "sha": "7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/39932187988",
+      "createdAt": "2026-10-23T09:29:05Z",
+      "updatedAt": "2026-10-23T09:32:47Z",
+      "jobs": [
+        {
+          "id": 120342925065,
+          "name": "build-package / source",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:09Z",
+          "completedAt": "2026-10-23T09:29:15Z"
+        },
+        {
+          "id": 120342986657,
+          "name": "build-package / page",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:18Z",
+          "completedAt": "2026-10-23T09:30:29Z"
+        },
+        {
+          "id": 120343482503,
+          "name": "build-package / linux",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:30:32Z",
+          "completedAt": "2026-10-23T09:32:11Z"
+        },
+        {
+          "id": 120343484979,
+          "name": "build-package / native",
+          "status": "completed",
+          "conclusion": "skipped",
+          "startedAt": "2026-10-23T09:30:29Z",
+          "completedAt": "2026-10-23T09:30:29Z"
+        },
+        {
+          "id": 120344182895,
+          "name": "image",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:32:14Z",
+          "completedAt": "2026-10-23T09:32:46Z"
+        }
+      ]
+    },
+    {
+      "runId": 39932187880,
+      "sha": "7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/39932187880",
+      "createdAt": "2026-10-23T09:29:05Z",
+      "updatedAt": "2026-10-23T09:32:01Z",
+      "jobs": [
+        {
+          "id": 120342924829,
+          "name": "build",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:29:09Z",
+          "completedAt": "2026-10-23T09:31:22Z"
+        },
+        {
+          "id": 120343855206,
+          "name": "deploy",
+          "status": "completed",
+          "conclusion": "success",
+          "startedAt": "2026-10-23T09:31:27Z",
+          "completedAt": "2026-10-23T09:32:00Z"
+        }
+      ]
+    }
+  ]
+}

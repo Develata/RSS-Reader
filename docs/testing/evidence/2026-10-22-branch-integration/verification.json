@@ -1,0 +1,936 @@
+{
+  "source_sha": "94cb58f17fb07782d9f4967ce6743a62510669fe",
+  "last_product_change_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+  "main_sha": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+  "mathml_source_sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+  "ci": {
+    "run": 39885292548,
+    "url": "https://github.com/Develata/RSS-Reader/actions/runs/39885292548",
+    "source_sha": "94cb58f17fb07782d9f4967ce6743a62510669fe",
+    "status": "completed",
+    "conclusion": "success",
+    "acceptance_long": true,
+    "default_ui_job": 120192732239,
+    "jobs": [
+      {
+        "id": 120191957325,
+        "name": "test-tools",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191957549,
+        "name": "android-smoke",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191957570,
+        "name": "release-ui-runner (ubuntu-latest)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191957725,
+        "name": "format",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191957755,
+        "name": "release-ui-runner (windows-latest)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191957761,
+        "name": "web-smoke",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191957827,
+        "name": "workspace",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051682,
+        "name": "native-module (rssr-web)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051718,
+        "name": "native-module (rssr-domain)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051738,
+        "name": "wasm-contract-build",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051751,
+        "name": "native-module (rssr-infra)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051793,
+        "name": "native-module (rssr-app)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051800,
+        "name": "native-module (rssr-api)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051833,
+        "name": "native-module (rssr-application)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192051840,
+        "name": "native-module (rssr-cli)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426100,
+        "name": "wasm-browser-contract (test_library_contracts)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426110,
+        "name": "wasm-browser-contract (test_library_unicode_title_search)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426143,
+        "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426149,
+        "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426163,
+        "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426177,
+        "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426178,
+        "name": "wasm-browser-contract (test_library_refresh_tickets)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426191,
+        "name": "wasm-browser-contract (test_library_queries)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426206,
+        "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426208,
+        "name": "wasm-browser-contract (wasm_memory_store)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426210,
+        "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426240,
+        "name": "wasm-browser-contract (test_library_settings_repository)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192426254,
+        "name": "wasm-browser-contract (test_opml_interop)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192427690,
+        "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192732210,
+        "name": "web-ui (amethyst-glass)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192732239,
+        "name": "web-ui (default)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192732251,
+        "name": "web-ui (newsprint)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192732253,
+        "name": "web-ui (midnight-ledger)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120192732381,
+        "name": "web-ui (atlas-sidebar)",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "id": 120194869077,
+        "name": "lint-and-test",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "artifact": {
+      "id": 12473025706,
+      "name": "ci-ui-default",
+      "digest": "sha256:f87a5d9815f4d242da56df3df1bd721a748e77e7cf02b5d6ced45d8093ca89ae",
+      "size_in_bytes": 9708804,
+      "source_sha": "94cb58f17fb07782d9f4967ce6743a62510669fe",
+      "download_digest_verified": true
+    },
+    "acceptance": {
+      "status": "pass",
+      "long": true,
+      "scenarios": 27,
+      "checks": 108,
+      "failed_checks": 0,
+      "unexpected_console": 0,
+      "scenario_names": [
+        "proxy-origin-cookie-csrf",
+        "proxy-redirects-api",
+        "unknown-write-then-reread",
+        "malformed-answers",
+        "malformed-poll-backoff",
+        "read-failure",
+        "job-survives-page-switch",
+        "reload-loses-the-job",
+        "job-ends-after-the-page-was-left",
+        "page-gone-stops-polling",
+        "reread-triggers",
+        "two-browsers",
+        "build-mismatch-keeps-edits",
+        "draft-storage-unavailable",
+        "restored-draft-then-sign-in",
+        "stopped-departure-restores-once",
+        "stopped-departure-then-saved",
+        "slow-departure-lands-late",
+        "later-edit-not-kept-stays",
+        "reader-recovers-without-localizing",
+        "reader-malicious-body",
+        "settings-read-fails-at-start",
+        "startup-target-fails",
+        "failures-and-unknowns-visible",
+        "http-backend-only",
+        "no-browser-periodic-refresh",
+        "background-tab-time-limit"
+      ]
+    }
+  },
+  "pages": {
+    "run": 39885298592,
+    "build": "success",
+    "deployment": "skipped",
+    "artifacts": [
+      {
+        "id": 12472766007,
+        "name": "pages-smoke-39885298592-1",
+        "digest": "sha256:9e16cfe9dc4a18b71e13c28d8c5bae581834e16cdbcee393461743a02416528e",
+        "size_in_bytes": 1913511,
+        "source_sha": "94cb58f17fb07782d9f4967ce6743a62510669fe",
+        "download_digest_verified": true
+      },
+      {
+        "id": 12472084020,
+        "name": "pages-rss-snapshot-39885298592-1",
+        "digest": "sha256:4c7d74a7ebb80fed6c8b2e89163d6f352bc70f607ab5a2e7436aa1187259ffad",
+        "size_in_bytes": 57141,
+        "source_sha": "94cb58f17fb07782d9f4967ce6743a62510669fe",
+        "download_digest_verified": true
+      }
+    ],
+    "result": {
+      "status": "pass",
+      "fetched_at": "2026-10-23 01:41:25.253977679 +00:00:00",
+      "feeds": 2,
+      "articles": 6,
+      "storage": "memory-sqlite",
+      "reloadResets": true,
+      "sourceHashes": [
+        {
+          "url": "https://develata.me/rss/daily-math.xml",
+          "sha256": "233f99cafba4bb896b1967aa2b7ad526000ed3f64bfe5f52267da3fcad2ba967"
+        },
+        {
+          "url": "https://terrytao.wordpress.com/feed/",
+          "sha256": "ec6b60da8a49d2e1d9f033345c5f0e39ee0d8048be38069f5a7d4948570eba9e"
+        }
+      ],
+      "ready_ms": 530.7000000000116,
+      "wasm_memory_bytes": [
+        4587520
+      ],
+      "max_long_task_ms": 99,
+      "wasm_decoded_bytes": 4992463,
+      "article_rendering": [
+        {
+          "title": "2026-10-23 · 平方之后为何更简单",
+          "mathml": 116,
+          "labeled_rows": [
+            {
+              "hasRowSpan": false,
+              "cellHeights": [
+                60.4375,
+                60.4375
+              ]
+            }
+          ],
+          "formula_images": 0,
+          "loaded_formula_images": 0,
+          "screenshot_regions": {
+            "body": {
+              "x": 0,
+              "y": 485,
+              "width": 1265,
+              "height": 900,
+              "scale": 1
+            },
+            "formula": {
+              "x": 0,
+              "y": 860,
+              "width": 1280,
+              "height": 900,
+              "scale": 1
+            }
+          }
+        },
+        {
+          "title": "2026-10-22 · 每个频率都安静，点列便均匀吗",
+          "mathml": 120,
+          "labeled_rows": [],
+          "formula_images": 0,
+          "loaded_formula_images": 0,
+          "screenshot_regions": null
+        },
+        {
+          "title": "2026-10-21 · 角亏预算能造出球面吗",
+          "mathml": 127,
+          "labeled_rows": [],
+          "formula_images": 0,
+          "loaded_formula_images": 0,
+          "screenshot_regions": null
+        },
+        {
+          "title": "2026-10-20 · 剪开为何多出一整圈",
+          "mathml": 108,
+          "labeled_rows": [],
+          "formula_images": 0,
+          "loaded_formula_images": 0,
+          "screenshot_regions": null
+        },
+        {
+          "title": "2026-10-19 · 边界不是少算半圈",
+          "mathml": 99,
+          "labeled_rows": [],
+          "formula_images": 0,
+          "loaded_formula_images": 0,
+          "screenshot_regions": null
+        },
+        {
+          "title": "Simple and critical zeros of the Riemann zeta-function",
+          "mathml": 0,
+          "labeled_rows": [],
+          "formula_images": 144,
+          "loaded_formula_images": 144,
+          "screenshot_regions": {
+            "body": {
+              "x": 0,
+              "y": 475,
+              "width": 1265,
+              "height": 900,
+              "scale": 1
+            },
+            "formula": {
+              "x": 0,
+              "y": 380,
+              "width": 1280,
+              "height": 900,
+              "scale": 1
+            }
+          }
+        }
+      ]
+    },
+    "representative_screenshots": [
+      {
+        "file": "daily-math-formula.png",
+        "sha256": "e7c2308a23853c6e8c2e58046dc2f4afa89b2830996fe5281ae8a719bba23a45",
+        "artifact": 12472766007,
+        "zip_entry": "run.BnIq3I/article-1-formula.png",
+        "visually_inspected": true
+      },
+      {
+        "file": "tao-formula.png",
+        "sha256": "643ccd820837a930d0cc03c9360950b36d11a2de7e2eb3bce0aa267ed2a0db50",
+        "artifact": 12472766007,
+        "zip_entry": "run.BnIq3I/article-6-formula.png",
+        "visually_inspected": true
+      }
+    ]
+  },
+  "web_packages_and_docker": {
+    "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+    "run": 39883102202,
+    "jobs": [
+      {
+        "name": "build-package / source",
+        "id": 120184874108,
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / page",
+        "id": 120184923061,
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / linux",
+        "id": 120185312781,
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / native (macos-15, aarch64-apple-darwin, macos-aarch64, tar.gz)",
+        "id": 120185312818,
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / native (macos-15-intel, x86_64-apple-darwin, macos-x86_64, tar.gz)",
+        "id": 120185312821,
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / native (windows-latest, x86_64-pc-windows-msvc, windows-x86_64, .exe, zip)",
+        "id": 120185312884,
+        "conclusion": "success"
+      },
+      {
+        "name": "image",
+        "id": 120186348210,
+        "conclusion": "success"
+      }
+    ],
+    "publishing": false,
+    "artifacts": [
+      {
+        "id": 12471735666,
+        "name": "web-package-check-linux-x86_64",
+        "digest": "sha256:db98cb5061819188a04cd9ffee85c9aa2dbbabe97196d5fba243fc1680ff1dd8",
+        "size_in_bytes": 1017,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+        "download_digest_verified": true,
+        "result": {
+          "status": "pass",
+          "build_id": "git-2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+          "checks": [
+            "package hashes and WASM id",
+            "new library",
+            "login",
+            "static index",
+            "matching build writes",
+            "old build rejected without mutation"
+          ]
+        }
+      },
+      {
+        "id": 12471671561,
+        "name": "web-package-windows-x86_64",
+        "digest": "sha256:d27a1996db2d01c26fdd25adfd83add975c86f2bb12708a54729d0ec1e87e9ef",
+        "size_in_bytes": 7250993,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4"
+      },
+      {
+        "id": 12471522203,
+        "name": "web-package-macos-x86_64",
+        "digest": "sha256:f825ee594570fd2309b8b4ad63f5ce070e3644a07da25216650e08ad0c0508b5",
+        "size_in_bytes": 7751098,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4"
+      },
+      {
+        "id": 12471487136,
+        "name": "web-package-macos-aarch64",
+        "digest": "sha256:ab01e628dfc38bdfc3701b6ee5b3b9c0a05a6f37aba9931acf81e033b6b18e63",
+        "size_in_bytes": 7508588,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4"
+      },
+      {
+        "id": 12471467577,
+        "name": "c6-container-check",
+        "digest": "sha256:5fe5c863aba81c114c8a6e4fe3797ac43b7e56879fd0360cda2ce55cba0f2c15",
+        "size_in_bytes": 3543,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+        "download_digest_verified": true,
+        "result": {
+          "status": "pass",
+          "build_id": "git-2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+          "image": "rss-reader-smoke:2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+          "checks": [
+            "new data volume, login and matching build write",
+            "old build rejected without mutation",
+            "image server is the exact packaged binary",
+            "owner CLI shares the running server library",
+            "CLI rejects root and unrelated uid for owner data",
+            "owner CLI backup while server runs",
+            "graceful restart retains session and data",
+            "read-only legacy credential volume migrates unchanged; old session rejected",
+            "migrated credentials survive removal of the legacy mount"
+          ]
+        }
+      },
+      {
+        "id": 12471378000,
+        "name": "Develata~RSS-Reader~IYZNH5.dockerbuild",
+        "digest": "sha256:8bbdd91b8ec50d180546b437ff446097516f12e5904bc562da0b7b023cd0514a",
+        "size_in_bytes": 30293,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4"
+      },
+      {
+        "id": 12471377634,
+        "name": "web-package-check-macos-aarch64",
+        "digest": "sha256:e7e4adbdab6fa910983bd98d8dd503223f63026d1993e38695928792444aa9d8",
+        "size_in_bytes": 1060,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+        "download_digest_verified": true,
+        "result": {
+          "status": "pass",
+          "build_id": "git-2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+          "checks": [
+            "package hashes and WASM id",
+            "new library",
+            "login",
+            "static index",
+            "matching build writes",
+            "old build rejected without mutation"
+          ]
+        }
+      },
+      {
+        "id": 12471257352,
+        "name": "web-package-public",
+        "digest": "sha256:611897b964d1e6ac1bfb80bac567e1c17f7c67061515c68cde2ac830f1c2b167",
+        "size_in_bytes": 1096532,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4"
+      },
+      {
+        "id": 12471248781,
+        "name": "web-package-check-macos-x86_64",
+        "digest": "sha256:84447085c502263112b98f4bd7bd9ea77a0df7212495b2f90ea2ecd9a1e1dbdf",
+        "size_in_bytes": 1058,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+        "download_digest_verified": true,
+        "result": {
+          "status": "pass",
+          "build_id": "git-2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+          "checks": [
+            "package hashes and WASM id",
+            "new library",
+            "login",
+            "static index",
+            "matching build writes",
+            "old build rejected without mutation"
+          ]
+        }
+      },
+      {
+        "id": 12471069547,
+        "name": "web-package-check-windows-x86_64",
+        "digest": "sha256:edc6047089b3bd088dbb8924b52cbee7450fc3ffc4f14c0d688ccf5da0ba508d",
+        "size_in_bytes": 1015,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+        "download_digest_verified": true,
+        "result": {
+          "status": "pass",
+          "build_id": "git-2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+          "checks": [
+            "package hashes and WASM id",
+            "new library",
+            "login",
+            "static index",
+            "matching build writes",
+            "old build rejected without mutation"
+          ]
+        }
+      },
+      {
+        "id": 12471063266,
+        "name": "web-package-linux-x86_64",
+        "digest": "sha256:0eff6653da7169b428146b37615d6e8b453d3eba8ccb19a8e0f4cfd29ffc89e9",
+        "size_in_bytes": 14270100,
+        "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4"
+      }
+    ]
+  },
+  "local_validation": {
+    "workspace": {
+      "passed": 886,
+      "failed": 0,
+      "ignored": 4
+    },
+    "native_clippy": "pass",
+    "wasm_clippy": [
+      "rssr-app",
+      "rssr-app pages-demo",
+      "rssr-infra default",
+      "rssr-infra --tests memory-store,http-backend"
+    ],
+    "url_upstream": {
+      "lib": 1,
+      "integration": 66,
+      "wpt": "pass",
+      "doc_tests": 67
+    },
+    "url_unpatched_canary": {
+      "status": "expected_failure",
+      "seconds": 60.01,
+      "exit_code": 101
+    },
+    "numbered_formula_browser_before": {
+      "passed": 6,
+      "failed": 1
+    },
+    "numbered_formula_browser_after": {
+      "passed": 7,
+      "failed": 0
+    },
+    "systemd": "static verification only; verification copy substitutes /bin/true for unavailable /opt installation"
+  },
+  "prior_product_candidate_acceptance": {
+    "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+    "run": 39883092648,
+    "acceptance_long": true,
+    "default_ui_job": 120185756815,
+    "acceptance": {
+      "status": "pass",
+      "long": true,
+      "scenarios": 27,
+      "checks": 108,
+      "failed_checks": 0,
+      "unexpected_console": 0,
+      "scenario_names": [
+        "proxy-origin-cookie-csrf",
+        "proxy-redirects-api",
+        "unknown-write-then-reread",
+        "malformed-answers",
+        "malformed-poll-backoff",
+        "read-failure",
+        "job-survives-page-switch",
+        "reload-loses-the-job",
+        "job-ends-after-the-page-was-left",
+        "page-gone-stops-polling",
+        "reread-triggers",
+        "two-browsers",
+        "build-mismatch-keeps-edits",
+        "draft-storage-unavailable",
+        "restored-draft-then-sign-in",
+        "stopped-departure-restores-once",
+        "stopped-departure-then-saved",
+        "slow-departure-lands-late",
+        "later-edit-not-kept-stays",
+        "reader-recovers-without-localizing",
+        "reader-malicious-body",
+        "settings-read-fails-at-start",
+        "startup-target-fails",
+        "failures-and-unknowns-visible",
+        "http-backend-only",
+        "no-browser-periodic-refresh",
+        "background-tab-time-limit"
+      ]
+    },
+    "artifact": {
+      "id": 12472235827,
+      "name": "ci-ui-default",
+      "digest": "sha256:4ae589140a3527f8f4ca56297a8eed10c634a7fa2e371ab22f5c3d762cc12e8f",
+      "size_in_bytes": 9695004,
+      "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+      "download_digest_verified": true
+    }
+  },
+  "font_timeout": {
+    "source_sha": "2c4f4724879adbf6afe34dbd361731a8633d2bd4",
+    "run": 39883092648,
+    "conclusion": "cancelled",
+    "jobs": [
+      {
+        "id": 120184967200,
+        "name": "release-ui-runner (ubuntu-latest)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120184967291,
+        "name": "workspace",
+        "conclusion": "success"
+      },
+      {
+        "id": 120184967292,
+        "name": "format",
+        "conclusion": "success"
+      },
+      {
+        "id": 120184967314,
+        "name": "test-tools",
+        "conclusion": "success"
+      },
+      {
+        "id": 120184967325,
+        "name": "web-smoke",
+        "conclusion": "success"
+      },
+      {
+        "id": 120184967331,
+        "name": "android-smoke",
+        "conclusion": "success"
+      },
+      {
+        "id": 120184967531,
+        "name": "release-ui-runner (windows-latest)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130347,
+        "name": "wasm-contract-build",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130554,
+        "name": "native-module (rssr-domain)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130560,
+        "name": "native-module (rssr-api)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130563,
+        "name": "native-module (rssr-application)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130599,
+        "name": "native-module (rssr-web)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130608,
+        "name": "native-module (rssr-infra)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130623,
+        "name": "native-module (rssr-app)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185130624,
+        "name": "native-module (rssr-cli)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450493,
+        "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450496,
+        "name": "wasm-browser-contract (test_library_contracts)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450509,
+        "name": "wasm-browser-contract (test_library_refresh_tickets)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450513,
+        "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450540,
+        "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450556,
+        "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450561,
+        "name": "wasm-browser-contract (test_opml_interop)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450564,
+        "name": "wasm-browser-contract (test_library_unicode_title_search)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450574,
+        "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450605,
+        "name": "wasm-browser-contract (wasm_memory_store)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450610,
+        "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450701,
+        "name": "wasm-browser-contract (test_library_queries)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185450887,
+        "name": "wasm-browser-contract (test_library_settings_repository)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185451991,
+        "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185756733,
+        "name": "web-ui (atlas-sidebar)",
+        "conclusion": "cancelled"
+      },
+      {
+        "id": 120185756737,
+        "name": "web-ui (newsprint)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185756766,
+        "name": "web-ui (amethyst-glass)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120185756788,
+        "name": "web-ui (midnight-ledger)",
+        "conclusion": "cancelled"
+      },
+      {
+        "id": 120185756815,
+        "name": "web-ui (default)",
+        "conclusion": "success"
+      },
+      {
+        "id": 120191438509,
+        "name": "lint-and-test",
+        "conclusion": "failure"
+      }
+    ],
+    "cause": "Atlas and midnight font installation exhausted the 15-minute job budget while downloading Noto CJK from azure.archive.ubuntu.com; both UI steps were never started.",
+    "atlas_log": "ci-fonts-azure-failure.log",
+    "midnight_log": "ci-fonts-midnight-azure-failure.log"
+  },
+  "font_fix_first_pages": {
+    "source_sha": "7ab5eb47f2cd9fa1069ca60e2ab6e96f23763de5",
+    "run": 39884707827,
+    "build": "success",
+    "deployment": "skipped",
+    "artifacts": [
+      {
+        "id": 12471633157,
+        "name": "pages-rss-snapshot-39884707827-1",
+        "digest": "sha256:2bad3f1b1abbf2181b8ebe569b1b63cae2e9e66e709cbd412531eda734671948",
+        "size_in_bytes": 57142,
+        "source_sha": "7ab5eb47f2cd9fa1069ca60e2ab6e96f23763de5"
+      },
+      {
+        "id": 12471508685,
+        "name": "pages-smoke-39884707827-1",
+        "digest": "sha256:f5b8dd7a2254b9bb0ac633d7e45515044b91281f2851d9568fdbb8d5c8de7ed3",
+        "size_in_bytes": 1915646,
+        "source_sha": "7ab5eb47f2cd9fa1069ca60e2ab6e96f23763de5"
+      }
+    ],
+    "fonts_download_bytes_mb": 66,
+    "fonts_download_seconds": 3,
+    "screenshot_limitation": "Viewport capture raced scroll restoration; numbered formula geometry passed, but these formula PNGs captured article headings. Do not use these PNGs as formula visual acceptance."
+  },
+  "gates": {
+    "independent_review": "pending user choice of reviewer",
+    "merge": "not_started",
+    "public_pages_subpath": "not_run; requires main deployment",
+    "tag_release_ghcr": "not_authorized; wait for user approval",
+    "branch_ci": "passed",
+    "branch_pages_build_and_visual": "passed"
+  },
+  "performance_scope": "CI local uncompressed HTTP server; not public Pages, mobile hardware, or compressed network performance.",
+  "font_fix_theme_jobs": [
+    {
+      "job": 120192732381,
+      "lines": [
+        "2026-10-23T01:42:54.0952564Z Checked Ubuntu mirror selection in /etc/apt/apt-mirrors.txt",
+        "2026-10-23T01:43:02.9735188Z Fetched 66.0 MB in 2s (27.9 MB/s)",
+        "2026-10-23T01:44:04.7545794Z server web regression passed"
+      ]
+    },
+    {
+      "job": 120192732253,
+      "lines": [
+        "2026-10-23T01:44:22.5797610Z Checked Ubuntu mirror selection in /etc/apt/apt-mirrors.txt",
+        "2026-10-23T01:44:31.7958669Z Fetched 66.0 MB in 3s (24.5 MB/s)",
+        "2026-10-23T01:45:33.9557303Z server web regression passed"
+      ]
+    }
+  ],
+  "recorded_at": "2026-10-23T01:52:41.623806+00:00"
+}

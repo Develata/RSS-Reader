@@ -4,22 +4,28 @@ use anyhow::Context;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use rssr_application::{
     AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ConfigImportOutcome,
-    DEFAULT_REFRESH_CONCURRENCY, OpmlImportOutcome, RefreshAllInput, RefreshAllOutcome,
-    RefreshFeedOutcome, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput,
+    DEFAULT_REFRESH_CONCURRENCY, OpmlImportOutcome, RefreshAllInput, RefreshFailureItem,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoveSubscriptionInput, SettingsPatch,
 };
-use rssr_domain::{Feed, ListDensity, StartupView, ThemeMode, UserSettings};
+use rssr_domain::{ConfigFingerprint, Feed, ListDensity, StartupView, ThemeMode, UserSettings};
 use rssr_infra::{
-    application_adapters::cleanup_pending_entry_content,
-    composition::compose_native_sqlite_use_cases,
+    composition::compose_library_use_cases_with,
     config_sync::webdav::WebDavConfigSync,
-    db::{sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend},
+    outbound::{self, OutboundPolicy},
+    store::{
+        LibraryStore, StoreOptions,
+        backup::{BackupCancel, BackupOptions, backup_library},
+        local::{self, open_library_in},
+    },
 };
 
 #[derive(Parser, Debug)]
 #[command(name = "rssr", version = cli_version(), about = "RSS-Reader command-line interface")]
 struct Cli {
-    #[arg(long)]
-    database_url: Option<String>,
+    /// Data directory holding `library.sqlite3` (and, before the first open, a v0.1.x library to
+    /// import). Defaults to this installation's data directory.
+    #[arg(long, env = "RSSR_DATA_DIR", value_name = "DIR")]
+    data_dir: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Command,
@@ -45,6 +51,19 @@ enum Command {
     SaveSettings(SaveSettingsArgs),
     PushWebdav(WebDavArgs),
     PullWebdav(WebDavArgs),
+    /// Write a consistent copy of the library to FILE, which must not exist yet and must be
+    /// named *.sqlite3. Safe while the server or another program uses the library; Ctrl-C
+    /// cancels it.
+    Backup(BackupArgs),
+}
+
+#[derive(Args, Debug)]
+struct BackupArgs {
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+    /// Give up a copy still running after this many seconds.
+    #[arg(long, value_name = "SECONDS", default_value_t = 600)]
+    timeout: u64,
 }
 
 #[derive(Args, Debug)]
@@ -86,6 +105,8 @@ enum BulkArchiveFilter {
 #[derive(Args, Debug)]
 struct AddFeedArgs {
     url: String,
+    /// 自定义订阅名称，刷新不会覆盖；省略时保留已有的自定义名称，没有自定义名称时显示订阅源
+    /// 自己的标题并跟随它改名
     #[arg(long)]
     title: Option<String>,
     #[arg(long)]
@@ -97,8 +118,19 @@ struct AddFeedArgs {
 #[derive(Args, Debug)]
 struct RemoveFeedArgs {
     feed_id: i64,
-    #[arg(long, default_value_t = true)]
+    /// 保留该订阅已抓取的文章（默认连同文章一起删除）。
+    #[arg(long)]
+    keep_entries: bool,
+    /// 旧开关：删除文章本来就是默认行为，隐藏保留只为兼容已有脚本。
+    #[arg(long, hide = true, conflicts_with = "keep_entries")]
     purge_entries: bool,
+}
+
+impl RemoveFeedArgs {
+    /// `--purge-entries` 与 `--keep-entries` 互斥，所以这就是 `!keep_entries`。
+    fn purge_entries(&self) -> bool {
+        self.purge_entries || !self.keep_entries
+    }
 }
 
 #[derive(Args, Debug)]
@@ -172,9 +204,19 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").with_writer(std::io::stderr).init();
 
     let cli = Cli::parse();
-    let services = CliServices::new(cli.database_url.as_deref()).await?;
+    let command = match cli.command {
+        Command::Backup(args) => return backup(cli.data_dir, args).await,
+        command => command,
+    };
+    let services = CliServices::new(cli.data_dir).await?;
+    let result = run(&services, command).await;
+    services.close().await;
+    result
+}
 
-    match cli.command {
+/// Runs a command other than `backup` on the opened library.
+async fn run(services: &CliServices, command: Command) -> anyhow::Result<()> {
+    match command {
         Command::MarkRead(args) => {
             use rssr_domain::{
                 ArchiveFilter, EntryQuery, MarkReadOutcome, ReadFilter, StarredFilter,
@@ -197,7 +239,8 @@ async fn main() -> anyhow::Result<()> {
                 },
             };
             let query = EntryQuery {
-                feed_ids: args.feed_id,
+                // `--all` is every subscription; `--feed-id` only those.
+                feed_ids: (!args.all).then_some(args.feed_id),
                 search_title: args.search,
                 read_filter: match args.read_filter {
                     BulkReadFilter::All => ReadFilter::All,
@@ -239,7 +282,7 @@ async fn main() -> anyhow::Result<()> {
             println!("订阅已添加。");
         }
         Command::RemoveFeed(args) => {
-            services.remove_feed(args.feed_id, args.purge_entries).await?;
+            services.remove_feed(args.feed_id, args.purge_entries()).await?;
             println!("订阅已删除。");
         }
         Command::Refresh(args) => {
@@ -256,8 +299,10 @@ async fn main() -> anyhow::Result<()> {
         Command::ImportConfig(args) => {
             let raw = fs::read_to_string(&args.input)
                 .with_context(|| format!("读取配置文件失败: {}", args.input.display()))?;
-            let outcome = services.import_config_json(&raw).await?;
-            println!("配置已导入：{}。", outcome.summary_line());
+            // The CLI replaces what is stored now: it reads the fingerprint just before.
+            let expected = services.use_cases.import_export_service.config_fingerprint().await?;
+            let outcome = services.import_config_json(&raw, &expected).await?;
+            println!("配置已导入：{}。", config_import_summary(&outcome));
         }
         Command::ExportOpml(args) => {
             let raw = services.export_opml().await?;
@@ -274,9 +319,8 @@ async fn main() -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&settings).context("序列化设置失败")?);
         }
         Command::SaveSettings(args) => {
-            let mut settings = services.load_settings().await?;
-            apply_settings_patch(&mut settings, args)?;
-            services.save_settings(&settings).await?;
+            // Only the options given change; the merge happens in the library's write.
+            services.update_settings(settings_patch(args)?).await?;
             println!("设置已保存。");
         }
         Command::PushWebdav(args) => {
@@ -286,11 +330,12 @@ async fn main() -> anyhow::Result<()> {
         Command::PullWebdav(args) => {
             let outcome = services.pull_remote_config(&args.endpoint, &args.remote_path).await?;
             if let Some(import) = outcome.import {
-                println!("已从 WebDAV 下载并导入配置：{}。", import.summary_line());
+                println!("已从 WebDAV 下载并导入配置：{}。", config_import_summary(&import));
             } else {
                 println!("远端配置不存在。");
             }
         }
+        Command::Backup(_) => unreachable!("备份在组装用例之前已处理"),
     }
 
     Ok(())
@@ -298,41 +343,97 @@ async fn main() -> anyhow::Result<()> {
 
 struct CliServices {
     use_cases: AppUseCases,
+    /// The data directory's outbound policy (`outbound.json`): a server's directory makes the CLI
+    /// public-only too.
+    policy: OutboundPolicy,
+    /// The library under the use cases, closed before the CLI exits ([`CliServices::close`]).
+    store: LibraryStore,
+}
+
+/// `backup`: copies the data directory's library file as it is. It needs no outbound policy or
+/// use cases and does not open the library through the store, so it never creates or imports one.
+/// Ctrl-C asks the backup to stop; the command still waits for it and reports what it did.
+async fn backup(data_dir: Option<PathBuf>, args: BackupArgs) -> anyhow::Result<()> {
+    use std::io::Write as _;
+    let library = resolve_data_dir(data_dir)?.join(local::LIBRARY_FILE);
+    if !library.is_file() {
+        anyhow::bail!("没有找到资料库：{}", library.display());
+    }
+    let options = BackupOptions {
+        deadline: std::time::Duration::from_secs(args.timeout),
+        ..BackupOptions::default()
+    };
+    let cancel = BackupCancel::new();
+    // Listening starts here, before the backup does; a listener that cannot be set up is reported
+    // instead of a backup Ctrl-C could not stop (review C5-R4-04).
+    #[cfg(unix)]
+    let mut interrupts = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+        .context("无法监听 Ctrl-C")?;
+    #[cfg(windows)]
+    let mut interrupts = tokio::signal::windows::ctrl_c().context("无法监听 Ctrl-C")?;
+    let on_ctrl_c = {
+        let cancel = cancel.clone();
+        tokio::spawn(async move {
+            if interrupts.recv().await.is_some() {
+                // Cancel first: a console that cannot be written must not keep the backup going.
+                cancel.cancel();
+                let _ = writeln!(std::io::stderr(), "正在取消备份…");
+            }
+        })
+    };
+    let result = backup_library(&library, &args.file, options, &cancel).await;
+    on_ctrl_c.abort();
+    let report = result.context("备份失败")?;
+    // The backup is in place whether or not this line can be written (review C5-R3-03).
+    let _ =
+        writeln!(std::io::stdout(), "已备份到 {}（{} 字节）", report.path.display(), report.bytes);
+    Ok(())
+}
+
+/// A library that cannot be closed cleanly is reported, not made the command's result: what the
+/// command wrote is committed, and SQLite recovers the log on the next open.
+async fn close_library(store: &LibraryStore) {
+    if let Err(error) = store.close().await {
+        tracing::warn!(%error, "关闭资料库失败");
+    }
+}
+
+fn resolve_data_dir(data_dir: Option<PathBuf>) -> anyhow::Result<PathBuf> {
+    match data_dir {
+        Some(dir) => Ok(dir),
+        None => local::local_data_dir().context("确定本地数据目录失败"),
+    }
 }
 
 impl CliServices {
-    async fn new(database_url: Option<&str>) -> anyhow::Result<Self> {
-        let native_backend = match database_url {
-            Some(database_url) => NativeSqliteBackend::new(database_url),
-            None => {
-                NativeSqliteBackend::from_default_location().context("确定本地数据库位置失败")?
+    async fn new(data_dir: Option<PathBuf>) -> anyhow::Result<Self> {
+        // A v0.1.x library in the data directory is imported on the first open.
+        let data_dir = resolve_data_dir(data_dir)?;
+        tracing::info!(data_dir = %data_dir.display(), "初始化 CLI 本地资料库");
+        // Before the library is opened: a policy that cannot be read stops the CLI here.
+        let policy = outbound::load_policy(&data_dir).context("读取出站策略失败")?;
+        let opened = open_library_in(&data_dir, StoreOptions::default())
+            .await
+            .context("打开本地资料库失败")?;
+        if let Some(imported) = &opened.imported {
+            tracing::info!(?imported, "已从 v0.1 数据导入资料库");
+        }
+        let store = opened.store;
+        let use_cases = match compose_library_use_cases_with(store.clone(), &policy) {
+            Ok(composition) => composition.use_cases,
+            Err(error) => {
+                close_library(&store).await;
+                return Err(error);
             }
         };
-        tracing::info!(
-            backend = native_backend.label(),
-            database = %native_backend.database_label(),
-            content_database = %native_backend.content_database_label().unwrap_or_else(|_| "<unavailable>".to_string()),
-            "初始化 CLI 本地数据库"
-        );
-        let index_pool = native_backend.connect().await.context("连接本地索引数据库失败")?;
-        native_backend.migrate(&index_pool).await.context("执行索引数据库迁移失败")?;
-        let content_pool =
-            native_backend.connect_content().await.context("连接本地正文数据库失败")?;
-        native_backend.migrate_content(&content_pool).await.context("执行正文数据库迁移失败")?;
+        Ok(Self { use_cases, policy, store })
+    }
 
-        match cleanup_pending_entry_content(&index_pool, &content_pool).await {
-            Ok(removed_rows) if removed_rows > 0 => {
-                tracing::info!(removed_rows, "已清理待回收正文缓存");
-            }
-            Ok(_) => {}
-            Err(error) => {
-                tracing::warn!(%error, "正文缓存清理失败，将在下次启动重试");
-            }
-        }
-
-        let use_cases = compose_native_sqlite_use_cases(index_pool, content_pool).use_cases;
-
-        Ok(Self { use_cases })
+    /// Closes the library and waits for its connections to close, on every path before the CLI
+    /// exits: the last one checkpoints the log into the main file, and a process that ended during
+    /// that would leave the main file part-written (`LibraryStore::close`).
+    async fn close(self) {
+        close_library(&self.store).await;
     }
 
     async fn list_feeds(&self) -> anyhow::Result<Vec<Feed>> {
@@ -358,8 +459,9 @@ impl CliServices {
             .await
             .context("保存订阅失败")?;
 
-        if let Some(first_refresh) = outcome.first_refresh {
-            ensure_refresh_feed_succeeded(&first_refresh).context("首次刷新订阅失败")?;
+        let first_failure = outcome.first_refresh.and_then(|refresh| refresh.failure_summary());
+        if let Some(failure) = self.named(first_failure.into_iter().collect()).await.pop() {
+            return Err(anyhow::anyhow!("{}", failure_line(&failure)).context("首次刷新订阅失败"));
         }
 
         Ok(())
@@ -384,12 +486,38 @@ impl CliServices {
             }
         }
         println!("合计：{}", new_entries_message(outcome.summary().inserted_count));
-        ensure_refresh_all_succeeded(&outcome)
+        let failures = self.named(outcome.failure_summaries()).await;
+        if !failures.is_empty() {
+            let lines = failures.iter().map(failure_line).collect::<Vec<_>>().join(" | ");
+            anyhow::bail!("部分订阅刷新失败: {lines}");
+        }
+        Ok(())
+    }
+
+    /// The display names of failed subscriptions, read once; without them the address stands in.
+    async fn named(&self, mut failures: Vec<RefreshFailureItem>) -> Vec<RefreshFailureItem> {
+        if failures.is_empty() {
+            return failures;
+        }
+        if let Ok(snapshot) = self.use_cases.feeds_snapshot_service.load_snapshot().await {
+            for failure in &mut failures {
+                failure.name = snapshot
+                    .feeds
+                    .iter()
+                    .find(|feed| feed.id == failure.feed_id)
+                    .map(|feed| feed.title.clone());
+            }
+        }
+        failures
     }
 
     async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<()> {
         let outcome = self.use_cases.refresh_service.refresh_feed(feed_id).await?;
-        ensure_refresh_feed_succeeded(&outcome)?;
+        if let Some(failure) =
+            self.named(outcome.failure_summary().into_iter().collect()).await.pop()
+        {
+            anyhow::bail!("{}", failure_line(&failure));
+        }
         println!("订阅 {feed_id}：{}", new_entries_message(outcome.inserted_count()));
         Ok(())
     }
@@ -398,8 +526,12 @@ impl CliServices {
         self.use_cases.import_export_service.export_config_json().await
     }
 
-    async fn import_config_json(&self, raw: &str) -> anyhow::Result<ConfigImportOutcome> {
-        self.use_cases.import_export_service.import_config_json(raw).await
+    async fn import_config_json(
+        &self,
+        raw: &str,
+        expected: &ConfigFingerprint,
+    ) -> anyhow::Result<ConfigImportOutcome> {
+        self.use_cases.import_export_service.import_config_json(raw, expected).await
     }
 
     async fn export_opml(&self) -> anyhow::Result<String> {
@@ -414,8 +546,8 @@ impl CliServices {
         self.use_cases.settings_service.load().await
     }
 
-    async fn save_settings(&self, settings: &UserSettings) -> anyhow::Result<()> {
-        self.use_cases.settings_service.save(settings).await
+    async fn update_settings(&self, patch: SettingsPatch) -> anyhow::Result<UserSettings> {
+        self.use_cases.settings_service.update(patch).await
     }
 
     async fn push_remote_config(
@@ -423,7 +555,7 @@ impl CliServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPushOutcome> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        let remote = WebDavConfigSync::with_policy(endpoint, remote_path, self.policy.clone())?;
         self.use_cases.import_export_service.push_remote_config(&remote).await
     }
 
@@ -432,60 +564,43 @@ impl CliServices {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<RemoteConfigPullOutcome> {
-        let remote = WebDavConfigSync::new(endpoint, remote_path)?;
+        let remote = WebDavConfigSync::with_policy(endpoint, remote_path, self.policy.clone())?;
         self.use_cases.import_export_service.pull_remote_config(&remote).await
     }
 }
 
-fn apply_settings_patch(settings: &mut UserSettings, args: SaveSettingsArgs) -> anyhow::Result<()> {
-    if let Some(theme) = args.theme {
-        settings.theme = match theme {
+/// The settings change the options ask for. Of the custom CSS options, a file wins over
+/// `--custom-css`, which wins over `--clear-custom-css`.
+fn settings_patch(args: SaveSettingsArgs) -> anyhow::Result<SettingsPatch> {
+    let custom_css = match (args.custom_css_file, args.custom_css, args.clear_custom_css) {
+        (Some(path), _, _) => Some(
+            fs::read_to_string(&path)
+                .with_context(|| format!("读取自定义 CSS 文件失败: {}", path.display()))?,
+        ),
+        (None, Some(custom_css), _) => Some(custom_css),
+        (None, None, true) => Some(String::new()),
+        (None, None, false) => None,
+    };
+    Ok(SettingsPatch {
+        theme: args.theme.map(|theme| match theme {
             CliThemeMode::Light => ThemeMode::Light,
             CliThemeMode::Dark => ThemeMode::Dark,
             CliThemeMode::System => ThemeMode::System,
-        };
-    }
-
-    if let Some(list_density) = args.list_density {
-        settings.list_density = match list_density {
+        }),
+        list_density: args.list_density.map(|density| match density {
             CliListDensity::Comfortable => ListDensity::Comfortable,
             CliListDensity::Compact => ListDensity::Compact,
-        };
-    }
-
-    if let Some(startup_view) = args.startup_view {
-        settings.startup_view = match startup_view {
+        }),
+        startup_view: args.startup_view.map(|view| match view {
             CliStartupView::All => StartupView::All,
             CliStartupView::LastFeed => StartupView::LastFeed,
-        };
-    }
-
-    if let Some(refresh_interval_minutes) = args.refresh_interval_minutes {
-        settings.refresh_interval_minutes = refresh_interval_minutes;
-    }
-
-    if let Some(archive_after_months) = args.archive_after_months {
-        settings.archive_after_months = archive_after_months;
-    }
-
-    if let Some(reader_font_scale) = args.reader_font_scale {
-        settings.reader_font_scale = reader_font_scale;
-    }
-
-    if args.clear_custom_css {
-        settings.custom_css.clear();
-    }
-
-    if let Some(custom_css) = args.custom_css {
-        settings.custom_css = custom_css;
-    }
-
-    if let Some(path) = args.custom_css_file {
-        settings.custom_css = fs::read_to_string(&path)
-            .with_context(|| format!("读取自定义 CSS 文件失败: {}", path.display()))?;
-    }
-
-    Ok(())
+        }),
+        refresh_interval_minutes: args.refresh_interval_minutes,
+        archive_after_months: args.archive_after_months,
+        entries_page_size: None,
+        reader_font_scale: args.reader_font_scale,
+        custom_css,
+    })
 }
 
 fn write_output(output: Option<PathBuf>, raw: &str) -> anyhow::Result<()> {
@@ -508,20 +623,48 @@ fn print_feeds(feeds: &[Feed]) {
     }
 }
 
-fn ensure_refresh_feed_succeeded(outcome: &RefreshFeedOutcome) -> anyhow::Result<()> {
-    if let Some(failure_line) = outcome.failure_line() {
-        anyhow::bail!("{failure_line}");
-    }
-    Ok(())
+/// One failed subscription: its name, or its address when it has none (B2-D7).
+fn failure_line(failure: &RefreshFailureItem) -> String {
+    format!("{}: {}", failure.name.as_deref().unwrap_or(&failure.url), failure.message)
 }
 
-fn ensure_refresh_all_succeeded(outcome: &RefreshAllOutcome) -> anyhow::Result<()> {
-    if let Some(failures) = outcome.joined_failure_lines() {
-        anyhow::bail!("部分订阅刷新失败: {failures}");
-    }
-    Ok(())
+fn config_import_summary(outcome: &ConfigImportOutcome) -> String {
+    let settings = if outcome.settings_updated { "设置已更新" } else { "设置未变化" };
+    format!(
+        "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
+        outcome.imported_feed_count, outcome.removed_feed_count
+    )
 }
 
 fn new_entries_message(count: u64) -> String {
     if count == 0 { "没有新文章".into() } else { format!("新增 {count} 篇文章") }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{CommandFactory, Parser};
+
+    use super::{Cli, Command};
+
+    #[test]
+    fn cli_definition_is_consistent() {
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn remove_feed_purges_by_default_and_keep_entries_opts_out() {
+        let purge = |arguments: &[&str]| {
+            let cli = Cli::try_parse_from(["rssr", "remove-feed", "1"].iter().chain(arguments))
+                .map_err(|error| error.kind())?;
+            let Command::RemoveFeed(args) = cli.command else { panic!("remove-feed") };
+            Ok(args.purge_entries())
+        };
+        assert_eq!(purge(&[]), Ok(true));
+        assert_eq!(purge(&["--purge-entries"]), Ok(true));
+        assert_eq!(purge(&["--keep-entries"]), Ok(false));
+        assert_eq!(
+            purge(&["--keep-entries", "--purge-entries"]),
+            Err(clap::error::ErrorKind::ArgumentConflict)
+        );
+    }
 }

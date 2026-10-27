@@ -91,11 +91,17 @@ fn main() {
         {
             "run_wasm_contract_harness.sh" => "browser-contracts",
             "run_rssr_web_auth_smoke.sh" | "run_rssr_web_auth_assertions.sh" => "web-auth",
-            "run_static_web_reader_theme_matrix.sh" => "reader-theme-matrix",
-            "run_static_web_small_viewport_smoke.sh" => "small-viewport",
-            "run_rssr_web_proxy_feed_smoke.sh" => "proxy-feed",
-            "run_rssr_web_browser_feed_smoke.sh" => "browser-feed",
-            "run_web_spa_regression_server.sh" => "spa",
+            "run_server_web_regression.sh" => match args
+                .iter()
+                .position(|s| s == "--suite")
+                .and_then(|i| args.get(i + 1))
+                .map(String::as_str)
+            {
+                Some("theme-matrix") => "reader-theme-matrix",
+                Some("regression") => "small-viewport",
+                Some("feed-smoke") => "browser-feed",
+                suite => panic!("unexpected suite {suite:?}: {args:?}"),
+            },
             _ => panic!("unexpected arguments: {args:?}"),
         },
     };

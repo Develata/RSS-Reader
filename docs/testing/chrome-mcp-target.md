@@ -10,7 +10,7 @@
 ## 适用场景
 
 - 需要用 Chrome MCP 实际点开 `/entries`、`/feeds`、`/settings`、阅读页 `/entries/:entry_id`
-- 需要在本地复跑静态 Web / `rssr-web` 的浏览器态 smoke
+- 需要在本地检查正式 Web 服务器模式，或单独构建的 Pages 演示
 - 当前 `127.0.0.1:9222` 没有 DevTools 目标，或者 MCP 连不上浏览器
 
 ## 固定入口
@@ -81,10 +81,10 @@ bash scripts/run_chrome_mcp_target.sh --chrome-bin "$HOME/.local/opt/chrome-for-
 
 ## 推荐搭配
 
-- 静态 Web：
-  - [Static Web 浏览器手工 Smoke](./static-web-browser-smoke.md)
-  - [Static Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
-  - [Static Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
-- 部署壳：
+- 正式 Web（真实服务器与资料库）：
+  - [服务器浏览器回归](./server-web-regression.md)
+  - [Web 阅读页 `/entries/:entry_id` 主题矩阵 Smoke](./static-web-reader-theme-matrix.md)
+  - [Web 小视口 Smoke](./static-web-small-viewport-smoke.md)
   - [`rssr-web` 浏览器手工 Smoke](./rssr-web-browser-smoke.md)
   - [`rssr-web` 浏览器自动 Feed Smoke](./rssr-web-browser-feed-smoke.md)
+- 静态演示：[Pages 构建与验收](../deployment/github-pages.md)。

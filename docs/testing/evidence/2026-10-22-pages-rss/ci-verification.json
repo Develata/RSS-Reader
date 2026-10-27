@@ -1,0 +1,41 @@
+{
+  "run_id": 39849066793,
+  "url": "https://github.com/Develata/RSS-Reader/actions/runs/39849066793",
+  "source_commit": "57407d8d838d0a417c8b59f31545722ead310e7c",
+  "attempt": 1,
+  "status": "completed",
+  "conclusion": "success",
+  "updated_at": "2026-10-22T20:30:59Z",
+  "jobs": [
+    {
+      "id": 120070068973,
+      "name": "build",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 120071622632,
+      "name": "deploy",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "evidence_lines": [
+    "2026-10-22T20:28:59.3282854Z test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+    "2026-10-22T20:29:00.5250158Z Develata · 每日数学: 5 articles, RSS SHA-256 a62b97881cecabb0492ca40f9d0844f133ea5681ef2a02b829550fd289fcbc01",
+    "2026-10-22T20:29:00.5732950Z Terence Tao · What's new: 1 articles, RSS SHA-256 ec6b60da8a49d2e1d9f033345c5f0e39ee0d8048be38069f5a7d4948570eba9e",
+    "2026-10-22T20:29:00.5877750Z Wrote 356387 bytes to /home/runner/work/RSS-Reader/RSS-Reader/crates/rssr-infra/../../assets/pages-demo/snapshot.json at 2026-10-22 20:29:00.573087312 +00:00:00",
+    "2026-10-22T20:30:53.0271422Z Pages smoke passed: 2 real feeds, 6 articles, reader, 404 deep link, prefix, persistence, blocked add/refresh"
+  ],
+  "artifacts": [
+    {
+      "id": 12455693988,
+      "name": "pages-rss-snapshot-39849066793-1",
+      "size_in_bytes": 59207,
+      "github_digest": "sha256:edc28a4597b58185f31ebd786b67ea705556f345a7ff0b4edcb226243d4b1e1d",
+      "expires_at": "2026-10-29T20:30:53Z",
+      "downloaded_locally": false
+    }
+  ],
+  "public_deployment": false
+}

@@ -1,76 +1,13 @@
-# Static Web 浏览器手工 Smoke
+# Web 浏览器手工 Smoke：入口迁移
 
-这份说明服务于纯静态 `rssr-app` Web 入口的真实浏览器态回归。
+保留本文件名以兼容已有链接。v0.2 C4c 起正式 Web 通过同源 API 访问服务器资料库，旧静态本地口令 helper 已退役。
 
-它解决的是：本地 Web 门禁默认要求先初始化用户名/密码，手工每次点一遍比较慢，也不利于固定回归路径。
-
-## 脚本
-
-- [run_static_web_browser_smoke.sh](../../scripts/run_static_web_browser_smoke.sh)
-
-## 最短用法
+手工检查用：
 
 ```bash
-bash scripts/run_static_web_browser_smoke.sh
+bash scripts/run_rssr_web_browser_smoke.sh
 ```
 
-默认行为：
+经真实 `/login` 登录，检查 `/entries`、`/feeds`、`/settings`，添加订阅后再打开实际存在的 `/entries/:entry_id`。操作与结果模板见 [服务器手工 Smoke](./rssr-web-browser-smoke.md)。
 
-- 启动带 SPA fallback 的静态 Web 服务
-- 提供同源 helper URL
-- helper 会自动写入本地 `localStorage/sessionStorage`
-- 然后跳转到默认内部页 `/entries`
-
-如果要稳定进入真实阅读页，也可以直接播种一份最小 demo 数据：
-
-```bash
-bash scripts/run_static_web_browser_smoke.sh --seed reader-demo --next /entries/2
-```
-
-这会额外写入一份最小浏览器状态，确保：
-
-- `/entries`
-- `/feeds`
-- `/settings`
-- `/entries/2`
-
-都能在 fresh profile 下直接进入真实应用内部页。
-
-## helper URL
-
-脚本会打印类似：
-
-```text
-http://127.0.0.1:8091/__codex/setup-local-auth?username=smoke&password=smoke-pass-123&next=/entries
-```
-
-打开这个 URL 后：
-
-- 本地 Web 门禁会被初始化
-- 会话会直接写入 `sessionStorage`
-- 浏览器会自动跳到目标页
-
-## 推荐检查项
-
-- helper 自动跳转是否成功
-- `/entries`
-- 内部导航到 `/feeds`
-- 内部导航到 `/settings`
-- 如使用 `--seed reader-demo`，再补 `/entries/2`
-- 刷新当前页后是否仍保持已登录
-
-## 结果记录
-
-脚本会生成：
-
-- `target/static-web-browser-smoke/<timestamp>/summary.md`
-
-建议直接在模板里补：
-
-- helper 结果
-- `/entries` 结果
-- `/feeds` 结果
-- `/settings` 结果
-- 刷新保持登录结果
-- console 结果
-- 是否通过
+自动化使用 [服务器浏览器回归](./server-web-regression.md)，每个场景有独立 SQLite 夹具资料库，不写浏览器文章库或口令。Pages 静态演示另用 `scripts/test_pages.sh`，见 [Pages 说明](../deployment/github-pages.md)；它使用内存 SQLite、重载重置，并禁用在线订阅、WebDAV 与自动刷新。

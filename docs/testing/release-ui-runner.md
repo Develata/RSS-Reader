@@ -1,4 +1,40 @@
-# Release UI runner 行为基线与迁移
+# Release UI runner：当前入口与历史迁移
+
+## 当前契约（2026-10-22，v0.2 阶段 D）
+
+```bash
+# 默认自动门禁，完成后退出
+bash scripts/run_release_ui_regression.sh
+# 自动门禁、认证、共享 SQL 浏览器契约、三个固定服务器套件
+bash scripts/run_release_ui_regression.sh --full
+# 正式 Web 长验收单独执行
+bash scripts/run_server_web_regression.sh --suite acceptance --long
+# 只输出计划
+bash scripts/run_release_ui_regression.sh --full --plan
+```
+
+固定组使用 `run_server_web_regression.sh` 的 theme-matrix（port + 10）、regression（port + 11）、feed-smoke（web-port + 11）。`--with-rssr-web` 开认证 smoke；未选固定组时另跑 feed-smoke（web-port + 1）。`--skip-automated` 跳过 Rust 门禁，`--skip-build` 只复用页面，服务器和夹具仍会构建。页面与服务器必须同一构建。没有常驻 SPA 阶段，结束后退出；旧的静态服务/代理阶段选项已删除。
+
+Windows 显式选择 Git Bash（`RSSR_BASH` 或 `--bash`），保持 Cargo、dx、Node 和 Chrome 对子进程可用。`--full` 不包括 acceptance，也不覆盖 CI 四个非默认主题的全页面回归。固定端口要求 port 与 web-port 均不超过 55524，以容纳 CDP 派生端口。
+
+`summary.json` / `summary.md` 记录每阶段状态与退出码；skipped 不等于通过，failed/interrupted/blocked 表示失败、中断或未运行。`completed` 仅说明选中的命令结束，不代表人工验收。构建与日志规则见 [服务器浏览器回归](./server-web-regression.md)。
+
+`--with-browser-contracts` / `--full` 运行 14 个共享 SQL、内存执行器与正文 targets；旧三个浏览器存储 harness 已退役。逐项语义对应见 [阶段 D 迁移表](./phase-d-browser-contract-migration.md)。
+
+独立 runner 校验：
+
+```bash
+cargo fmt --manifest-path scripts/release-ui/Cargo.toml --check
+cargo clippy --manifest-path scripts/release-ui/Cargo.toml --all-targets --locked --target-dir target/release-ui-runner -- -D warnings
+cargo test --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
+python -X utf8 scripts/release-ui/tests/acceptance.py --bash "$BASH"
+```
+
+Windows 深层 worktree 若在真实构建场景遇到 MSVC `LNK1104`，先核对输出路径长度；可用 `--artifacts-root E:/rssr-qa/release-ui` 缩短测试目录。每次仍建立独立目录并保留日志，中文和空格路径案例继续执行，不因此跳过编译器配置验收。
+
+## 历史迁移记录（2026-10-03 至 2026-10-06）
+
+下文保留当时的契约、旧命令和实测结果，只供原提交复现；当前操作以上一节为准，不把历史失败或跳过改写成通过。
 
 基线：`f1984c04f2a2875faaa9e175d746417ae80ebcf6` 的
 `scripts/run_release_ui_regression.sh`，409 行。2026-10-03 在 Windows
@@ -28,6 +64,10 @@ LAPTOP-H6JEOCF0 / Git Bash 检查；下表来自源码，不冒充整套实测�
 failed/interrupted，后续未运行阶段为 blocked，显式未选择的阶段为 skipped；
 不把进程退出 0 或 SPA 启动写作人工验收通过。
 
+v0.2 C4a 起 `rssr-web` 不再提供 `/feed-proxy`：`proxy-feed` 阶段、`--skip-external-feed`
+选项以及随之而来的 `partial` 分组状态和 `completed-with-skips` 总体状态已移除；固定 smoke
+为 reader 五主题、小视口、browser feed 三项。上表与下面带日期的证据章节是当时的记录，不随之改写。
+
 ## 实现选择
 
 独立 `scripts/release-ui/Cargo.toml` 不增加产品 workspace 成员，也不引入产品依赖。
@@ -48,9 +88,6 @@ OS 关闭最后一个句柄时也回收其后代。每个阶段有自己的 Job 
 # 原有接口继续使用；首次会构建独立 CLI，以后 Cargo 复用缓存。
 bash scripts/run_release_ui_regression.sh --release --full --no-serve
 bash scripts/run_release_ui_regression.sh --full --plan
-
-# 环境限制外部 RSS 时，只验既有本地 fixture；报告明确是部分验收。
-bash scripts/run_release_ui_regression.sh --release --full --skip-external-feed --no-serve
 
 # 独立构建与验证，不改变根 Cargo.lock 或产品 workspace。
 cargo build --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
@@ -100,11 +137,6 @@ Git Bash，避免选中 system32 的 WSL 入口。已有 `RSSR_BASH` 不被 laun
 $env:RSSR_WASM_BINDGEN_TEST_RUNNER = Join-Path (Get-Location) 'target/release-ui-tools/wasm-bindgen-0.2.126/bin/wasm-bindgen-test-runner.exe'
 ```
 
-`--skip-external-feed` 只在 `--full` / `--with-fixed-smokes` 下有效，只排除既有外部
-proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读流程仍会执行。
-这不覆盖外部代理可达性；代理安全逻辑仍由现有本地 HTTP fixture / SSRF 单元测试验证。
-默认 full 保持执行外部检查，外部失败仍终止后续阶段并返回真实非零码。
-
 `--repo-root` 默认是构建时工具源码所在仓库；复制二进制到别处时显式指定。
 `--log-dir` 的相对路径以仓库为基准，支持空格和中文。新增默认目录名为
 `target/release-ui-regression/<Unix毫秒>-<PID>`，避免秒级目录碰撞。
@@ -120,8 +152,6 @@ proxy-feed smoke。原有本地同源 feed fixture 的添加、刷新、阅读�
   只保存一个 Rust 阶段列表，分组状态从该列表计算。
 - `skipped` 只表示用户未选择；失败后后续阶段为 `blocked`；正常复用构建为 `reused`。
   `completed` 仅表示选中的命令执行完毕，不表示手工验收完成。
-- 显式 `--skip-external-feed` 将 proxy-feed 标成 `skipped`，固定组为
-  `partial (external feed skipped)`，总体为 `completed-with-skips`；其余阶段失败仍返回非零码。
 - SPA 经 HTTP 就绪探测后为 `serving`，始终需要人工检查；提前退出（包括退出 0）失败。
   端口占用在启动阶段前被拒绝，不关闭占用者。
 - 捕获的 Unix SIGINT/SIGTERM 分别计划返回 130/143；本机 Windows Ctrl+C/Ctrl+Break

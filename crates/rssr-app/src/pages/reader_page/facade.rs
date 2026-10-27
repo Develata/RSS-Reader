@@ -1,5 +1,3 @@
-use dioxus::prelude::Callback;
-
 use crate::bootstrap::ReaderNavigation;
 
 use super::{session::ReaderPageSession, state::ReaderPageState};
@@ -8,7 +6,6 @@ use super::{session::ReaderPageSession, state::ReaderPageState};
 pub(crate) struct ReaderPageFacade {
     session: ReaderPageSession,
     snapshot: ReaderPageState,
-    shortcuts: Callback<dioxus::events::KeyboardEvent>,
 }
 
 impl ReaderPageFacade {
@@ -17,16 +14,13 @@ impl ReaderPageFacade {
             && self.snapshot.content_loaded
             && self.snapshot.error.is_none()
     }
-    pub(crate) fn new(
-        session: ReaderPageSession,
-        snapshot: ReaderPageState,
-        shortcuts: Callback<dioxus::events::KeyboardEvent>,
-    ) -> Self {
-        Self { session, snapshot, shortcuts }
+    pub(crate) fn new(session: ReaderPageSession, snapshot: ReaderPageState) -> Self {
+        Self { session, snapshot }
     }
 
-    pub(crate) fn shortcuts(&self) -> Callback<dioxus::events::KeyboardEvent> {
-        self.shortcuts
+    /// 已读、收藏按钮可用：屏幕上的标记就是这篇文章存储里的值。
+    pub(crate) fn flags_known(&self, entry_id: i64) -> bool {
+        self.snapshot.flags_known(entry_id)
     }
 
     pub(crate) fn title(&self) -> &str {
@@ -67,6 +61,16 @@ impl ReaderPageFacade {
 
     pub(crate) fn error(&self) -> Option<&str> {
         self.snapshot.error.as_deref()
+    }
+
+    pub(crate) fn error_tone(&self) -> &'static str {
+        self.snapshot.error_tone
+    }
+
+    /// Whether the status is shown on screen (screen readers hear every status): an error, a
+    /// failure or an outcome that may have happened; a plain result is only announced.
+    pub(crate) fn status_shown(&self) -> bool {
+        status_shown(&self.snapshot)
     }
 
     pub(crate) fn is_read(&self) -> bool {
@@ -136,4 +140,10 @@ impl ReaderPageFacade {
     pub(crate) fn toggle_starred(&self, via_shortcut: bool) {
         self.session.toggle_starred(via_shortcut);
     }
+}
+
+/// See [`ReaderPageFacade::status_shown`] (C4b item 1: an unknown outcome must be seen).
+pub(crate) fn status_shown(state: &super::state::ReaderPageState) -> bool {
+    let tone = state.status_tone.as_str();
+    state.error.is_some() || tone == "error" || tone == crate::ui::failure::TONE_UNKNOWN
 }

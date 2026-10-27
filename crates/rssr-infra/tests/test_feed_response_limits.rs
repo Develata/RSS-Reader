@@ -1,15 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
-use rssr_application::RefreshService;
-use rssr_domain::{EntryQuery, FeedRepository, NewFeedSubscription};
 use rssr_infra::{
-    application_adapters::{InfraFeedRefreshSource, SqliteRefreshStore},
-    db::{
-        entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository, migrate,
-        sqlite_native::NativeSqliteBackend, storage_backend::StorageBackend,
-    },
     fetch::{FetchClient, FetchRequest, FetchResult},
     subscription_probe::MAX_SUBSCRIPTION_BYTES,
 };
@@ -121,8 +114,31 @@ async fn feed_preserves_charset_and_bom_decoding_and_bounds_converted_text() {
     assert!(error.to_string().contains("8 MiB"), "{error:#}");
 }
 
+/// The byte order mark is removed once, where the body is decoded: a page after one is read; a
+/// second is text, which ends the head (review C3-R6 R6-04).
 #[tokio::test]
-async fn feed_body_stall_still_obeys_the_30_second_request_timeout() {
+async fn discovery_reads_the_page_after_one_byte_order_mark() {
+    use rssr_application::{SubscriptionProbeOutcome, SubscriptionProbePort};
+    let page =
+        b"<html><head><link rel=alternate type=application/rss+xml href='/f.xml'></head></html>";
+    for (marks, expected) in [(0, 1), (1, 1), (2, 0)] {
+        let body = [b"\xef\xbb\xbf".repeat(marks), page.to_vec()].concat();
+        let (url, server) =
+            server(vec![response("Content-Type: text/html\r\n", &body)], false).await;
+        let outcome = rssr_infra::subscription_probe::HttpSubscriptionProbe::with_feed_client()
+            .probe(&url.parse().unwrap())
+            .await
+            .unwrap();
+        server.abort();
+        let SubscriptionProbeOutcome::Html { candidates, .. } = outcome else {
+            panic!("an HTML page");
+        };
+        assert_eq!(candidates.len(), expected, "{marks} byte order marks");
+    }
+}
+
+#[tokio::test]
+async fn feed_body_stall_obeys_the_30_second_read_idle_timeout() {
     let error = fetch(response("Content-Length: 100\r\n", b"x"), true, Duration::from_secs(35))
         .await
         .unwrap_err();
@@ -134,43 +150,261 @@ async fn feed_body_stall_still_obeys_the_30_second_request_timeout() {
     );
 }
 
-#[tokio::test]
-async fn oversized_refresh_keeps_old_articles_counts_and_success_history() {
-    let xml = br#"<rss version="2.0"><channel><title>Test</title><description>Test</description><item><guid>entry</guid><title>Article</title><description>body</description></item></channel></rss>"#;
-    let (url, server) = server(
-        vec![
-            response("Content-Type: application/rss+xml\r\n", xml),
-            response(&format!("Content-Length: {}\r\n", MAX_SUBSCRIPTION_BYTES + 1), &[]),
-        ],
-        false,
-    )
-    .await;
-    let pool = NativeSqliteBackend::new("sqlite::memory:").connect().await.unwrap();
-    migrate(&pool).await.unwrap();
-    let feeds = Arc::new(SqliteFeedRepository::new(pool.clone()));
-    let entries = Arc::new(SqliteEntryRepository::new(pool));
-    let feed = feeds
-        .upsert_subscription(&NewFeedSubscription {
-            url: url.parse().unwrap(),
-            title: None,
-            site_url: None,
-            folder: None,
-        })
-        .await
-        .unwrap();
-    let service = RefreshService::new(
-        Arc::new(InfraFeedRefreshSource::default()),
-        Arc::new(SqliteRefreshStore::new(feeds.clone(), entries.clone())),
+/// What feed-rs keeps per open element is bounded before it reads a feed: nested relative
+/// `xml:base` attributes, deep nesting and a long `xml:base` are refused; a document with a
+/// comment inside its DOCTYPE is still checked (review C3-R5 R5-02, R5-03). A tag of many
+/// attributes is read in linear time (quick-xml 0.41), in a feed and in an OPML document.
+#[test]
+fn feed_structure_is_bounded_before_feed_rs_reads_it() {
+    let parse = |feed: &str| rssr_infra::parser::FeedParser::new().parse(feed);
+    let started = std::time::Instant::now();
+    let rss = |inner: &str| {
+        format!(
+            "<rss version=\"2.0\" xml:base=\"https://example.com/\"><channel><title>t</title>{inner}<item><title>i</title></item></channel></rss>"
+        )
+    };
+
+    let nested = |levels: usize| {
+        format!("{}{}", "<x xml:base=\"a/\">".repeat(levels), "</x>".repeat(levels))
+    };
+    assert!(parse(&rss(&nested(50_000))).is_err(), "50 000 nested bases");
+    assert!(parse(&rss(&nested(15))).is_ok(), "15 nested bases and the feed's own");
+    assert!(parse(&rss(&nested(16))).is_err(), "17 bases in force at once");
+
+    let deep = format!("{}{}", "<x>".repeat(300), "</x>".repeat(300));
+    assert!(parse(&rss(&deep)).is_err(), "300 nested elements");
+    let deep = format!("{}{}", "<x>".repeat(200), "</x>".repeat(200));
+    assert!(parse(&rss(&deep)).is_ok(), "200 nested elements");
+
+    let long_base = format!("<x xml:base=\"{}/\"></x>", "b".repeat(3000));
+    assert!(parse(&rss(&long_base)).is_err(), "an xml:base over 2 KiB");
+
+    let doctype = format!("<!DOCTYPE rss [<!-- << -->]>{}", rss(&nested(50_000)));
+    assert!(parse(&doctype).is_err(), "a comment in the DOCTYPE does not hide the feed");
+
+    // A tag of 256 attributes is read; one of 257 is not, in a feed or an OPML file (review C3-R6
+    // R6-01). A repeated name is looked up by scanning the earlier ones: 100 000 distinct names
+    // followed by 100 000 repeats would take 10^10 comparisons.
+    let attributes = |count: usize| (0..count).map(|i| format!(" a{i}=\"x\"")).collect::<String>();
+    let item = |attributes: &str| {
+        format!(
+            "<rss version=\"2.0\"><channel><title>t</title><item{attributes}><title>i</title></item></channel></rss>"
+        )
+    };
+    assert!(parse(&item(&attributes(256))).is_ok(), "256 attributes");
+    assert!(parse(&item(&attributes(257))).is_err(), "257 attributes");
+    let repeated = format!("{}{}", attributes(100_000), " a99999=\"x\"".repeat(100_000));
+    assert!(parse(&item(&repeated)).is_err(), "repeated attributes");
+    let opml = |attributes: &str| {
+        format!(
+            "<opml version=\"2.0\"><head/><body><outline{attributes} xmlUrl=\"https://example.com/f.xml\"/></body></opml>"
+        )
+    };
+    let codec = rssr_infra::opml::OpmlCodec::new();
+    assert_eq!(codec.decode(&opml(&attributes(255))).unwrap().len(), 1);
+    assert!(codec.decode(&opml(&attributes(256))).is_err(), "257 attributes in OPML");
+
+    // After a repeated name quick-xml resumes reading at the first space inside the value, so
+    // `a="0" a=" xml:base='…'"` hides a base in a value. The check reads attributes as feed-rs
+    // does, and counts and measures the hidden base (review C3-R6 R6-02).
+    let hidden = |base: &str, levels: usize| {
+        let open = format!("<x a=\"0\" a=\" xml:base='{base}'\">");
+        format!("{}{}", open.repeat(levels), "</x>".repeat(levels))
+    };
+    assert!(parse(&rss(&hidden("a/", 1))).is_ok(), "one hidden base");
+    assert!(parse(&rss(&hidden("a/", 15))).is_ok(), "16 bases in force, 15 of them hidden");
+    assert!(parse(&rss(&hidden("a/", 16))).is_err(), "17 bases in force, 16 of them hidden");
+    assert!(parse(&rss(&hidden(&"雪".repeat(1000), 1))).is_err(), "a hidden base over 2 KiB");
+    // A backstop: without the bounds these take hours.
+    assert!(started.elapsed() < std::time::Duration::from_secs(60), "{:?}", started.elapsed());
+}
+
+/// What feed-rs builds is estimated before it reads the feed (review C3-R6 R6-03): large real
+/// feeds stay within the estimate; floods of small entries, or of addresses resolved against a
+/// long base, do not.
+#[test]
+fn feed_model_is_bounded_before_feed_rs_builds_it() {
+    let parse = |feed: &str| rssr_infra::parser::FeedParser::new().parse(feed);
+    const LIMIT: usize = 8 * 1024 * 1024 - 4096;
+
+    // A podcast at the response limit: about 3 000 episodes with full descriptions.
+    let mut items = String::new();
+    while items.len() < LIMIT {
+        let i = items.len();
+        let description = "An episode description &lt;p&gt;with markup&lt;/p&gt;. ".repeat(36);
+        items.push_str(&format!(
+            "<item><title>Episode {i}</title><link>https://example.com/episodes/{i}</link><guid isPermaLink=\"false\">urn:episode:{i}</guid><pubDate>Mon, 01 Jan 2024 00:00:00 +0000</pubDate><description>{description}</description><enclosure url=\"https://cdn.example.com/{i}.mp3\" length=\"12345678\" type=\"audio/mpeg\"/><itunes:duration>01:02:03</itunes:duration><itunes:episode>{i}</itunes:episode><itunes:explicit>false</itunes:explicit><itunes:image href=\"https://cdn.example.com/{i}.jpg\"/><itunes:author>Host</itunes:author><itunes:summary>Summary</itunes:summary><dc:creator>Host</dc:creator><category>Society</category><category>Culture</category><media:content url=\"https://cdn.example.com/{i}.mp3\" type=\"audio/mpeg\" medium=\"audio\"/></item>"
+        ));
+    }
+    let podcast = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><channel><title>t</title>{items}</channel></rss>"
     );
-    assert_eq!(service.refresh_feed(feed.id).await.unwrap().inserted_count(), 1);
-    let before = entries.get_content(1).await.unwrap().unwrap();
-    let success_at = feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at;
-    let outcome = service.refresh_feed(feed.id).await.unwrap();
-    assert_eq!(outcome.inserted_count(), 0);
-    assert!(outcome.failure_message().unwrap().contains("8 MiB"));
-    assert_eq!(entries.get_content(1).await.unwrap().unwrap(), before);
-    assert_eq!(entries.list_entries(&EntryQuery::default()).await.unwrap().len(), 1);
-    assert_eq!(feeds.list_summaries().await.unwrap()[0].unread_count, 1);
-    assert_eq!(feeds.get_feed(feed.id).await.unwrap().unwrap().last_success_at, success_at);
-    server.await.unwrap();
+    assert!(parse(&podcast).unwrap().entries.len() > 2500, "a large podcast");
+
+    // A full-text Atom feed at the limit, with an `xml:base` and inline XHTML: the elements of the
+    // XHTML are kept as text.
+    let mut entries = String::new();
+    while entries.len() < LIMIT {
+        let i = entries.len();
+        let paragraphs =
+            "<p>Text with <a href=\"/posts/x\">a link</a> and <em>emphasis</em>.</p>".repeat(20);
+        entries.push_str(&format!(
+            "<entry><title>Post {i}</title><link rel=\"alternate\" href=\"/posts/{i}\"/><id>tag:example.com,2024:{i}</id><updated>2024-01-01T00:00:00Z</updated><author><name>A</name></author><category term=\"x\"/><content type=\"xhtml\"><div xmlns=\"http://www.w3.org/1999/xhtml\">{paragraphs}</div></content></entry>"
+        ));
+    }
+    let atom = |base: &str, inner: &str| {
+        format!(
+            "<feed xmlns=\"http://www.w3.org/2005/Atom\" xml:base=\"{base}\"><title>t</title><id>i</id><updated>2024-01-01T00:00:00Z</updated>{inner}</feed>"
+        )
+    };
+    let full_text = atom("https://example.com/blog/wp-atom.php", &entries);
+    assert!(parse(&full_text).unwrap().entries.len() > 4000, "a full-text Atom feed");
+
+    // A JSON Feed at the limit.
+    let mut items = Vec::new();
+    let mut size = 0;
+    while size < LIMIT {
+        let i = items.len();
+        let item = format!(
+            "{{\"id\":\"{i}\",\"url\":\"https://example.com/{i}\",\"title\":\"Post {i}\",\"content_html\":\"{}\",\"date_published\":\"2024-01-01T00:00:00Z\",\"authors\":[{{\"name\":\"A\"}}],\"tags\":[\"a\",\"b\"]}}",
+            "<p>Some text.</p>".repeat(120)
+        );
+        size += item.len() + 1;
+        items.push(item);
+    }
+    let json = |items: &str| {
+        format!(
+            "{{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"authors\":[{{\"name\":\"Site\",\"url\":\"https://example.com/\"}}],\"items\":[{items}]}}"
+        )
+    };
+    assert!(parse(&json(&items.join(","))).unwrap().entries.len() > 3000, "a large JSON Feed");
+
+    // Each flood below is refused by one charge alone; the others would let it through.
+    let started = std::time::Instant::now();
+    // Links resolved against a base of 2 031 bytes, 6 051 once percent-encoded: 20 000 take about
+    // 120 MB (500 000, in 7.5 MB, about 3 GB).
+    let base = format!("https://example.com/{}/", "雪".repeat(670));
+    assert!(parse(&atom(&base, &"<link href=\"\"/>".repeat(20_000))).is_err(), "links");
+    // 200 000 empty items (1.4 MB): about 190 MB of entries.
+    let empty = format!(
+        "<rss version=\"2.0\"><channel><title>t</title>{}</channel></rss>",
+        "<item/>".repeat(200_000)
+    );
+    assert!(parse(&empty).is_err(), "empty items");
+    // 50 000 JSON items: about 100 MB; 300 000 tags of one item (1.2 MB): about 35 MB.
+    let ids = (0..50_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>();
+    assert!(parse(&json(&ids.join(","))).is_err(), "JSON items");
+    let tags = vec!["\"a\""; 300_000].join(",");
+    assert!(parse(&json(&format!("{{\"id\":\"x\",\"tags\":[{tags}]}}"))).is_err(), "JSON tags");
+    // A feed author with a 64 KiB address is copied into each of 2 000 items: about 130 MB
+    // (review C3-R7 R7A-01).
+    let author = format!("{{\"name\":\"a\",\"url\":\"{}\"}}", "u".repeat(64 * 1024));
+    let items = (0..2_000).map(|i| format!("{{\"id\":\"{i}\"}}")).collect::<Vec<_>>().join(",");
+    let inherited = format!(
+        "{{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"author\":{author},\"items\":[{items}]}}"
+    );
+    assert!(parse(&inherited).is_err(), "inherited authors");
+    // The same feed with its author's address short is read: the refusal is the copies'.
+    let short = inherited.replace(&"u".repeat(64 * 1024), "https://example.com/");
+    assert_eq!(parse(&short).unwrap().entries.len(), 2_000, "a short inherited author");
+    // A 64 KiB rating is copied into each of the 2 000 contents before it: about 130 MB
+    // (review C3-R7 R7A-02).
+    let contents = "<media:content url=\"https://example.com/a\"/>".repeat(2_000);
+    let rating = format!("<media:rating>{}</media:rating>", "r".repeat(64 * 1024));
+    let rated = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{contents}{rating}</item></channel></rss>"
+    );
+    assert!(parse(&rated).is_err(), "a copied rating");
+    let short_rating = rated.replace(&"r".repeat(64 * 1024), "nonadult");
+    assert_eq!(parse(&short_rating).unwrap().entries.len(), 1, "a short copied rating");
+    // feed-rs reads `a:b:entry` as an Atom entry: 100 000 of them are charged as entries
+    // (review C3-R7 R7A-03).
+    let entries = "<a:b:entry/>".repeat(100_000);
+    let colons = format!(
+        "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:a=\"http://www.w3.org/2005/Atom\"><title>t</title>{entries}</feed>"
+    );
+    assert!(parse(&colons).is_err(), "entries named after a second colon");
+    let few = colons.replace(&entries, &"<a:b:entry/>".repeat(1_000));
+    assert_eq!(parse(&few).unwrap().entries.len(), 1_000, "feed-rs reads them as entries");
+    // RSS enclosures receive the rating's copies as Media RSS contents do (review C3-R8 R8A-02).
+    let enclosures = "<enclosure url=\"https://example.com/a.mp3\"/>".repeat(2_000);
+    let rated = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{enclosures}{rating}</item></channel></rss>"
+    );
+    assert!(parse(&rated).is_err(), "a rating copied into enclosures");
+    let short_rating = rated.replace(&"r".repeat(64 * 1024), "nonadult");
+    assert_eq!(parse(&short_rating).unwrap().entries.len(), 1, "a short rating with enclosures");
+    // serde reads an author from an array of its fields; feed-rs accepts it, the check refuses it
+    // (review C3-R8 R8A-01).
+    let positional = "{\"version\":\"https://jsonfeed.org/version/1.1\",\"title\":\"t\",\"author\":[\"a\",\"https://example.com/\"],\"items\":[{\"id\":\"1\"}]}";
+    assert_eq!(feed_rs::parser::parse(positional.as_bytes()).unwrap().entries.len(), 1);
+    assert!(parse(positional).is_err(), "a positional author");
+    // A duration feed-rs cannot hold makes it panic; the check refuses it (review C3-R8 R8A-04).
+    let duration = format!(
+        "<rss version=\"2.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>t</title><item><title>i</title><itunes:duration>{}</itunes:duration></item></channel></rss>",
+        "1".repeat(21)
+    );
+    let raw = std::panic::catch_unwind(|| feed_rs::parser::parse(duration.as_bytes()).is_ok());
+    assert!(raw.is_err(), "feed-rs panics on it");
+    assert!(parse(&duration).is_err(), "a duration feed-rs cannot hold");
+    // An invalid character reference whose error feed-rs swallows puts its walk out of step: the
+    // item inside the Atom content of the channel title is read as an item of the channel, where
+    // the estimate saw text (review C3-R9 R9A-01).
+    let desync = "<rss version=\"2.0\" xmlns:a=\"http://www.w3.org/2005/Atom\"><channel><title><a:content><w>&#0;</w><item><title>hidden</title></item></a:content></title></channel></rss>";
+    let read = feed_rs::parser::parse(desync.as_bytes()).unwrap();
+    assert_eq!(read.entries.len(), 1, "feed-rs reads the item inside the title");
+    assert!(parse(desync).is_err(), "an invalid character reference");
+    // feed-rs reads an RSS 2.0 feed missing only its closing root tag (it returns after the
+    // channel; Atom and RSS 1.0 fail), so an open document is not refused as such; a charge it
+    // would have taken at an end tag is taken at the end of the document instead (reviews C3-R10
+    // R10A-01, C3-R11; unit tests in feed_structure).
+    let unclosed =
+        "<rss version=\"2.0\"><channel><title>t</title><item><title>a</title></item></channel>";
+    assert_eq!(feed_rs::parser::parse(unclosed.as_bytes()).unwrap().entries.len(), 1);
+    assert!(parse(unclosed).is_ok(), "a feed missing its closing root tag");
+    // The time checks match by local name in any namespace, so a long number in an extension
+    // element feed-rs ignores is refused too: conservative, and stated in the plan (review C3-R11
+    // R11A-01).
+    let extension = "<rss version=\"2.0\" xmlns:x=\"urn:x\"><channel><title>t</title><x:duration>1234567890123</x:duration></channel></rss>";
+    assert!(feed_rs::parser::parse(extension.as_bytes()).is_ok());
+    assert!(parse(extension).is_err(), "a time checked by its local name");
+    // `media:content` is not an Atom text construct: what is inside it is charged.
+    let thumbnails = "<media:thumbnail url=\"\"/>".repeat(300_000);
+    let media = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><media:content url=\"\">{thumbnails}</media:content></item></channel></rss>"
+    );
+    assert!(parse(&media).is_err(), "media thumbnails");
+    // Outside an Atom text construct elements are charged even where feed-rs would skip them.
+    let content = "<x/>".repeat(300_000);
+    let outside = format!("<entry><id>x</id>{content}</entry>");
+    assert!(parse(&atom("https://example.com/", &outside)).is_err(), "elements outside it");
+    // A backstop: without the bounds these take hours.
+    assert!(started.elapsed() < std::time::Duration::from_secs(60), "{:?}", started.elapsed());
+    // Inside one they are text.
+    let xhtml = format!("<entry><id>x</id><content type=\"xhtml\">{content}</content></entry>");
+    assert!(parse(&atom("https://example.com/", &xhtml)).is_ok(), "elements in content");
+    // A gallery: 200 contents and one rating in an item.
+    let gallery = format!(
+        "<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\"><channel><title>t</title><item><title>i</title>{}<media:rating scheme=\"urn:simple\">nonadult</media:rating></item></channel></rss>",
+        "<media:content url=\"https://example.com/p.jpg\" medium=\"image\"/>".repeat(200)
+    );
+    assert_eq!(parse(&gallery).unwrap().entries.len(), 1, "a gallery");
+}
+
+/// An OPML export with a long title imports again (review C3-R5 R5-06).
+#[test]
+fn a_long_title_survives_an_opml_round_trip() {
+    let title = "长".repeat(3000);
+    let codec = rssr_infra::opml::OpmlCodec::new();
+    let exported = codec
+        .encode(&[rssr_domain::OpmlFeed {
+            url: "https://example.com/feed.xml".into(),
+            name: Some(title.clone()),
+            source_title: Some(title.clone()),
+            folder: None,
+        }])
+        .unwrap();
+    assert!(exported.len() > 16 * 1024);
+    let imported = codec.decode(&exported).unwrap();
+    assert_eq!(imported[0].title.as_deref(), Some(title.as_str()));
 }

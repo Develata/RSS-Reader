@@ -1,0 +1,84 @@
+     Running unittests src\main.rs (target\debug\deps\rssr_app-b07a2794954a5840.exe)
+test result: ok. 109 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\test_builtin_theme_contracts.rs (target\debug\deps\test_builtin_theme_contracts-6d9fa2a99ce2c621.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_default_style_token_contract.rs (target\debug\deps\test_default_style_token_contract-3642233322ae5fa9.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src\lib.rs (target\debug\deps\rssr_application-263a728c77ca1874.exe)
+test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+     Running unittests src\main.rs (target\debug\deps\rssr_cli-4675db404adf831d.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_stdout_contract.rs (target\debug\deps\test_stdout_contract-1d821f62b34bb7b2.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.89s
+     Running unittests src\lib.rs (target\debug\deps\rssr_domain-c8438d2b352d1c21.exe)
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src\lib.rs (target\debug\deps\rssr_infra-e407f7316000f6cb.exe)
+test result: ok. 48 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.12s
+     Running tests\test_application_refresh_store_adapter.rs (target\debug\deps\test_application_refresh_store_adapter-ea00ce37c16b3f8a.exe)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+     Running tests\test_archive_filter_parity.rs (target\debug\deps\test_archive_filter_parity-784697e6ddaa5b29.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_browser_state_seed_contracts.rs (target\debug\deps\test_browser_state_seed_contracts-757e5d8c9680105a.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_bulk_read.rs (target\debug\deps\test_bulk_read-5442f595a9d42484.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+     Running tests\test_concurrent_refresh_writes.rs (target\debug\deps\test_concurrent_refresh_writes-6e4330d4b8f4f87b.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+     Running tests\test_config_exchange_contract_harness.rs (target\debug\deps\test_config_exchange_contract_harness-bff7641c54dad9aa.exe)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+     Running tests\test_config_package_codec.rs (target\debug\deps\test_config_package_codec-54bb9fdc0a764df2.exe)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_config_package_io.rs (target\debug\deps\test_config_package_io-10042c26cf898cbd.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_config_package_schema_consistency.rs (target\debug\deps\test_config_package_schema_consistency-09d5a5b78eaffa85.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_entry_large_dataset_performance.rs (target\debug\deps\test_entry_large_dataset_performance-c50ec58757492bb4.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+     Running tests\test_entry_state_and_search.rs (target\debug\deps\test_entry_state_and_search-0061f7c0e84e4e65.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\test_feed_parse_dedup.rs (target\debug\deps\test_feed_parse_dedup-46976f544babeb7f.exe)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_feed_refresh_flow.rs (target\debug\deps\test_feed_refresh_flow-0851e8f5ac21e899.exe)
+test localized_writeback_does_not_override_newer_refresh_content ... ok
+test localized_writeback_from_old_generation_is_rejected_after_readd ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\test_feed_response_limits.rs (target\debug\deps\test_feed_response_limits-afba62827262e6c7.exe)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.01s
+     Running tests\test_guid_identity_transition.rs (target\debug\deps\test_guid_identity_transition-78214fe34551241a.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_large_feed_write.rs (target\debug\deps\test_large_feed_write-9c2da03bccdb4ad1.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.89s
+     Running tests\test_native_outbound_requests.rs (target\debug\deps\test_native_outbound_requests-ea2ba7f0d9552e12.exe)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+     Running tests\test_opml_interop.rs (target\debug\deps\test_opml_interop-47e46a1cf5146dfe.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_persistence_atomicity.rs (target\debug\deps\test_persistence_atomicity-4ba09c0dd77d36e3.exe)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+     Running tests\test_refresh_contract_harness.rs (target\debug\deps\test_refresh_contract_harness-4bedd4cdf86995be.exe)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\test_regression_smoke.rs (target\debug\deps\test_regression_smoke-da515766988b0931.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_settings_repository.rs (target\debug\deps\test_settings_repository-851c5f83853b7f8d.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_sqlite_bootstrap.rs (target\debug\deps\test_sqlite_bootstrap-c573d7f471e6e8da.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+     Running tests\test_subscription_contract_harness.rs (target\debug\deps\test_subscription_contract_harness-eef60b8f9fa5e4c0.exe)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_subscription_discovery.rs (target\debug\deps\test_subscription_discovery-7a2590ff7b14bee7.exe)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests\test_webdav_local_roundtrip.rs (target\debug\deps\test_webdav_local_roundtrip-1884ecba73dddcb4.exe)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\wasm_config_exchange_contract_harness.rs (target\debug\deps\wasm_config_exchange_contract_harness-50c5fd62835b8770.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\wasm_refresh_contract_harness.rs (target\debug\deps\wasm_refresh_contract_harness-ec7e78fb33bdfdc6.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\wasm_subscription_contract_harness.rs (target\debug\deps\wasm_subscription_contract_harness-1bb4afbc26b9af08.exe)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src\main.rs (target\debug\deps\rssr_web-ee14b7bf96017dc7.exe)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.54s
+   Doc-tests rssr_application
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests rssr_domain
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests rssr_infra
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

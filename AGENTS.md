@@ -1,13 +1,13 @@
 # RSS-Reader 开发指南
 
-当前实现说明，核对日期：2026-09-30。历史功能计划见 `specs/`；以当前源码、锁文件和下述文档为准。
+当前实现说明，核对日期：2026-10-22（v0.2 阶段 D）。历史功能计划见 `specs/`；以当前源码、锁文件和下述文档为准。
 
 ## 当前技术栈
 
 - Rust 稳定版（Edition 2024）
 - Dioxus / dioxus-router 0.7.9
 - tokio
-- sqlx
+- rusqlite（捆绑 SQLite）
 - reqwest
 - feed-rs
 - quick-xml
@@ -18,6 +18,7 @@
 
 ```text
 crates/
+├── rssr-api/
 ├── rssr-app/
 ├── rssr-cli/
 ├── rssr-web/
@@ -25,6 +26,7 @@ crates/
 ├── rssr-domain/
 └── rssr-infra/
 
+build-support/   # 构建脚本共用的片段（构建标识）
 assets/
 migrations/
 migrations_content/
@@ -41,7 +43,9 @@ specs/
 - `cargo test --workspace --locked`
 - `cargo run -p rssr-app --locked`
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`
-- `dx serve --platform web --package rssr-app --locked`
+- `bash scripts/run_rssr_web_browser_smoke.sh`（正式 Web 同源开发与手工检查）
+- `bash scripts/run_server_web_regression.sh --suite acceptance --long`（服务器模式验收）
+- `dx serve --platform web --package rssr-app --features pages-demo --locked`（仅静态演示）
 
 ## 代码风格
 
@@ -52,10 +56,11 @@ specs/
 
 ## 当前架构与入口
 
-- 六个 crate：UI、CLI 和 Web 部署服务为入口；application 统一用例语义，domain 定义模型与端口，infra 实现平台适配。
-- 原生端使用 SQLite 索引库和正文库，迁移分别在 `migrations/`、`migrations_content/`。
-- Web 使用 infra 的 `BrowserStore`：`localStorage` 分片、版本化提交和 Web Locks 协调写入；不使用 SQLite。
-- 页面通过 facade/session 派发 `UiCommand`；runtime 调用 application 用例或 host capability，页面不直接执行 I/O。
+- 七个 crate：UI、CLI 和 Web 部署服务为入口；application 统一用例语义，domain 定义模型与端口，`rssr-api` 定义界面与用例之间的 `Backend` 接口，infra 实现平台适配与 `LocalBackend`。
+- 原生端使用单个 SQLite 资料库 `library.sqlite3`（rusqlite），实现与基线 schema 在 `crates/rssr-infra/src/store/`；根目录的 `migrations/`、`migrations_content/` 冻结为 v0.1.x 历史，只供旧库导入核对。
+- 正式 Web 的 `HttpBackend` 经同源 `/api/v1` 读写 `rssr-web` 的 `LocalBackend` 与服务器 `library.sqlite3`；浏览器不保存文章库，正式 wasm 不含 SQLite 或 `memory-store`。登录由服务器负责，已删除本地浏览器口令门禁与 `/feed-proxy`。
+- `pages-demo` 通过 `memory-store` 复用共享 SQL 仓储与单连接内存 SQLite，每次加载预抓取 RSS，资料库操作重载即重置；旧 BrowserStore 已退役，在线订阅、WebDAV 与自动刷新禁用。正式 Web 仍可保存设备偏好，以及在重新加载或登录前保留本标签页的设置草稿（`sessionStorage`）；这些不构成离线文章库。
+- 页面通过 facade/session 派发 `UiCommand`；runtime 只经 `Arc<dyn Backend>` 调用，页面不直接执行 I/O。
 - 用户操作见 `docs/user-guide.md`，边界见 `docs/design/functional-design-philosophy.md`，UI 契约见 `docs/design/frontend-command-reference.md` 与 `docs/design/theme-author-selector-reference.md`。
 - 变更和验证证据见 `docs/handoffs/`，发布检查见 `docs/testing/release-ui-regression-checklist.md`；历史 spec 的完成勾选不能代替当前验证。
 

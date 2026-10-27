@@ -117,13 +117,21 @@ fn parser_preserves_full_html_when_summary_also_exists() {
     );
 }
 
+/// 产品决策（2026-10-09）：无摘要、无正文的条目保留为仅索引条目（此前整条丢弃），
+/// 同一 feed 里的其它条目照常解析。
 #[test]
-fn parser_skips_sparse_entries_without_failing_entire_feed() {
+fn parser_keeps_sparse_entries_as_index_only_without_failing_entire_feed() {
     let parser = FeedParser::new();
     let parsed = parser.parse(SPARSE_ITEM_FEED).expect("parse sparse feed");
 
-    assert_eq!(parsed.entries.len(), 1);
-    assert_eq!(parsed.entries[0].title, "Valid entry");
+    assert_eq!(parsed.entries.len(), 2);
+    let sparse = &parsed.entries[0];
+    assert_eq!(sparse.title, "Empty entry");
+    assert_eq!(sparse.url.as_ref().map(url::Url::as_str), Some("https://example.com/empty"));
+    assert!(sparse.summary.is_none() && sparse.content_html.is_none());
+    assert!(sparse.content_text.is_none());
+    assert_eq!(parsed.entries[1].title, "Valid entry");
+    assert_eq!(parsed.entries[1].content_text.as_deref(), Some("Still readable"));
 }
 
 #[test]

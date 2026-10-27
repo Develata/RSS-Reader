@@ -1,0 +1,229 @@
+{
+  "branchLongAcceptance": {
+    "status": "pass",
+    "long": true,
+    "scenarios": 27,
+    "checks": 108,
+    "failedChecks": 0,
+    "unexpectedConsole": 0,
+    "caseStatusCounts": [
+      {
+        "Name": "pass",
+        "Count": 27
+      }
+    ],
+    "assertionsSha256": "b8c4502660fdd6bcd8fdddc963a538568c3f80bb09fe6b1ad5fd028e5baa52df",
+    "runId": 39930743719,
+    "artifactId": 12491533724,
+    "archiveSha256": "bfa62aacf59f100189e60355af039665cefb16920b70b2bf16df5641e7657150"
+  },
+  "mainDefaultAcceptance": {
+    "status": "pass",
+    "long": false,
+    "scenarios": 27,
+    "checks": 104,
+    "failedChecks": 0,
+    "unexpectedConsole": 0,
+    "caseStatusCounts": [
+      {
+        "Name": "pass",
+        "Count": 24
+      },
+      {
+        "Name": "skipped",
+        "Count": 3
+      }
+    ],
+    "assertionsSha256": "178e62d7008e6bbe85072de1c325c4b25dbdc76d6d87d5e7cd4165ed0dba7fb6",
+    "runId": 39932187742,
+    "artifactId": 12492810879,
+    "archiveSha256": "6cefd362eff948f8b10c9e9dd3a05cd265fed0dd8d17d31fa09e1e8f5faa2646"
+  },
+  "mainPagesLocalSmoke": {
+    "status": "pass",
+    "base": "http://127.0.0.1:40465/RSS-Reader",
+    "loadTimeoutMs": 30000,
+    "imageTimeoutMs": 5000,
+    "interactionTimeoutMs": 30000,
+    "feeds": 2,
+    "articles": 6,
+    "fetchedAt": "2026-10-23 09:29:57.064323039 +00:00:00",
+    "reloadResets": true,
+    "readyMs": 547.1000000000058,
+    "articleRendering": [
+      {
+        "title": "2026-10-23 · 平方之后为何更简单",
+        "math": 116,
+        "images": 0,
+        "imageWaitMs": 6
+      },
+      {
+        "title": "2026-10-22 · 每个频率都安静，点列便均匀吗",
+        "math": 120,
+        "images": 0,
+        "imageWaitMs": 5
+      },
+      {
+        "title": "2026-10-21 · 角亏预算能造出球面吗",
+        "math": 127,
+        "images": 0,
+        "imageWaitMs": 6
+      },
+      {
+        "title": "2026-10-20 · 剪开为何多出一整圈",
+        "math": 108,
+        "images": 0,
+        "imageWaitMs": 5
+      },
+      {
+        "title": "2026-10-19 · 边界不是少算半圈",
+        "math": 99,
+        "images": 0,
+        "imageWaitMs": 6
+      },
+      {
+        "title": "Simple and critical zeros of the Riemann zeta-function",
+        "math": 0,
+        "images": 144,
+        "imageWaitMs": 7
+      }
+    ],
+    "resultSha256": "e29b6b0ec41b7637628eace3a377bcb1b3a802de7e9dacb8433861b910b395d8",
+    "runId": 39932187880,
+    "artifactId": 12492246345,
+    "archiveSha256": "f69c9cce709c71def623d41618b2632c480ee360035a20a31b69eac5083526d0"
+  },
+  "branchPagesLocalSmoke": {
+    "status": "pass",
+    "base": "http://127.0.0.1:40289/RSS-Reader",
+    "loadTimeoutMs": 30000,
+    "imageTimeoutMs": 5000,
+    "interactionTimeoutMs": 30000,
+    "feeds": 2,
+    "articles": 6,
+    "fetchedAt": "2026-10-23 09:24:33.92423173 +00:00:00",
+    "reloadResets": true,
+    "readyMs": 359.3999999999942,
+    "articleRendering": [
+      {
+        "title": "2026-10-23 · 平方之后为何更简单",
+        "math": 116,
+        "images": 0,
+        "imageWaitMs": 4
+      },
+      {
+        "title": "2026-10-22 · 每个频率都安静，点列便均匀吗",
+        "math": 120,
+        "images": 0,
+        "imageWaitMs": 4
+      },
+      {
+        "title": "2026-10-21 · 角亏预算能造出球面吗",
+        "math": 127,
+        "images": 0,
+        "imageWaitMs": 5
+      },
+      {
+        "title": "2026-10-20 · 剪开为何多出一整圈",
+        "math": 108,
+        "images": 0,
+        "imageWaitMs": 3
+      },
+      {
+        "title": "2026-10-19 · 边界不是少算半圈",
+        "math": 99,
+        "images": 0,
+        "imageWaitMs": 4
+      },
+      {
+        "title": "Simple and critical zeros of the Riemann zeta-function",
+        "math": 0,
+        "images": 144,
+        "imageWaitMs": 203
+      }
+    ],
+    "resultSha256": "a9ad3b492d9e5c99e6e6f42ab5136e0653367a912504ddd5fbc7d0226cc214b8",
+    "runId": 39931551509,
+    "artifactId": 12492150793,
+    "archiveSha256": "0ee3e235a512f218e0cf5368fc25a14d8894e56ebf37edf10520e8eacf0e2cd9"
+  },
+  "linuxResult": {
+    "status": "pass",
+    "build_id": "git-7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+    "checks": [
+      "package hashes and WASM id",
+      "new library",
+      "login",
+      "static index",
+      "matching build writes",
+      "old build rejected without mutation"
+    ],
+    "runId": 39932187988,
+    "artifactId": 12492006979,
+    "archiveSha256": "09784780ddc79a453877e64814f19d56228cce56fcc5161566a9cc894baf179c"
+  },
+  "containerResult": {
+    "status": "pass",
+    "build_id": "git-7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+    "image": "rss-reader-smoke:7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+    "checks": [
+      "new data volume, login and matching build write",
+      "old build rejected without mutation",
+      "image server is the exact packaged binary",
+      "owner CLI shares the running server library",
+      "CLI rejects root and unrelated uid for owner data",
+      "owner CLI backup while server runs",
+      "graceful restart retains session and data",
+      "read-only legacy credential volume migrates unchanged; old session rejected",
+      "migrated credentials survive removal of the legacy mount"
+    ],
+    "runId": 39932187988,
+    "artifactId": 12491947060,
+    "archiveSha256": "897223c93c4f8b597fbebf23ab0adb546a9f0f0fc17b79c90785fdc67e999a37"
+  },
+  "feedSnapshotComparison": {
+    "serialization": "PowerShell 7 ConvertTo-Json -Depth 80 -Compress, UTF-8",
+    "canonicalFeedsSha256": "93e499b437030f3fcd6287e9fe43f51118f41ba33e9b3f36f30b756b8d94e087",
+    "fetchedAt": [
+      "2026-10-23 08:18:01.840914458 +00:00:00",
+      "2026-10-23 09:24:33.92423173 +00:00:00",
+      "2026-10-23 09:29:57.064323039 +00:00:00"
+    ],
+    "identicalFeedContent": true
+  },
+  "productSourceComparison": {
+    "productSourcesAssetsDependenciesBuildSupportUnchanged": true,
+    "head": "7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+    "changedPaths": [
+      "docs/deployment/github-pages.md",
+      "docs/design/v0.2-phase-c-plan.md",
+      "docs/handoffs/2026-10-22-phase-d-pages-sqlite.md",
+      "docs/handoffs/2026-10-23-integration-merge-pages.md",
+      "docs/reviews/2026-10-23-integration-review.md",
+      "docs/testing/evidence/2026-10-23-integration/acceptance-and-packages.json",
+      "docs/testing/evidence/2026-10-23-integration/public-windows-failures.json",
+      "docs/testing/evidence/2026-10-23-integration/remote-checks.json",
+      "scripts/browser/pages_smoke.mjs"
+    ],
+    "base": "699dcf6b07ef05e5fa0cc967a0cf0020551097ed"
+  },
+  "sourceSha": "7cb83b2e8dd5903bc60f2d88d2301c2a0cca49e3",
+  "pagesArtifacts": [
+    {
+      "id": 12492480949,
+      "name": "snapshot",
+      "archiveSha256": "5fdfffcfffb02435eba7e722368a0842d33844d96d9618bd1789b2137d3bd96e"
+    },
+    {
+      "id": 12492246345,
+      "name": "pages-smoke",
+      "archiveSha256": "f69c9cce709c71def623d41618b2632c480ee360035a20a31b69eac5083526d0"
+    },
+    {
+      "id": 12492171676,
+      "name": "github-pages",
+      "archiveSha256": "de6fbdb5c2ac372819468857d1961893e9ba16d910a86c41e43d5f187410fe9f"
+    }
+  ],
+  "coverageBoundary": "Four-platform package tests belong to 699dcf6. The final 7cb83b2 main Docker run checked Linux and container only; native matrix was skipped. Full public interactions belong to 699dcf6 with the final driver; final 7cb83b2 public checks target actual new asset identity and both formula formats. Not a performance/SLA pass."
+}

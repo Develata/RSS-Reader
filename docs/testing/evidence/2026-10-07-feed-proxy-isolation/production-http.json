@@ -1,0 +1,31 @@
+{
+  "base": "http://127.0.0.1:56668",
+  "login": 303,
+  "http://127.0.0.1/private": {
+    "status": 400,
+    "headers": {
+      "content-length": "57",
+      "content-type": "text/plain; charset=utf-8",
+      "date": "Wed, 07 Oct 2026 08:15:09 GMT"
+    },
+    "bodyPrefix": "出于安全原因，禁止代理内网或本地地址。"
+  },
+  "https://fixture.example.invalid/html": {
+    "status": 400,
+    "headers": {
+      "content-length": "57",
+      "content-type": "text/plain; charset=utf-8",
+      "date": "Wed, 07 Oct 2026 08:15:09 GMT"
+    },
+    "bodyPrefix": "出于安全原因，禁止代理内网或本地地址。"
+  },
+  "https://www.ruanyifeng.com/blog/atom.xml": {
+    "status": 400,
+    "headers": {
+      "content-length": "57",
+      "content-type": "text/plain; charset=utf-8",
+      "date": "Wed, 07 Oct 2026 08:15:09 GMT"
+    },
+    "bodyPrefix": "出于安全原因，禁止代理内网或本地地址。"
+  }
+}

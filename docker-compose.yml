@@ -3,17 +3,19 @@ services:
     image: ${RSS_READER_IMAGE:-ghcr.io/develata/rss-reader:latest}
     environment:
       RSS_READER_WEB_USERNAME: ${RSS_READER_WEB_USERNAME:?RSS_READER_WEB_USERNAME is required}
+      # The address users open, scheme://host[:port]; it must match the published port.
+      RSS_READER_WEB_PUBLIC_ORIGIN: ${RSS_READER_WEB_PUBLIC_ORIGIN:?Set the exact public origin, for example http://localhost:8039}
+      # Initial credential, read only when /data/auth.sqlite3 has none (then `rssr-web passwd`).
       RSS_READER_WEB_PASSWORD_HASH: ${RSS_READER_WEB_PASSWORD_HASH:-}
       RSS_READER_WEB_PASSWORD: ${RSS_READER_WEB_PASSWORD:-}
-      RSS_READER_WEB_SESSION_SECRET: ${RSS_READER_WEB_SESSION_SECRET:-}
       RSS_READER_WEB_AUTH_STATE_FILE: ${RSS_READER_WEB_AUTH_STATE_FILE:-/app/auth/auth.json}
       RSS_READER_WEB_ENV: ${RSS_READER_WEB_ENV:-development}
-      RSS_READER_WEB_SECURE_COOKIE: ${RSS_READER_WEB_SECURE_COOKIE:-false}
       RSS_READER_WEB_TRUST_PROXY_HEADERS: ${RSS_READER_WEB_TRUST_PROXY_HEADERS:-false}
-      RSS_READER_WEB_SESSION_TTL_HOURS: ${RSS_READER_WEB_SESSION_TTL_HOURS:-12}
     ports:
       - "${RSS_READER_PORT:-8039}:8080"
     volumes:
+      - rss-reader-data:/data
+      # v0.1 credential volume: keep it mounted until auth.sqlite3 exists in rss-reader-data.
       - rss-reader-auth:/app/auth
     restart: unless-stopped
     healthcheck:
@@ -24,4 +26,5 @@ services:
       start_period: 10s
 
 volumes:
+  rss-reader-data:
   rss-reader-auth:

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Text};
+use feed_rs::model::{Entry as FeedRsEntry, Feed as FeedRsFeed, Link, Text};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
@@ -27,93 +27,150 @@ pub struct ParsedEntry {
     pub updated_at_source: Option<OffsetDateTime>,
 }
 
-#[derive(Debug, Default)]
-struct MissingContentWarningAggregation {
-    total_skipped: usize,
-    sample_titles: Vec<String>,
-}
-
-impl MissingContentWarningAggregation {
-    const MAX_SAMPLE_TITLES: usize = 3;
-
-    fn record(&mut self, title: &str) {
-        self.total_skipped += 1;
-        if self.sample_titles.len() < Self::MAX_SAMPLE_TITLES {
-            self.sample_titles.push(title.to_string());
+impl From<ParsedFeed> for rssr_application::ParsedFeedUpdate {
+    fn from(feed: ParsedFeed) -> Self {
+        Self {
+            title: feed.title,
+            site_url: feed.site_url,
+            description: feed.description,
+            entries: feed.entries.into_iter().map(Into::into).collect(),
         }
-    }
-
-    fn emit(&self, feed_title: Option<&str>) {
-        if self.total_skipped == 0 {
-            return;
-        }
-
-        tracing::warn!(
-            feed_title = feed_title.unwrap_or("Untitled feed"),
-            skipped_entry_count = self.total_skipped,
-            sample_entry_titles = %self.sample_titles.join(" | "),
-            "本次 feed 规范化跳过了缺少 summary 和 content 的条目"
-        );
     }
 }
 
-pub fn parse_feed_xml(raw: &str, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
+impl From<ParsedEntry> for rssr_application::ParsedEntryData {
+    fn from(entry: ParsedEntry) -> Self {
+        Self {
+            external_id: entry.external_id,
+            dedup_key: entry.dedup_key,
+            url: entry.url,
+            title: entry.title,
+            author: entry.author,
+            summary: entry.summary,
+            content_html: entry.content_html,
+            content_text: entry.content_text,
+            published_at: entry.published_at,
+            updated_at_source: entry.updated_at_source,
+        }
+    }
+}
+
+/// Feed parses of the native services at once: refresh (`application_adapters::refresh`) and the
+/// subscription probe take a slot around the parse. A parse runs to its end without yielding, and
+/// its model may approach [`crate::feed_structure::MAX_FEED_MODEL_BYTES`]; refresh fetches several
+/// feeds at once and background jobs run beside it, so their parses take turns (review C3-R6).
+/// The synchronous helpers (`FeedParser::parse`, `classify_subscription_response`) take no slot:
+/// a caller running several of them at once bounds them itself (review C3-R7 R7B-01).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) static PARSE_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
+pub fn parse_feed_xml(raw: &str) -> anyhow::Result<ParsedFeed> {
+    // feed-rs builds its whole model before normalisation: what it reads and builds is bounded
+    // before it reads the feed (reviews C3-R5 R5-02, C3-R6). It reads XML or JSON by the first
+    // `<` or `{`, as `utf8_parser_input` does.
+    match raw.bytes().find(|&byte| byte == b'<' || byte == b'{') {
+        Some(b'<') => crate::feed_structure::check_feed_structure(raw),
+        _ => crate::feed_structure::check_json_feed_structure(raw),
+    }
+    .context("解析 RSS/Atom feed 失败")?;
     // feed-rs normally synthesizes IDs for entries that omit one. Downstream we need to
     // distinguish a source-provided GUID from that fallback; guessing by "looks like a hash"
     // incorrectly discards legitimate hexadecimal GUIDs. Keep missing IDs empty here and let
     // our normalization choose the URL/title+timestamp fallback explicitly.
     let parser = feed_rs::parser::Builder::new().id_generator(|_, _, _| String::new()).build();
-    let feed = parser.parse(raw.as_bytes()).context("解析 RSS/Atom feed 失败")?;
-    normalize_feed(feed, warn_on_missing_content)
+    let parsed = without_panic(|| parser.parse(utf8_parser_input(raw.as_bytes())))
+        .context("解析 RSS/Atom feed 失败")?;
+    let feed = parsed.context("解析 RSS/Atom feed 失败")?;
+    Ok(normalize_feed(feed))
 }
 
-pub fn hash_content(html: Option<&str>, text: Option<&str>, title: Option<&str>) -> Option<String> {
-    let mut hasher = Sha256::new();
-    let mut used = false;
-    for part in [title, text, html].into_iter().flatten() {
-        hasher.update(part.as_bytes());
-        used = true;
+/// Runs `parse`, a panic becoming an error: a panic in feed-rs is a refused feed, not a failed
+/// refresh (review C3-R8 R8A-04). The parser is built for one call and dropped with it, so nothing
+/// is left half-updated. A wasm build aborts on a panic instead; `feed_structure` refuses the one
+/// input known to cause one.
+fn without_panic<T>(parse: impl FnOnce() -> T) -> anyhow::Result<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(parse))
+        .map_err(|_| anyhow::anyhow!("feed 解析器异常"))
+}
+
+const UTF8_DECLARATION: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>"#;
+
+/// `raw` 已经解码成 UTF-8，但 feed-rs 会把它当字节重新交给 quick-xml，而 quick-xml 按遇到的
+/// 第一个 XML 声明切换解码器：留下的 `encoding="GBK"` 会让文本被再解码一次（审计 B2）。
+///
+/// 后置条件：XML 文本交给解析器时，第一个声明总是这里补上的 UTF-8 声明。quick-xml 读到它就把
+/// 编码定为 `XmlDetected(UTF-8)`，不再接受后续声明的切换；原有声明成了第二个声明，feed-rs
+/// 跳过所有声明事件。不改写原声明，因此不依赖 quick-xml 怎样解析它的属性。JSON 原样交出；
+/// 只拼接切片，不复制正文。
+fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
+    use std::io::Read;
+
+    // 已解码文本开头的 U+FEFF 没有意义，去掉后再交给解析器。
+    let raw = raw.strip_prefix("\u{feff}".as_bytes()).unwrap_or(raw);
+    // 与 feed-rs 的分派一致：它按第一个 `<` 或 `{` 决定按 XML 还是 JSON 解析，前面的杂质文本
+    // （例如服务端把警告输出在 feed 之前）会被跳过。只看第一个非空白字节的话，`x<?xml …
+    // encoding="windows-1252"?>` 就绕过了这里的固定（独立评审）。
+    let xml = raw.iter().find(|&&b| b == b'<' || b == b'{') == Some(&b'<');
+    let declaration: &[u8] = if xml { UTF8_DECLARATION } else { &[] };
+    declaration.chain(raw)
+}
+
+/// 源正文的标识：标题、纯文本、HTML、文章地址四段各自带“是否存在”与长度前缀再求 SHA-256。
+///
+/// 它标识的是 feed 给出的**源**内容，而不是存储里可能已被派生（图片本地化）的正文：刷新只在
+/// 它变化时才覆盖正文（审计 C1）。文章地址也算在内，因为正文里的相对图片地址按它解析，
+/// 地址变了，按旧地址本地化的结果就不再对应这篇文章。旧算法把三段直接拼接，`("c", "ab")`
+/// 与 `("bc", "a")` 会得到同一个哈希，不能单独据此判断源是否变化；加版本前缀后，旧库里的
+/// 哈希在下一次刷新时一次性更新。四段都缺失时返回 `None`。
+pub fn hash_content(
+    html: Option<&str>,
+    text: Option<&str>,
+    title: Option<&str>,
+    url: Option<&str>,
+) -> Option<String> {
+    let parts = [title, text, html, url];
+    if parts.iter().all(Option::is_none) {
+        return None;
     }
-    used.then(|| format!("{:x}", hasher.finalize()))
-}
-
-fn normalize_feed(feed: FeedRsFeed, warn_on_missing_content: bool) -> anyhow::Result<ParsedFeed> {
-    let title = text_value(feed.title.as_ref());
-    let site_url = feed.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
-    let description = feed.description.as_ref().map(text_content);
-    let mut entries = Vec::with_capacity(feed.entries.len());
-    let mut warnings = MissingContentWarningAggregation::default();
-
-    for entry in feed.entries {
-        if let Some(entry) = normalize_entry(entry, warn_on_missing_content, &mut warnings)? {
-            entries.push(entry);
+    let mut hasher = Sha256::new();
+    hasher.update(b"rssr-content-v2");
+    for part in parts {
+        match part {
+            Some(part) => {
+                hasher.update([1]);
+                hasher.update((part.len() as u64).to_le_bytes());
+                hasher.update(part.as_bytes());
+            }
+            None => hasher.update([0]),
         }
     }
-
-    if warn_on_missing_content {
-        warnings.emit(title.as_deref());
-    }
-
-    Ok(ParsedFeed { title, site_url, description, entries })
+    Some(format!("{:x}", hasher.finalize()))
 }
 
-fn normalize_entry(
-    entry: FeedRsEntry,
-    warn_on_missing_content: bool,
-    warnings: &mut MissingContentWarningAggregation,
-) -> anyhow::Result<Option<ParsedEntry>> {
+fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {
+    let title = text_value(feed.title.as_ref());
+    // 只认 alternate：`self` 是 feed 自身、`hub` 是 WebSub 服务。没有时留空，
+    // 添加订阅会回落到发现页地址，刷新则保留已存的值（`COALESCE`）。
+    let site_url = alternate_url(&feed.links);
+    let description = feed.description.as_ref().map(text_content);
+    let entries = feed.entries.into_iter().map(normalize_entry).collect();
+
+    ParsedFeed { title, site_url, description, entries }
+}
+
+/// 没有摘要也没有正文的条目同样保留：只建索引（`has_content = false`），阅读页给出原文链接。
+/// YouTube 频道（正文在 `media:group`）和只有标题与链接的条目都属于这一类；
+/// 正文缓存边界不变——feed 没给的正文不去原网页补抓。
+fn normalize_entry(entry: FeedRsEntry) -> ParsedEntry {
     let title = text_value(entry.title.as_ref()).unwrap_or_else(|| "Untitled entry".to_string());
-    let url = entry.links.first().and_then(|link| Url::parse(link.href.as_str()).ok());
+    // 文章页是 alternate，不是 `replies`/`enclosure`；全无 alternate 时沿用第一条可解析链接。
+    let url = alternate_url(&entry.links).or_else(|| {
+        entry.links.iter().find_map(|link| rssr_domain::parse_untrusted_url(&link.href))
+    });
     let author = entry.authors.first().map(|author| author.name.clone());
     let summary = entry.summary.as_ref().map(text_content);
     let content_html = entry.content.as_ref().and_then(|content| content.body.clone());
     let content_text = summary.clone();
-    if content_html.is_none() && content_text.is_none() {
-        if warn_on_missing_content {
-            warnings.record(&title);
-        }
-        return Ok(None);
-    }
 
     let published_at = entry.published.and_then(to_offset_datetime);
     let updated_at_source = entry.updated.and_then(to_offset_datetime);
@@ -133,7 +190,7 @@ fn normalize_entry(
         dedup_key_fallback(&title, published_at)
     };
 
-    Ok(Some(ParsedEntry {
+    ParsedEntry {
         external_id,
         dedup_key,
         url,
@@ -144,7 +201,21 @@ fn normalize_entry(
         content_text,
         published_at,
         updated_at_source,
-    }))
+    }
+}
+
+/// RFC 4287 §4.2.7.2：没有 rel 即 alternate（feed-rs 已为 Atom 补齐，RSS 的 `<link>` 则没有 rel），
+/// IANA 注册名的绝对 IRI 形式与短名等价。
+fn alternate_url(links: &[Link]) -> Option<Url> {
+    const IANA_RELATIONS: &str = "http://www.iana.org/assignments/relation/";
+    links
+        .iter()
+        .filter(|link| {
+            link.rel.as_deref().map(str::trim).is_none_or(|rel| {
+                rel.strip_prefix(IANA_RELATIONS).unwrap_or(rel).eq_ignore_ascii_case("alternate")
+            })
+        })
+        .find_map(|link| rssr_domain::parse_untrusted_url(&link.href))
 }
 
 fn dedup_key_fallback(title: &str, published_at: Option<OffsetDateTime>) -> String {
@@ -185,21 +256,122 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::MissingContentWarningAggregation;
+    use super::parse_feed_xml;
 
     #[test]
-    fn missing_content_warning_aggregation_keeps_total_count_and_samples() {
-        let mut aggregation = MissingContentWarningAggregation::default();
+    fn a_panic_in_the_parser_is_an_error() {
+        assert!(super::without_panic(|| -> u8 { panic!("feed-rs") }).is_err());
+        assert_eq!(super::without_panic(|| 7).unwrap(), 7);
+    }
 
-        aggregation.record("Entry One");
-        aggregation.record("Entry Two");
-        aggregation.record("Entry Three");
-        aggregation.record("Entry Four");
+    /// 产品决策（2026-10-09）：无摘要、无正文的条目保留为仅索引条目，而不是整条丢弃。
+    #[test]
+    fn keeps_entries_without_summary_or_content_as_index_only() {
+        let youtube_like = parse_feed_xml(
+            r#"<feed xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <title>Channel</title><id>yt:channel:UC123</id>
+ <entry>
+  <id>yt:video:abc</id><title>Video One</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=abc"/>
+  <published>2026-10-01T00:00:00+00:00</published>
+  <media:group><media:title>Video One</media:title><media:description>Desc</media:description></media:group>
+ </entry>
+</feed>"#,
+        )
+        .expect("parse youtube-like feed");
+        let title_only = parse_feed_xml(
+            r#"<rss version="2.0"><channel><title>Links</title>
+ <item><title>Only a title</title><link>https://example.com/a</link><guid>a</guid></item>
+</channel></rss>"#,
+        )
+        .expect("parse title-only feed");
 
-        assert_eq!(aggregation.total_skipped, 4);
+        for (feed, title, url) in [
+            (&youtube_like, "Video One", "https://www.youtube.com/watch?v=abc"),
+            (&title_only, "Only a title", "https://example.com/a"),
+        ] {
+            assert_eq!(feed.entries.len(), 1);
+            let entry = &feed.entries[0];
+            assert_eq!(entry.title, title);
+            assert_eq!(entry.url.as_ref().map(url::Url::as_str), Some(url));
+            assert_eq!(entry.content_html, None);
+            assert_eq!(entry.content_text, None);
+            assert_eq!(entry.summary, None);
+        }
+    }
+
+    /// 文本已解码；无论残留的声明写成什么样，解析器都不能再按它解码一次（审计 B2）。
+    #[test]
+    fn decoded_text_is_never_decoded_again_by_a_leftover_declaration() {
+        let body = "<rss version=\"2.0\"><channel><title>中文标题</title></channel></rss>";
+        let padding = " ".repeat(1100);
+        for prolog in [
+            r#"<?xml version="1.0" encoding="GBK"?>"#.to_string(),
+            format!(r#"<?xml version="1.0" encoding="GBK"{padding}?>"#),
+            format!("{padding}\n<?xml version='1.0' encoding='GBK'?>"),
+            r#"<?xml version="1.0" encoding=" gbk "?>"#.to_string(),
+            r#"<?xml version="1.0" encodingx="a" encoding="GBK"?>"#.to_string(),
+            r#"<?xml version="1.0" standalone="yes"?><?xml version="1.0" encoding="GBK"?>"#
+                .to_string(),
+            r#"<?xml version=1.0 encoding="GBK"?>"#.to_string(),
+            r#"<!-- c --><?xml version="1.0" encoding="GBK"?>"#.to_string(),
+            r#"<?xml version="1.0" encoding="utf-8"?>"#.to_string(),
+            "\u{feff}<?xml version=\"1.0\" encoding=\"GBK\"?>".to_string(),
+            "x<?xml version=\"1.0\" encoding=\"windows-1252\"?>".to_string(),
+            "Warning: something happened\n<?xml version=\"1.0\" encoding=\"GBK\"?>".to_string(),
+            String::new(),
+        ] {
+            let feed = parse_feed_xml(&format!("{prolog}{body}")).expect(&prolog);
+            assert_eq!(feed.title.as_deref(), Some("中文标题"), "{prolog}");
+        }
+    }
+
+    #[test]
+    fn json_feeds_are_not_given_an_xml_declaration() {
+        let feed = parse_feed_xml(
+            r#"{"version":"https://jsonfeed.org/version/1.1","title":"中文","items":[{"id":"1","title":"条目","content_text":"正文"}]}"#,
+        )
+        .expect("parse json feed");
+        assert_eq!(feed.title.as_deref(), Some("中文"));
+        assert_eq!(feed.entries.len(), 1);
+    }
+
+    /// WordPress 等 RSS 2.0 在 `<link>` 之前输出 `atom:link rel="self"` 与 WebSub 的 `rel="hub"`。
+    #[test]
+    fn rss_site_url_skips_self_and_hub_links() {
+        let feed = parse_feed_xml(
+            r#"<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blog</title>
+ <atom:link href="https://example.com/feed/" rel="self" type="application/rss+xml"/>
+ <atom:link href="https://hub.example.net/" rel="hub"/>
+ <link>https://example.com/</link>
+ <item><title>Post</title><link>https://example.com/post</link><guid>p</guid></item>
+</channel></rss>"#,
+        )
+        .expect("parse rss");
+        assert_eq!(feed.site_url.as_ref().map(url::Url::as_str), Some("https://example.com/"));
         assert_eq!(
-            aggregation.sample_titles,
-            vec!["Entry One".to_string(), "Entry Two".to_string(), "Entry Three".to_string()]
+            feed.entries[0].url.as_ref().map(url::Url::as_str),
+            Some("https://example.com/post")
         );
+    }
+
+    /// 只有 `self` 时不把 feed 地址当作站点；条目没有 alternate 时沿用第一条链接（如播客的 enclosure）。
+    #[test]
+    fn missing_alternate_leaves_site_empty_and_entry_on_its_first_link() {
+        let feed = parse_feed_xml(
+            r#"<feed xmlns="http://www.w3.org/2005/Atom"><title>F</title><id>f</id>
+ <link rel="self" href="https://example.com/feed.atom"/>
+ <entry><id>e1</id><title>E</title>
+  <link rel="enclosure" href="https://cdn.example.com/e1.mp3"/>
+  <link rel="http://www.iana.org/assignments/relation/alternate" href="https://example.com/e1"/>
+ </entry>
+ <entry><id>e2</id><title>E2</title><link rel="enclosure" href="https://cdn.example.com/e2.mp3"/></entry>
+</feed>"#,
+        )
+        .expect("parse atom");
+        assert_eq!(feed.site_url, None);
+        let urls =
+            feed.entries.iter().map(|e| e.url.as_ref().map(url::Url::as_str)).collect::<Vec<_>>();
+        assert_eq!(urls, [Some("https://example.com/e1"), Some("https://cdn.example.com/e2.mp3")]);
     }
 }

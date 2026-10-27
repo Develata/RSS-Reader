@@ -1,28 +1,24 @@
+use super::entry_flags::{Flag, flag_message, flag_tone};
 use crate::{
     pages::entries_page::intent::EntriesPageIntent,
-    ui::{commands::EntriesCommand, runtime::services::UiServices, snapshot::UiIntent},
+    ui::{
+        commands::EntriesCommand, failure::UiFailure, runtime::backend::backend, snapshot::UiIntent,
+    },
 };
-use rssr_application::{
-    EntriesBootstrapInput, EntriesBootstrapOutcome, ToggleEntryReadInput, ToggleEntryStarredInput,
-};
+use rssr_application::{EntriesBootstrapInput, EntriesBootstrapOutcome, EntryFlagOutcome};
 use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
     match command {
         EntriesCommand::PreviewMarkRead { query } => {
-            let result =
-                async { UiServices::shared().await?.entries().preview_mark_read(&query).await }
-                    .await;
+            let result = async { backend().await?.preview_mark_read(&query).await }.await;
             vec![UiIntent::EntriesPage(match result {
                 Ok(preview) => EntriesPageIntent::BulkPreview(preview),
-                Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
+                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("预览批量已读", error)),
             })]
         }
         EntriesCommand::ConfirmMarkRead { preview } => {
-            let result = async {
-                UiServices::shared().await?.entries().mark_read_if_unchanged(&preview).await
-            }
-            .await;
+            let result = async { backend().await?.mark_read_if_unchanged(&preview).await }.await;
             vec![UiIntent::EntriesPage(match result {
                 Ok(rssr_domain::MarkReadOutcome::Applied { changed_count }) => {
                     EntriesPageIntent::BulkApplied(changed_count)
@@ -30,30 +26,36 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                 Ok(rssr_domain::MarkReadOutcome::SelectionChanged { preview }) => {
                     EntriesPageIntent::BulkPreview(preview)
                 }
-                Err(error) => EntriesPageIntent::BulkFailed(error.to_string()),
+                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("批量标为已读", error)),
             })]
         }
 
-        EntriesCommand::Bootstrap { feed_id, load_preferences, load_feeds } => {
-            match UiServices::shared().await {
-                Ok(services) => {
-                    match services
-                        .entries()
-                        .bootstrap(EntriesBootstrapInput { feed_id, load_preferences, load_feeds })
-                        .await
-                    {
-                        Ok(outcome) => bootstrap_intents(outcome, load_preferences),
-                        Err(err) => bootstrap_error(
-                            format!("加载文章页初始状态失败：{err}"),
-                            load_preferences,
-                        ),
-                    }
+        EntriesCommand::Bootstrap { load_preferences, load_feeds } => {
+            let input = EntriesBootstrapInput { load_preferences, load_feeds };
+            match async { backend().await?.bootstrap_entries(input).await }.await {
+                Ok(outcome) => bootstrap_intents(outcome, load_preferences),
+                Err(error) => {
+                    bootstrap_error(UiFailure::new("加载文章页初始状态", error), load_preferences)
                 }
-                Err(err) => bootstrap_error(format!("初始化应用失败：{err}"), load_preferences),
             }
         }
-        EntriesCommand::LoadEntries { query } => match UiServices::shared().await {
-            Ok(services) => match services.entries().list_entries(&query).await {
+        EntriesCommand::Reread => {
+            let input = EntriesBootstrapInput { load_preferences: true, load_feeds: true };
+            match async { backend().await?.bootstrap_entries(input).await }.await {
+                Ok(outcome) => reread_intents(outcome),
+                Err(error) => entries_intents(vec![EntriesPageIntent::PreferencesRereadFailed(
+                    UiFailure::new("重新读取文章页", error),
+                )]),
+            }
+        }
+        EntriesCommand::RememberOpenedFeed { feed_id } => {
+            match async { backend().await?.remember_opened_feed(feed_id).await }.await {
+                Ok(()) => Vec::new(),
+                Err(error) => entries_failed("记住上次打开的订阅", error),
+            }
+        }
+        EntriesCommand::LoadEntries { query } => {
+            match async { backend().await?.list_entries(&query).await }.await {
                 Ok(outcome) => {
                     vec![UiIntent::EntriesPage(EntriesPageIntent::SetEntries {
                         entries: outcome
@@ -66,73 +68,23 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
                             })
                             .collect(),
                         archived_count: outcome.archived_count as usize,
+                        truncated: outcome.truncated,
                     })]
                 }
-                Err(err) => entries_status_error(format!("{err}")),
-            },
-            Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-        },
-        EntriesCommand::ToggleRead { entry_id, entry_title, currently_read } => {
-            match UiServices::shared().await {
-                Ok(services) => {
-                    match services
-                        .entries()
-                        .toggle_read(ToggleEntryReadInput { entry_id, currently_read })
-                        .await
-                    {
-                        Ok(outcome) => entries_intents(vec![
-                            EntriesPageIntent::SetStatus {
-                                message: format!(
-                                    "已将《{}》{}。",
-                                    entry_title,
-                                    if outcome.is_read {
-                                        "标记为已读"
-                                    } else {
-                                        "标记为未读"
-                                    }
-                                ),
-                                tone: "info".to_string(),
-                            },
-                            EntriesPageIntent::PatchEntryFlags {
-                                entry_id,
-                                is_read: Some(outcome.is_read),
-                                is_starred: None,
-                            },
-                        ]),
-                        Err(err) => entries_status_error(format!("{err}")),
-                    }
-                }
-                Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
+                Err(error) => entries_intents(vec![EntriesPageIntent::ReadFailed(UiFailure::new(
+                    "读取文章列表",
+                    error,
+                ))]),
             }
         }
-        EntriesCommand::ToggleStarred { entry_id, entry_title, currently_starred } => {
-            match UiServices::shared().await {
-                Ok(services) => {
-                    match services
-                        .entries()
-                        .toggle_starred(ToggleEntryStarredInput { entry_id, currently_starred })
-                        .await
-                    {
-                        Ok(outcome) => entries_intents(vec![
-                            EntriesPageIntent::SetStatus {
-                                message: format!(
-                                    "已{}《{}》。",
-                                    if outcome.is_starred { "收藏" } else { "取消收藏" },
-                                    entry_title
-                                ),
-                                tone: "info".to_string(),
-                            },
-                            EntriesPageIntent::PatchEntryFlags {
-                                entry_id,
-                                is_read: None,
-                                is_starred: Some(outcome.is_starred),
-                            },
-                        ]),
-                        Err(err) => entries_status_error(format!("{err}")),
-                    }
-                }
-                Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-            }
+        EntriesCommand::SetRead { entry_id, entry_title, read } => {
+            let result = async { backend().await?.set_entry_read(entry_id, read).await }.await;
+            entry_flag_intents(Flag::Read, entry_id, &entry_title, result)
+        }
+        EntriesCommand::SetStarred { entry_id, entry_title, starred } => {
+            let result =
+                async { backend().await?.set_entry_starred(entry_id, starred).await }.await;
+            entry_flag_intents(Flag::Starred, entry_id, &entry_title, result)
         }
         EntriesCommand::SaveBrowsingPreferences {
             grouping_mode,
@@ -140,22 +92,22 @@ pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
             read_filter,
             starred_filter,
             selected_feed_urls,
-        } => match UiServices::shared().await {
-            Ok(services) => {
-                let next = EntriesWorkspaceState {
-                    grouping_mode,
-                    show_archived,
-                    read_filter,
-                    starred_filter,
-                    selected_feed_urls,
-                };
-                match services.entries().save_workspace_if_changed(next).await {
-                    Ok(true) | Ok(false) => Vec::new(),
-                    Err(err) => entries_status_error(format!("保存文章页偏好失败：{err}")),
+        } => {
+            let next = EntriesWorkspaceState {
+                grouping_mode,
+                show_archived,
+                read_filter,
+                starred_filter,
+                selected_feed_urls,
+            };
+            let saved = next.clone();
+            match async { backend().await?.save_entries_workspace_if_changed(next).await }.await {
+                Ok(true) | Ok(false) => {
+                    entries_intents(vec![EntriesPageIntent::WorkspaceSaved(saved)])
                 }
+                Err(error) => entries_failed("保存文章页偏好", error),
             }
-            Err(err) => entries_status_error(format!("初始化应用失败：{err}")),
-        },
+        }
     }
 }
 
@@ -178,23 +130,58 @@ fn bootstrap_intents(outcome: EntriesBootstrapOutcome, load_preferences: bool) -
     entries_intents(intents)
 }
 
-fn bootstrap_error(message: String, load_preferences: bool) -> Vec<UiIntent> {
+fn bootstrap_error(failure: UiFailure, load_preferences: bool) -> Vec<UiIntent> {
     if load_preferences {
-        entries_intents(vec![EntriesPageIntent::PreferencesUnavailable(message)])
+        entries_intents(vec![EntriesPageIntent::PreferencesUnavailable(failure)])
     } else {
-        entries_status_error(message)
+        entries_intents(vec![EntriesPageIntent::ReadFailed(failure)])
     }
+}
+
+/// The read-only refresh's reply: the preferences for the reducer to weigh, and the
+/// subscriptions (C4b item 2).
+fn reread_intents(outcome: EntriesBootstrapOutcome) -> Vec<UiIntent> {
+    let mut intents = Vec::new();
+    if let (Some(settings), Some(workspace)) = (outcome.settings, outcome.workspace) {
+        intents.push(EntriesPageIntent::PreferencesReread { settings, workspace });
+    }
+    if let Some(feeds) = outcome.feeds {
+        intents.push(EntriesPageIntent::SetFeeds(feeds));
+    }
+    entries_intents(intents)
 }
 
 fn entries_intents(intents: Vec<EntriesPageIntent>) -> Vec<UiIntent> {
     intents.into_iter().map(UiIntent::EntriesPage).collect()
 }
 
-fn entries_status_error(message: impl Into<String>) -> Vec<UiIntent> {
-    entries_intents(vec![EntriesPageIntent::SetStatus {
-        message: message.into(),
-        tone: "error".to_string(),
-    }])
+fn entries_failed(action: &'static str, error: rssr_api::BackendError) -> Vec<UiIntent> {
+    vec![UiIntent::Failed(UiFailure::new(action, error))]
+}
+
+/// The status and, when the entry still exists, the flag patch for a list card.
+fn entry_flag_intents(
+    flag: Flag,
+    entry_id: i64,
+    entry_title: &str,
+    result: rssr_api::Result<EntryFlagOutcome>,
+) -> Vec<UiIntent> {
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(error) => return entries_failed(flag.action(), error),
+    };
+    let mut intents = vec![EntriesPageIntent::SetStatus {
+        message: flag_message(flag, &format!("《{entry_title}》"), outcome),
+        tone: flag_tone(outcome).to_string(),
+    }];
+    if let EntryFlagOutcome::Set { value, .. } = outcome {
+        intents.push(EntriesPageIntent::PatchEntryFlags {
+            entry_id,
+            is_read: (flag == Flag::Read).then_some(value),
+            is_starred: (flag == Flag::Starred).then_some(value),
+        });
+    }
+    entries_intents(intents)
 }
 
 #[cfg(test)]
@@ -237,12 +224,13 @@ mod tests {
     #[test]
     fn bootstrap_failures_release_initial_query_gate_without_marking_preferences_loaded() {
         assert!(matches!(
-            bootstrap_error("read failed".into(), true).as_slice(),
+            bootstrap_error(crate::ui::failure::plain("read failed"), true).as_slice(),
             [UiIntent::EntriesPage(EntriesPageIntent::PreferencesUnavailable(_))]
         ));
         assert!(matches!(
-            bootstrap_error("refresh summaries failed".into(), false).as_slice(),
-            [UiIntent::EntriesPage(EntriesPageIntent::SetStatus { .. })]
+            bootstrap_error(crate::ui::failure::plain("refresh summaries failed"), false)
+                .as_slice(),
+            [UiIntent::EntriesPage(EntriesPageIntent::ReadFailed(_))]
         ));
     }
 }

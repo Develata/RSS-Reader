@@ -3,10 +3,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 
-use super::{
-    config::AuthConfig,
-    session::{gate_cookie_header, session_cookie_header},
-};
+use super::session::{logout_cookie_header, session_cookie_header};
 
 pub(super) fn login_redirect(next: &str, error: Option<&str>) -> Response {
     let encoded_next = urlencoding::encode(next);
@@ -17,17 +14,32 @@ pub(super) fn login_redirect(next: &str, error: Option<&str>) -> Response {
     Redirect::to(&location).into_response()
 }
 
-pub(super) fn successful_login_response(config: &AuthConfig, next: &str, token: &str) -> Response {
+pub(super) fn successful_login_response(
+    secure: bool,
+    next: &str,
+    token: &str,
+    device_cookie: Option<String>,
+) -> Response {
     let mut response = Redirect::to(next).into_response();
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&session_cookie_header(token, config)).expect("valid session cookie"),
-    );
-    response.headers_mut().append(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&gate_cookie_header(config)).expect("valid gate cookie"),
-    );
+    if let Some(device_cookie) = device_cookie.and_then(|value| HeaderValue::from_str(&value).ok())
+    {
+        response.headers_mut().append(header::SET_COOKIE, device_cookie);
+    }
+    append_cookie(&mut response, session_cookie_header(token, secure));
     response
+}
+
+/// 退出登录后回到登录页，清掉会话 cookie（已知设备标记保留）。
+pub(super) fn logged_out_response(secure: bool) -> Response {
+    let mut response = Redirect::to("/login").into_response();
+    append_cookie(&mut response, logout_cookie_header(secure));
+    response
+}
+
+/// Cookie 头只由本模块按固定格式拼出（令牌是 base64url），一定是合法的头部值。
+fn append_cookie(response: &mut Response, cookie: String) {
+    let value = HeaderValue::try_from(cookie).expect("cookies are built from header-safe parts");
+    response.headers_mut().append(header::SET_COOKIE, value);
 }
 
 #[cfg(test)]
