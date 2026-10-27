@@ -10,9 +10,11 @@ pub(crate) struct ReaderPageFacade {
 
 impl ReaderPageFacade {
     pub(crate) fn positions_ready(&self, entry_id: i64) -> bool {
-        self.snapshot.current_entry_id == entry_id
-            && self.snapshot.content_loaded
-            && self.snapshot.error.is_none()
+        self.load_state(entry_id) == "loaded"
+    }
+
+    pub(crate) fn load_state(&self, entry_id: i64) -> &'static str {
+        self.snapshot.load_state(entry_id)
     }
     pub(crate) fn new(session: ReaderPageSession, snapshot: ReaderPageState) -> Self {
         Self { session, snapshot }

@@ -31,6 +31,8 @@ mod mutations;
 mod options;
 mod queries;
 mod refresh;
+mod workspace_edits;
+pub use workspace_edits::LibraryWorkspaceEdits;
 
 pub use documents::{LibraryAppState, LibrarySettings};
 pub use entries::{LibraryEntries, LocalizedBody, compute_entry_content_hash};

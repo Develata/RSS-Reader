@@ -254,6 +254,19 @@ impl Backend for Scripted {
         self.inner.localize_entry_assets(entry_id).await
     }
 
+    async fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> Result<u64> {
+        self.enter("apply_entry_batch")?;
+        self.inner.apply_entry_batch(request).await
+    }
+    async fn feed_edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails> {
+        self.enter("feed_edit_details")?;
+        self.inner.feed_edit_details(feed_id).await
+    }
+    async fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> Result<()> {
+        self.enter("update_subscription")?;
+        self.inner.update_subscription(edit).await
+    }
+
     async fn load_feeds_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
         self.enter("load_feeds_snapshot")?;
         self.inner.load_feeds_snapshot().await

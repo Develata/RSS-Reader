@@ -1,3 +1,4 @@
+mod edit;
 mod facade;
 pub(crate) mod intent;
 pub(crate) mod reducer;
@@ -12,15 +13,17 @@ use self::sections::{ConfigExchangeSection, FeedComposeSection, SavedFeedsSectio
 use self::session::FeedsPageSession;
 use crate::{
     app::AppNav, components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation, router::AppRoute,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation_with_dismiss, router::AppRoute,
     ui::use_reactive_task,
 };
 
 #[component]
 pub fn FeedsPage() -> Element {
-    use_mobile_back_navigation(Some(AppRoute::EntriesPage {}));
-
     let facade = use_feeds_page_workspace();
+    let session = facade.session();
+    use_mobile_back_navigation_with_dismiss(Some(AppRoute::EntriesPage {}), move || {
+        session.dismiss_edit()
+    });
 
     rsx! {
         section { "data-page": "feeds",
@@ -37,11 +40,20 @@ pub fn FeedsPage() -> Element {
                     div { "data-slot": "stat-card-label", "文章数" }
                     div { "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
                 }
+                div { "data-layout": "stat-card", "data-stat": "unread",
+                    div { "data-slot": "stat-card-label", "未读" }
+                    div { "data-slot": "stat-card-value", "{facade.unread_count()}" }
+                }
+                div { "data-layout": "stat-card", "data-stat": "archived",
+                    div { "data-slot": "stat-card-label", "已归档" }
+                    div { "data-slot": "stat-card-value", "{facade.archived_count()}" }
+                }
             }
             StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string(), announce: true }
             FeedComposeSection { facade: facade.clone() }
             SavedFeedsSection { facade: facade.clone() }
-            ConfigExchangeSection { facade }
+            ConfigExchangeSection { facade: facade.clone() }
+            if facade.edit_open() { edit::FeedEditDialog { facade } }
         }
     }
 }

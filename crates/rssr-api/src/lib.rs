@@ -63,6 +63,11 @@ pub trait Backend {
         remote_path: &str,
     ) -> Result<RemoteConfigPullOutcome>;
 
+    /// Applies only the selected IDs, with one atomic write.
+    async fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> Result<u64>;
+    async fn feed_edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails>;
+    async fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> Result<()>;
+
     // Entry list.
     async fn bootstrap_entries(
         &self,

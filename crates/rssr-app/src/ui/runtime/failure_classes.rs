@@ -7,7 +7,6 @@
 use std::sync::Arc;
 
 use rssr_api::{BackendError, ErrorCode};
-use rssr_domain::EntryQuery;
 
 use super::execute_ui_command;
 use super::fake_backend::Scripted;
@@ -103,28 +102,42 @@ fn status_is(status: &str, tone: &str, class: &Class) {
 #[tokio::test(flavor = "current_thread")]
 async fn a_failed_bulk_mark_read_releases_the_page() {
     for class in classes() {
-        let (backend, _host) = failing("mark_read_if_unchanged", &class);
-        let preview = backend_preview(&backend).await;
-        let mut state = EntriesPageState::new(false);
+        let (backend, _host) = failing("apply_entry_batch", &class);
+        let mut state = EntriesPageState::new();
+        state.entries = vec![Arc::new(rssr_domain::EntrySummary {
+            id: 1,
+            feed_id: 1,
+            title: "Selected".into(),
+            feed_title: "Source".into(),
+            published_at: None,
+            is_read: false,
+            is_starred: false,
+        })]
+        .into();
         reduce_entries_page_intent(&mut state, EntriesPageIntent::BeginBulk { writing: true });
-        state.bulk_preview = Some(preview.clone());
+        state.selected_entry_ids = Arc::new([1].into_iter().collect());
 
-        let command = UiCommand::Entries(EntriesCommand::ConfirmMarkRead { preview });
+        let command = UiCommand::Entries(EntriesCommand::ApplySelection {
+            request: rssr_domain::EntryBatchRequest {
+                entry_ids: vec![1],
+                action: rssr_domain::EntryBatchAction::MarkRead,
+            },
+        });
         for intent in run(command, &class).await {
             if let Some(intent) = intent.into_entries_page_intent() {
                 reduce_entries_page_intent(&mut state, intent);
             }
         }
         assert!(!state.bulk_busy && !state.bulk_writing, "{}: markers released", class.name);
-        assert_eq!(state.bulk_preview.is_none(), class.unknown, "{}: preview", class.name);
+        assert_eq!(
+            state.selected_entry_ids.is_empty(),
+            class.unknown,
+            "{}: uncertain selection",
+            class.name
+        );
         status_is(&state.status, &state.status_tone, &class);
-        assert_eq!(backend.calls("mark_read_if_unchanged"), 1, "{}: sent once", class.name);
+        assert_eq!(backend.calls("apply_entry_batch"), 1, "{}: sent once", class.name);
     }
-}
-
-async fn backend_preview(backend: &Scripted) -> rssr_domain::MarkReadPreview {
-    use rssr_api::Backend;
-    backend.preview_mark_read(&EntryQuery::default()).await.expect("a preview")
 }
 
 /// The entries' preferences that cannot be read are unavailable (never saved over), with the
@@ -133,7 +146,7 @@ async fn backend_preview(backend: &Scripted) -> rssr_domain::MarkReadPreview {
 async fn unreadable_preferences_are_unavailable() {
     for class in classes() {
         let (_backend, _host) = failing("bootstrap_entries", &class);
-        let mut state = EntriesPageState::new(false);
+        let mut state = EntriesPageState::new();
         let command = UiCommand::Entries(EntriesCommand::Bootstrap {
             load_preferences: true,
             load_feeds: true,
@@ -162,7 +175,7 @@ async fn unreadable_preferences_are_unavailable() {
 async fn a_failed_flag_change_on_the_list_says_so() {
     for class in classes() {
         let (_backend, _host) = failing("set_entry_read", &class);
-        let mut state = EntriesPageState::new(false);
+        let mut state = EntriesPageState::new();
         let command = UiCommand::Entries(EntriesCommand::SetRead {
             entry_id: 1,
             entry_title: "文章".into(),

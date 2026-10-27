@@ -1,5 +1,13 @@
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsCommand {
+    LoadEdit {
+        feed_id: i64,
+        generation: u64,
+    },
+    SaveEdit {
+        edit: rssr_domain::FeedEditRequest,
+        generation: u64,
+    },
     LoadSnapshot,
     /// `token`: the page's operation it answers (C4b item 3); its results carry it back.
     AddFeed {

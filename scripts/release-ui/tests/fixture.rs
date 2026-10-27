@@ -154,5 +154,10 @@ fn main() {
     if step == "web-bundle" && env::var_os("MISSING_BUNDLE").is_none() {
         let profile = if args.iter().any(|s| s == "--release") { "release" } else { "debug" };
         fs::create_dir_all(format!("target/dx/rssr-app/{profile}/web/public")).unwrap();
+        if env::var_os("FAILED_WASM_OPT").is_some() {
+            // Reproduce dx's fallback: output directory exists and the process exits 0.
+            eprintln!("ERROR wasm-opt failed with status code exit code: 0xc0000409");
+            println!("Client build completed successfully!");
+        }
     }
 }

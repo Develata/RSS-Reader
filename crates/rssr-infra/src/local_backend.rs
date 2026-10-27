@@ -383,6 +383,19 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         Ok(self.inner.host.localize_entry_assets(entry_id).await?)
     }
 
+    async fn apply_entry_batch(
+        &self,
+        request: rssr_domain::EntryBatchRequest,
+    ) -> BackendResult<u64> {
+        Ok(self.inner.use_cases.entry_batch_service.apply(request).await?)
+    }
+    async fn feed_edit_details(&self, feed_id: i64) -> BackendResult<rssr_domain::FeedEditDetails> {
+        Ok(self.inner.use_cases.feed_edit_service.details(feed_id).await?)
+    }
+    async fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> BackendResult<()> {
+        Ok(self.inner.use_cases.feed_edit_service.update(edit).await?)
+    }
+
     async fn load_feeds_snapshot(&self) -> BackendResult<FeedsSnapshotOutcome> {
         Ok(self.inner.use_cases.feeds_snapshot_service.load_snapshot().await?)
     }

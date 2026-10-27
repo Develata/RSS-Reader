@@ -4,18 +4,18 @@ import { evaluate, sleep } from './cdp_session.mjs';
 // from the tracker, DOM order, or the production grouping/selection algorithm.
 export const directoryCases = {
   time: {
-    group: 'entry-group-2026-年-09-月', first: 'entry-group-2026-09-02-72',
-    next: 'entry-group-2026-09-01-66',
-    otherGroup: 'entry-group-2026-年-08-月', other: 'entry-group-2026-08-02-60',
-    beforeOther: 'entry-group-2026-09-01-66',
-    remoteGroup: 'entry-group-2026-年-04-月', remote: 'entry-group-2026-04-02-12',
+    group: 'entry-group-2026-年-09-月', first: 'entry-group-2026-09-02',
+    next: 'entry-group-2026-09-01',
+    otherGroup: 'entry-group-2026-年-08-月', other: 'entry-group-2026-08-02',
+    beforeOther: 'entry-group-2026-09-01',
+    remoteGroup: 'entry-group-2026-年-04-月', remote: 'entry-group-2026-04-02',
   },
   source: {
-    group: 'entry-group-alpha', first: 'entry-group-2026-年-09-月-72',
-    next: 'entry-group-2026-年-08-月-60',
-    otherGroup: 'entry-group-bravo', other: 'entry-group-2026-年-09-月-71',
-    beforeOther: 'entry-group-2026-年-05-月-24',
-    remoteGroup: 'entry-group-alpha', remote: 'entry-group-2026-年-04-月-12',
+    group: 'entry-source-1', first: 'entry-source-1-month-2026-09',
+    next: 'entry-source-1-month-2026-08',
+    otherGroup: 'entry-source-2', other: 'entry-source-2-month-2026-09',
+    beforeOther: 'entry-source-1-month-2026-05',
+    remoteGroup: 'entry-source-1', remote: 'entry-source-1-month-2026-04',
   },
 };
 export const rail = '[data-layout="entry-directory-rail"]';
@@ -124,9 +124,36 @@ export async function userWheel(client, deltaY) {
   await client.send('Input.dispatchMouseEvent', {type:'mouseWheel',x:100,y:400,deltaX:0,deltaY});
 }
 async function userScrollAnchor(client, id) {
+  // Alignment allows a 2px tolerance, while a smooth jump can still be on its
+  // last frame. Finish that motion before measuring a new wheel delta; otherwise
+  // Chromium can consume the wheel as cancellation of the preceding animation.
+  await evaluate(client, `new Promise((resolve, reject) => {
+    let previous = scrollY, stable = 0, frame;
+    const timeout = setTimeout(() => { cancelAnimationFrame(frame); reject(new Error('main scroll did not settle')); }, 6000);
+    const tick = () => {
+      const current = scrollY;
+      stable = current === previous ? stable + 1 : 0;
+      previous = current;
+      if (stable >= 6) { clearTimeout(timeout); resolve(); }
+      else frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+  })`);
   const delta = await evaluate(client, `document.getElementById(${q(id)}).getBoundingClientRect().top - 80`);
   await userWheel(client,delta);
   await settle(client, `Math.abs(document.getElementById(${q(id)}).getBoundingClientRect().top - 80) <= 2`, 'user wheel anchor positioning');
+}
+async function expectTargetAligned(client, id) {
+  // Compact rows can make the last group shorter than one viewport. In that
+  // case scrolling clamps at the document end; the target must still be visible.
+  await settle(client, `(() => {
+    const anchor=document.getElementById(${q(id)}), scroller=document.scrollingElement;
+    if (!anchor) return false;
+    const top=anchor.getBoundingClientRect().top;
+    const inset=parseFloat(getComputedStyle(anchor).scrollMarginTop || 0);
+    const max=Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+    return Math.abs(top-inset)<=2 || (Math.abs(scrollY-max)<=2 && top>=inset && top<innerHeight-80);
+  })()`, 'directory target must align or remain visible at the clamped document end');
 }
 async function expectOnlyOpen(client, id) {
   await settle(client, `(() => { const groups=[...document.querySelectorAll(${q(rail+' [data-layout="entry-directory-toggle"]')})];
@@ -139,7 +166,8 @@ export async function snapshot(client) {
     const visible = e => !!e && !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
     const state = selector => {
       const root = document.querySelector(selector);
-      return {visible:visible(root), scrollTop:root?.scrollTop, scrollLeft:root?.scrollLeft,
+      return {visible:visible(root), scrollTop:root?.scrollTop ?? 0, scrollLeft:root?.scrollLeft ?? 0,
+        currentGroup:root?.dataset.directoryCurrentGroup, currentItem:root?.dataset.directoryCurrentItem,
         maxScrollTop:root ? root.scrollHeight-root.clientHeight : 0,
         groups:[...(root?.querySelectorAll('[data-directory-kind="group"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor),
         items:[...(root?.querySelectorAll('[data-directory-kind="item"][data-active="true"]') || [])].map(e=>e.dataset.directoryAnchor)};
@@ -163,8 +191,15 @@ export async function expectActive(client, expectedGroup, expectedItem, consumer
     if (!root || !root.getClientRects().length) return false;
     const groups = root.querySelectorAll('[data-directory-kind="group"][data-active="true"]');
     const items = root.querySelectorAll('[data-directory-kind="item"][data-active="true"]');
-    return groups.length === 1 && groups[0].dataset.directoryAnchor === ${q(expectedGroup)} &&
-      (${q(consumer)} === 'top' || (items.length === 1 && items[0].dataset.directoryAnchor === ${q(expectedItem)}));
+    if (groups.length !== 1 || groups[0].dataset.directoryAnchor !== ${q(expectedGroup)}) return false;
+    if (${q(consumer)} === 'top') return true;
+    // A manually closed branch no longer keeps invisible child DOM nodes.
+    // Check the retained Rust path, then require the exact highlight when open.
+    return root.dataset.directoryCurrentGroup === ${q(expectedGroup)} &&
+      root.dataset.directoryCurrentItem === ${q(expectedItem)} &&
+      (groups[0].dataset.open === 'true'
+        ? items.length === 1 && items[0].dataset.directoryAnchor === ${q(expectedItem)}
+        : items.length === 0);
   })()`, `visible ${consumer} must select ${expectedGroup} / ${expectedItem}`);
 }
 
@@ -179,7 +214,6 @@ export function directoryHarness(client, env) {
       await evaluate(client, `if (!document.querySelector('[data-page="entries"]')) document.querySelector('[data-action="activate-home"]').click()`);
     }
     await settle(client, `document.querySelector('[data-page="entries"][data-position-ready="true"]') && document.querySelectorAll('[data-position-entry]').length > 0`, 'directory fixture not ready');
-    await evaluate(client, `document.querySelector('[data-action="show-entry-controls"]')?.click()`);
     if (env.native) await setMode(mode === 'time' ? 'source' : 'time');
     await setMode(mode);
     await env.manualScroll();
@@ -193,10 +227,8 @@ export function directoryHarness(client, env) {
     return c;
   }
   async function setMode(mode) {
-    await evaluate(client, `(() => { const select = document.querySelector('[data-field="entry-grouping-mode"]');
-      if (!select) throw new Error('Grouping control missing');
-      if (select.value !== ${q(mode)}) { select.value = ${q(mode)}; select.dispatchEvent(new Event('change',{bubbles:true})); }
-    })()`);
+    await evaluate(client, `document.querySelector('[data-action="group-by-${mode}"]').scrollIntoView({block:'center',behavior:'instant'})`);
+    await click(client, `[data-action="group-by-${mode}"]`);
     await settle(client, `document.querySelector('[data-entry-scroll-anchor][data-grouping-mode="${mode}"]')`, `grouping ${mode} not rendered`);
   }
   return {prepare, setMode};
@@ -223,21 +255,59 @@ export async function checkDirectoryContracts(client, env) {
     }
   }
   for (const gap of [0,4,12,32]) await scenario(`rapid-cross-page-${gap}ms`, async () => {
-    const c = await prepare('time'), last='entry-group-2026-04-01-6';
+    const c = await prepare('time'), last='entry-group-2026-04-01';
     await click(client,group(c.remoteGroup));
     await settle(client,`document.querySelector(${q(group(c.remoteGroup))}).dataset.open === 'true'`,'expand cross-page targets');
     const hits=await clickBurst(client,[item(c.remote),item(last)],gap,true);
     check(`rapid navigation ${gap}ms: both distinct targets receive trusted clicks`,
       hits.length===2 && hits[0].anchor===c.remote && hits[1].anchor===last && hits.every(h=>h.trusted),hits);
     await settle(client,`location.hash === ${q('#'+last)} && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim()==='2 / 2' && !!document.getElementById(${q(last)})`,'latest real cross-page click must win');
-    await settle(client,`Math.abs(document.getElementById(${q(last)}).getBoundingClientRect().top)<=2`,'latest cross-page target must align');
+    await expectTargetAligned(client,last);
     check(`rapid navigation ${gap}ms: latest user target wins`,true,{hits,after:await snapshot(client)});
   });
   for (const mode of ['time', 'source']) {
+    await scenario(`${mode}-hidden-tree-preserves-state`, async () => {
+      const c = await prepare(mode);
+      await click(client, '[data-position-entry="72"] [data-action="select-entry"]');
+      await click(client, group(c.group));
+      await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'close current branch');
+      check(`${mode}: closed branch releases its child nodes`, await evaluate(client,
+        `document.querySelector(${q(group(c.group))}).nextElementSibling.childElementCount === 0`));
+      for (const entry of (await snapshot(client)).groups.filter(g => g.open !== 'true')) {
+        await click(client, group(entry.id));
+        await settle(client, `document.querySelector(${q(group(entry.id))}).dataset.open === 'true'`, 'open branches before hiding');
+      }
+      await evaluate(client, `document.querySelector(${q(group(c.group))}).focus({preventScroll:true});
+        window.__directoryListIdentity = [...document.querySelectorAll('[data-position-entry]')];`);
+      const point = await evaluate(client, `(() => {const r=document.querySelector(${q(rail)}).getBoundingClientRect();
+        return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+      await client.send('Input.dispatchMouseEvent', {type:'mouseWheel', ...point, deltaX:0, deltaY:150});
+      await settle(client, `document.querySelector(${q(rail)}).scrollTop > 30`, 'scroll the manual directory');
+      await directoryIdle(client);
+      const before = await snapshot(client);
+      for (const type of ['keyDown','keyUp']) await client.send('Input.dispatchKeyEvent',
+        {type,key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await settle(client, `document.querySelector(${q(rail)}).dataset.directoryRendered === 'false' &&
+        !document.querySelector(${q(rail + ' [data-layout="entry-directory-nav"]')})`, 'hidden directory must unmount its tree');
+      await click(client, '[data-action="open-directory"]');
+      await settle(client, `document.querySelector(${q(rail)}).dataset.directoryRendered === 'true'`, 'reopen directory');
+      await directoryIdle(client);
+      const after = await snapshot(client);
+      check(`${mode}: reopening retains manual expansion, scroll and selection`,
+        after.mode === 'manual' && Math.abs(after.rail.scrollTop-before.rail.scrollTop)<=1 &&
+        JSON.stringify(after.groups.map(g=>[g.id,g.open]))===JSON.stringify(before.groups.map(g=>[g.id,g.open])) &&
+        await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked`),
+        {before,after});
+      check(`${mode}: directory visibility does not remount article rows`, await evaluate(client,
+        `[...document.querySelectorAll('[data-position-entry]')].every((row,i)=>row===window.__directoryListIdentity[i])`));
+      await evaluate(client, 'delete window.__directoryListIdentity');
+      await userWheel(client, 24);
+      await settle(client, `document.querySelector(${q(rail)}).dataset.directoryMode === 'follow'`, 'main scrolling resumes following after reopening');
+    });
     await scenario(`${mode}-read-summary-preserves-manual`, async () => {
       const c = await prepare(mode);
       check(`${mode}: read regression uses All feeds and ReadFilter::All`,
-        await evaluate(client, `!!document.querySelector('#source-unread-1') && !document.querySelector('[data-field="read-filter-unread"]').checked && !document.querySelector('[data-field="read-filter-read"]').checked`));
+        await evaluate(client, `document.querySelector('.source-filter-trigger span').textContent === '全部来源' && document.querySelector('[aria-label="仅未读"]').getAttribute('aria-pressed') === 'false' && document.querySelector('[aria-label="仅已读"]').getAttribute('aria-pressed') === 'false'`));
       await scrollAnchor(client,c.first);
       await click(client,group(c.group));
       await settle(client, `document.querySelector(${q(group(c.group))}).dataset.open === 'false'`, 'close current group before read update');
@@ -246,15 +316,10 @@ export async function checkDirectoryContracts(client, env) {
       for (const action of ['toggle-starred','mark-read','mark-read']) {
         const selector = `[data-position-entry="72"] [data-action="${action}"]`;
         const before = await snapshot(client);
-        const label = await evaluate(client, `document.querySelector(${q(selector)}).textContent.trim()`);
-        const count = await evaluate(client, `Number(document.querySelector('#source-unread-1').textContent.split(' ')[1])`);
+        const pressed = await evaluate(client, `document.querySelector(${q(selector)}).getAttribute('aria-pressed')`);
         await click(client,selector);
-        await settle(client, `document.querySelector(${q(selector)}).textContent.trim() !== ${q(label)}`, 'entry flag write must complete');
-        if (action==='mark-read') {
-          const wanted = count + (label==='标已读'?-1:1);
-          await settle(client, `document.querySelector('#source-unread-1').textContent === ${q(`未读 ${wanted} 篇`)}`, 'feed summary bootstrap must finish');
-          check(`${mode}: read update finishes source unread summary refresh`, true, {before:count,after:wanted});
-        }
+        await settle(client, `document.querySelector(${q(selector)}).getAttribute('aria-pressed') !== ${q(pressed)}`, 'entry flag write must complete');
+        // Unread totals moved to Subscribe; rssr_workspace_acceptance checks those values.
         await directoryIdle(client);
         const after = await snapshot(client);
         check(`${mode}: ${action} preserves manual/open state and both scroll positions`,
@@ -339,7 +404,7 @@ export async function checkDirectoryContracts(client, env) {
     await scenario(`${mode}-internal-scroll-and-keyboard`, async () => {
       const c = await prepare(mode);
       await scrollAnchor(client,c.first);
-      const distant = mode==='time'?c.remoteGroup:'entry-group-foxtrot';
+      const distant = mode==='time'?c.remoteGroup:'entry-source-6';
       await click(client,group(distant));
       await settle(client, `document.querySelector(${q(group(distant))}).dataset.open === 'true'`, 'manual distant group');
       for (const entry of (await snapshot(client)).groups.filter(g=>g.open!=='true')) {
@@ -387,7 +452,7 @@ export async function checkDirectoryContracts(client, env) {
       const c = await prepare(mode);
       await scrollAnchor(client,c.first);
       await expectActive(client,c.group,c.first);
-      const distantGroup = mode==='time'?c.remoteGroup:'entry-group-foxtrot';
+      const distantGroup = mode==='time'?c.remoteGroup:'entry-source-6';
       if ((await snapshot(client)).groups.find(g=>g.id===distantGroup).open!=='true') {
         await click(client,group(distantGroup));
         await settle(client, `document.querySelector(${q(group(distantGroup))}).dataset.open === 'true'`, 'distant group expansion');
@@ -415,10 +480,9 @@ export async function checkDirectoryContracts(client, env) {
       await scrollAnchor(client,c.other);
       await expectActive(client,c.otherGroup,c.other);
       const beforeFlag = await snapshot(client);
-      const priorLabel = await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim()`);
-      const nextLabel = priorLabel === '收藏' ? '取消收藏' : '收藏';
+      const priorPressed = await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').getAttribute('aria-pressed')`);
       await evaluate(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').click()`);
-      await settle(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').textContent.trim() === ${q(nextLabel)}`, 'flag rerender not completed');
+      await settle(client, `document.querySelector('[data-position-entry="72"] [data-action="toggle-starred"]').getAttribute('aria-pressed') !== ${q(priorPressed)}`, 'flag rerender not completed');
       await directoryIdle(client);
       await expectActive(client,c.otherGroup,c.other);
       const afterFlag = await snapshot(client);
@@ -458,40 +522,91 @@ export async function checkDirectoryContracts(client, env) {
       await settle(client, `document.querySelector(${q(group(c.remoteGroup))}).dataset.open === 'true' && document.querySelector(${q(item(c.remote))}).getClientRects().length > 0`, 'remote directory item must finish expanding before navigation');
       await click(client,item(c.remote));
       await settle(client, `document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && location.hash === ${q('#'+encodeURIComponent(c.remote))} && !!document.getElementById(${q(c.remote)})`, 'cross-page target/hash');
-      await settle(client, `Math.abs(document.getElementById(${q(c.remote)}).getBoundingClientRect().top - parseFloat(getComputedStyle(document.getElementById(${q(c.remote)})).scrollMarginTop || 0)) <= 2`, 'cross-page alignment');
+      await expectTargetAligned(client,c.remote);
       check(`${mode}: cross-page directory navigation reaches target/hash`, true, await snapshot(client));
     });
     if (!env.native) await scenario(`${mode}-consumers`, async () => {
       const c = await prepare(mode);
       await scrollAnchor(client,c.other);
       await expectActive(client,c.otherGroup,c.other);
-      for (const width of [721,720,1280,360]) {
-        const mobile=width<=720;
+      for (const width of [1001,1000,1280,360]) {
+        const mobile=width<=1000;
         await env.setViewport(width,800,mobile,mobile?3:1);
+        await evaluate(client, "window.scrollTo({top:0,behavior:'instant'})");
+        if (!await evaluate(client, `!!document.querySelector(${q(rail)}).getClientRects().length`)) {
+          await settle(client, `document.querySelector(${q(rail)}).dataset.directoryRendered === 'false' && !document.querySelector(${q(rail+' nav')})`, 'responsive hiding releases the directory tree');
+          check(`${mode}: ${width}px hidden directory has no navigation tree`, true);
+          await click(client,'[data-action="open-directory"]');
+          await settle(client, `!!document.querySelector(${q(rail)}).getClientRects().length && document.querySelector(${q(rail)}).dataset.directoryRendered === 'true'`, 'directory opens from collapsed entry');
+        }
         // Responsive layout changes anchor positions. Restore the explicit
         // article target before comparing consumers; do not infer it from JS.
         await scrollAnchor(client,c.other);
-        await expectActive(client,c.otherGroup,c.other,mobile?'top':'rail');
+        await expectActive(client,c.otherGroup,c.other);
         const s = await snapshot(client);
-        const activeWeight=await evaluate(client, `getComputedStyle(document.querySelector(${q((mobile?top:rail)+' [data-directory-kind="group"][data-active="true"] [data-slot="entry-directory-title"]')})).fontWeight`);
-        check(`${mode}: ${width}px uses and emphasizes the visible directory consumer`, s.rail.visible===!mobile && s.top.visible===mobile && Number(activeWeight)>=600, {...s,activeWeight});
+        const activeWeight=await evaluate(client, `getComputedStyle(document.querySelector(${q(rail+' [data-directory-kind="group"][data-active="true"] [data-slot="entry-directory-title"]')})).fontWeight`);
+        check(`${mode}: ${width}px visible directory preserves active path`, s.rail.visible && !s.top.visible && Number(activeWeight)>=600, {...s,activeWeight});
+        if (mobile && width!==360) {
+          await click(client,'[data-action="close-directory"]');
+          const closed = await snapshot(client);
+          check(`${mode}: narrow directory closes without moving articles`, !closed.rail.visible && Math.abs(closed.y-s.y)<=1, {before:s,after:closed});
+        }
       }
       const before = await snapshot(client);
-      const target = mode==='source'?'entry-group-2026-年-09-月-67':'entry-group-2026-06-02-36';
+      const target = mode==='source'?'entry-source-6-month-2026-09':'entry-group-2026-06-02';
       const requestedY = await evaluate(client, `scrollY + document.getElementById(${q(target)}).getBoundingClientRect().top - 80`);
-      await scrollAnchor(client,target);
-      const expectedGroup = mode==='source'?'entry-group-foxtrot':'entry-group-2026-年-06-月';
-      await expectActive(client,expectedGroup,null,'top');
+      await userScrollAnchor(client,target);
+      const expectedGroup = mode==='source'?'entry-source-6':'entry-group-2026-年-06-月';
+      await expectActive(client,expectedGroup,target);
       const aligned = await evaluate(client, `(() => {
-        const root=document.querySelector(${q(top)}), active=root.querySelector('[data-active="true"]');
+        const root=document.querySelector(${q(rail)}), active=root.querySelector('[data-directory-kind="item"][data-active="true"]');
         const r=root.getBoundingClientRect(), a=active.getBoundingClientRect();
-        return {y:scrollY,left:root.scrollLeft,fits:a.left>=r.left-1 && a.right<=r.right+1};
+        return {y:scrollY,top:root.scrollTop,fits:a.top>=r.top-1 && a.bottom<=r.bottom+1};
       })()`);
       const after = await snapshot(client);
-      check(`${mode}: mobile horizontal alignment preserves requested body position`, aligned.left>0 && aligned.fits && Math.abs(after.y-requestedY)<=1, {before,requestedY,aligned,after});
+      check(`${mode}: mobile directory alignment preserves requested body position`, aligned.fits && Math.abs(after.y-requestedY)<=1, {before,requestedY,aligned,after});
       await env.capture(`directory-${mode}-mobile`);
     });
   }
+  for (const mode of ['time', 'source']) await scenario(`${mode}-article-navigation`, async () => {
+    const c = await prepare(mode), samePageArticle = mode === 'time' ? 71 : 66;
+    const navigationHistory = await evaluate(client, `({length:history.length,state:JSON.stringify(history.state)})`);
+    const branch = id => `${rail} [data-layout="entry-directory-branch-toggle"][data-directory-anchor="${id}"]`;
+    const article = id => `${rail} [data-directory-kind="entry"][data-directory-anchor="entry-card-${id}"]`;
+    await settle(client, `!!document.querySelector(${q(article(samePageArticle))})`, 'current path must expose article titles');
+    await click(client, '[data-position-entry="72"] [data-action="select-entry"]');
+    await click(client, branch(c.first));
+    await settle(client, `!document.querySelector(${q(article(samePageArticle))})`, 'closing the branch unmounts its article nodes');
+    check(`${mode}: collapsing the article branch preserves selection`, await evaluate(client,
+      `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked`));
+    await evaluate(client, `document.querySelector(${q(branch(c.first))}).focus({preventScroll:true})`);
+    await keyPress(client, 'Enter');
+    await settle(client, `!!document.querySelector(${q(article(samePageArticle))})`, 'keyboard expands article titles');
+    await click(client, article(samePageArticle));
+    await settle(client, `location.hash === '#entry-card-${samePageArticle}'`, 'article link must navigate to the exact article');
+    await expectTargetAligned(client, `entry-card-${samePageArticle}`);
+    check(`${mode}: same-page directory jump preserves route history`, await evaluate(client,
+      `history.length === ${navigationHistory.length} && JSON.stringify(history.state) === ${q(navigationHistory.state)}`));
+    check(`${mode}: same-page article navigation keeps selection and manual browsing`, await evaluate(client,
+      `document.querySelector('[data-position-entry="72"] [data-action="select-entry"]').checked && document.querySelector(${q(rail)}).dataset.directoryMode === 'manual'`));
+    if (mode === 'time') await click(client, group(c.remoteGroup));
+    await click(client, branch(c.remote));
+    await settle(client, `!!document.querySelector(${q(article(12))})`, 'remote month must expose off-page articles');
+    check(`${mode}: article target uses its global page, not the current-page index`, await evaluate(client,
+      `document.querySelector(${q(article(12))}).dataset.directoryPage === '2'`));
+    await click(client, article(12));
+    await settle(client, `location.hash === '#entry-card-12' && document.querySelector('[data-slot="entry-pagination-status"]').textContent.trim() === '2 / 2' && !!document.getElementById('entry-card-12')`, 'cross-page article target');
+    await expectTargetAligned(client, 'entry-card-12');
+    check(`${mode}: cross-page directory jump preserves route history`, await evaluate(client,
+      `history.length === ${navigationHistory.length} && JSON.stringify(history.state) === ${q(navigationHistory.state)}`));
+    check(`${mode}: cross-page article navigation clears the old selection`, await evaluate(client,
+      `[...document.querySelectorAll('[data-action="select-entry"]')].every(e=>!e.checked)`));
+    // Entry 12 is near the document end, so its jump can legitimately clamp.
+    // Entry 22 is the first article on page 2 and can reach the 80px probe line.
+    await userScrollAnchor(client, 'entry-card-22');
+    await settle(client, `document.querySelector(${q(article(22))})?.getAttribute('aria-current') === 'location'`, 'directory follows the exact visible article');
+    await env.capture(`directory-${mode}-articles`);
+  });
   await scenario('lifecycle', async () => {
     const c = await prepare('time');
     const installed = await listenerCount(client);

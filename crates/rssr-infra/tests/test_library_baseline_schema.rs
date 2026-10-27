@@ -1,8 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-//! The v0.2 baseline equals the v0.1.x schema (index migrations 0001-0009 plus content
+//! The current v0.2 library (released baseline plus incremental migrations) equals the v0.1.x schema (index migrations 0001-0009 plus content
 //! migration 0001) except for the changes listed here, which are the ones decided in
-//! docs/design/v0.2-architecture.md. The v0.1.x schema is built from the frozen migration files.
+//! docs/design/v0.2-architecture.md and frontend-command-reference.md. The v0.1.x schema is built from the frozen migration files.
 
 #[path = "support/v01_schema.rs"]
 mod v01_schema;
@@ -101,6 +101,7 @@ async fn columns_differ_only_by_the_decided_changes() {
             "sync_sources.username TEXT notnull=0 default=- pk=0",
         ],
         &[
+            "entries.is_archived INTEGER notnull=1 default=0 pk=0",
             "entries.title_search TEXT notnull=1 default=- pk=0",
             "feeds.fetch_error_kind TEXT notnull=0 default=- pk=0",
             "feeds.refresh_diagnosed INTEGER notnull=1 default=0 pk=0",

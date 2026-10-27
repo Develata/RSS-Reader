@@ -4,7 +4,6 @@ use rssr_domain::{
     ArchiveFilter, EntriesWorkspaceState, EntryGroupingPreference, EntryQuery, EntrySummary,
     FeedSummary, ReadFilter, StarredFilter, UserSettings,
 };
-use time::OffsetDateTime;
 
 pub(crate) const FIRST_PAGE_NUMBER: u32 = 1;
 
@@ -40,11 +39,13 @@ impl PreferencesLoadState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EntriesPageState {
-    pub(crate) bulk_preview: Option<rssr_domain::MarkReadPreview>,
+    pub(crate) selected_entry_ids: Arc<BTreeSet<i64>>,
+    pub(crate) pending_entry_writes: Arc<BTreeSet<i64>>,
     pub(crate) bulk_busy: bool,
     pub(crate) bulk_writing: bool,
     pub(crate) bulk_generation: u64,
-    pub(crate) bulk_revision: u64,
+    pub(crate) reload_revision: u64,
+    pub(crate) flags_revision: u64,
     pub(crate) bulk_notice: Option<String>,
 
     /// Snapshots and presenter inputs share the immutable collection. Flag changes copy
@@ -62,7 +63,6 @@ pub(crate) struct EntriesPageState {
     pub(crate) grouping_mode: EntryGroupingMode,
     pub(crate) archive_after_months: u32,
     pub(crate) entries_page_size: u32,
-    pub(crate) controls_hidden: bool,
     pub(crate) current_page: u32,
     pub(crate) entries_loaded: bool,
     pub(crate) status: String,
@@ -98,7 +98,7 @@ pub(crate) struct EntriesPageState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct QueryClockTrigger {
     library_revision: u64,
-    bulk_revision: u64,
+    reload_revision: u64,
     feed_id: Option<i64>,
     search_title: Option<String>,
     show_archived: bool,
@@ -109,15 +109,17 @@ pub(crate) struct QueryClockTrigger {
 }
 
 impl EntriesPageState {
-    pub(crate) fn new(initial_controls_hidden: bool) -> Self {
+    pub(crate) fn new() -> Self {
         let settings = UserSettings::default();
         let workspace = EntriesWorkspaceState::default();
         Self {
-            bulk_preview: None,
+            selected_entry_ids: Arc::default(),
+            pending_entry_writes: Arc::default(),
             bulk_busy: false,
             bulk_writing: false,
             bulk_generation: 0,
-            bulk_revision: 0,
+            reload_revision: 0,
+            flags_revision: 0,
             bulk_notice: None,
             entries: Arc::default(),
             archived_count: 0,
@@ -130,7 +132,6 @@ impl EntriesPageState {
             grouping_mode: entry_grouping_mode_from_preference(workspace.grouping_mode),
             archive_after_months: settings.archive_after_months,
             entries_page_size: settings.entries_page_size.max(1),
-            controls_hidden: initial_controls_hidden,
             current_page: FIRST_PAGE_NUMBER,
             entries_loaded: false,
             status: "正在加载文章列表…".to_string(),
@@ -158,15 +159,13 @@ impl EntriesPageState {
         }
     }
 
-    /// 构造这一屏对应的查询。
-    ///
-    /// 归档筛选放在查询里由存储层执行：页面层不再把已归档文章一并读回来再在内存里过滤。
-    /// `now` 由调用方传入，便于测试固定时间。
+    /// 构造不依赖时钟的查询范围。归档分界由页面 memo 在范围或刷新代次
+    /// 变化时补入；选择、目录和状态文字重绘不能改变查询的时间参数。
     pub(crate) fn entry_query(
         &self,
         feed_id: Option<i64>,
         search_title: Option<String>,
-        now: OffsetDateTime,
+        now: time::OffsetDateTime,
     ) -> EntryQuery {
         EntryQuery {
             feed_id,
@@ -198,7 +197,7 @@ impl EntriesPageState {
     ) -> QueryClockTrigger {
         QueryClockTrigger {
             library_revision,
-            bulk_revision: self.bulk_revision,
+            reload_revision: self.reload_revision,
             feed_id,
             search_title,
             show_archived: self.show_archived,
@@ -211,6 +210,14 @@ impl EntriesPageState {
 
     pub(crate) fn page_size(&self) -> usize {
         self.entries_page_size.max(1) as usize
+    }
+
+    pub(crate) fn current_page_entries(&self) -> &[Arc<EntrySummary>] {
+        let start = ((self.current_page.saturating_sub(1) as usize)
+            .saturating_mul(self.page_size()))
+        .min(self.entries.len());
+        let end = start.saturating_add(self.page_size()).min(self.entries.len());
+        &self.entries[start..end]
     }
 
     pub(crate) fn position_key(&self, feed_id: Option<i64>, search: Option<&str>) -> String {
@@ -267,14 +274,14 @@ mod tests {
     /// 查询条件变化时重新采样归档时钟；状态提示、查询结果等普通变化不采样（审计 A4）。
     #[test]
     fn archive_clock_resamples_on_query_changes_only() {
-        let state = EntriesPageState::new(true);
+        let state = EntriesPageState::new();
         let base = state.query_clock_trigger(None, None, 0);
 
         let mut unrelated = state.clone();
         unrelated.status = "共 3 篇文章。".into();
         unrelated.entries_loaded = true;
         unrelated.current_page = 2;
-        unrelated.controls_hidden = !unrelated.controls_hidden;
+        unrelated.selected_entry_ids = std::sync::Arc::new([1].into_iter().collect());
         assert_eq!(unrelated.query_clock_trigger(None, None, 0), base);
 
         let mut changed = Vec::new();
@@ -285,7 +292,7 @@ mod tests {
             |s| s.show_archived = !s.show_archived,
             |s| s.selected_feed_urls = vec!["https://example.com/feed.xml".into()],
             |s| s.archive_after_months += 1,
-            |s| s.bulk_revision += 1,
+            |s| s.reload_revision += 1,
         ] {
             let mut edited = state.clone();
             edit(&mut edited);
@@ -304,7 +311,7 @@ mod tests {
     #[test]
     fn chosen_sources_that_are_gone_match_nothing() {
         let now = time::OffsetDateTime::UNIX_EPOCH;
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         assert_eq!(state.entry_query(None, None, now).feed_ids, None);
 
         state.feeds = std::sync::Arc::new(vec![rssr_domain::FeedSummary {

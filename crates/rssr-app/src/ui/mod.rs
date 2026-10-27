@@ -26,6 +26,5 @@ pub(crate) use self::{
         use_reread_triggers, use_startup_route_bus,
     },
     shell_browser::wait_for_refresh_feedback,
-    shell_prefs::{initial_entry_controls_hidden, remember_entry_controls_hidden},
     snapshot::UiIntent,
 };

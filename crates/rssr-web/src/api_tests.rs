@@ -574,6 +574,19 @@ async fn parameters_and_bodies_are_bounded() {
     let response = client.send(Method::PUT, routes::WORKSPACE, Some(&json!([1])), build).await;
     assert_eq!(client.error(response).await.1, "invalid_input");
 
+    // The new workspace writes retain the same body and build gates as other mutations.
+    for (method, path) in
+        [(Method::POST, routes::ENTRY_BATCH.to_owned()), (Method::PATCH, protocol::feed(1))]
+    {
+        let oversized = json!({"padding": "x".repeat(protocol::MAX_BODY_BYTES)});
+        let response = client.send(method.clone(), &path, Some(&oversized), build).await;
+        assert_eq!(client.error(response).await.1, "too_large", "{path}");
+        let response = client.send(method.clone(), &path, Some(&json!({})), build).await;
+        assert_eq!(client.error(response).await.1, "invalid_input", "{path}");
+        let response = client.send(method, &path, Some(&json!({})), Some("obsolete-build")).await;
+        assert_eq!(client.error(response).await.1, "build_mismatch", "{path}");
+    }
+
     // The largest legal custom CSS escapes to twice its size: over the default bound, accepted.
     let css = "\n".repeat(rssr_domain::MAX_CUSTOM_CSS_BYTES);
     let settings =

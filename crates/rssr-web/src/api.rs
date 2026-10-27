@@ -169,7 +169,8 @@ pub(crate) fn routes<S: Clone + Send + Sync + 'static>(state: ApiState) -> Route
                 .layer(DefaultBodyLimit::max(protocol::MAX_MARK_READ_BODY_BYTES)),
         )
         .route(routes::FEEDS, get(load_feeds_snapshot))
-        .route(routes::FEED, delete(remove_feed))
+        .route(routes::ENTRY_BATCH, post(apply_entry_batch))
+        .route(routes::FEED, delete(remove_feed).get(feed_edit_details).patch(update_subscription))
         .route(routes::CONFIG_JSON, get(export_config_json).put(import_config_json).layer(imports))
         .route(routes::CONFIG_OPML, get(export_opml).post(import_opml).layer(imports))
         .route(routes::JOB_REFRESH_ALL, post(start_refresh_all))
@@ -575,6 +576,27 @@ async fn mark_read_if_unchanged(ctx: Ctx, request: Request) -> Answer {
     Ok(ctx
         .run(slots, move |backend| async move { backend.mark_read_if_unchanged(&preview).await })
         .await)
+}
+
+async fn apply_entry_batch(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    let batch: rssr_domain::EntryBatchRequest = ctx.json(request).await?;
+    Ok(ctx.run(slots, move |backend| async move { backend.apply_entry_batch(batch).await }).await)
+}
+
+async fn feed_edit_details(ctx: Ctx, path: PathParam) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, move |backend| async move { backend.feed_edit_details(feed_id).await }).await)
+}
+
+async fn update_subscription(ctx: Ctx, path: PathParam, request: Request) -> Answer {
+    let feed_id = ctx.path_id(path)?;
+    let slots = ctx.admit()?;
+    let mut edit: rssr_domain::FeedEditRequest = ctx.json(request).await?;
+    // The authenticated route owns identity; a body cannot redirect it to another feed.
+    edit.feed_id = feed_id;
+    Ok(ctx.run(slots, move |backend| async move { backend.update_subscription(edit).await }).await)
 }
 
 async fn load_feeds_snapshot(ctx: Ctx) -> Answer {

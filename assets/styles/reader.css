@@ -277,6 +277,8 @@
   display: grid;
   place-items: center;
   padding: 32px 20px;
+  /* 登录门不在 .app-shell 内，需在本层重新求值系统配色的文字 token。 */
+  color: var(--ink);
 }
 
 [data-layout="web-auth-card"] {

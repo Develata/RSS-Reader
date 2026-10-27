@@ -440,6 +440,23 @@ class Acceptance(unittest.TestCase):
         self.run_cli("--skip-automated", "--with-browser-contracts", code=1)
         self.assertEqual(self.stage("browser-contracts")["status"], "failed")
 
+    def test_optimizer_failure_with_zero_exit_blocks_bundle_consumers(self):
+        args = ("--skip-automated", "--with-fixed-smokes", "--release")
+        self.env["FAILED_WASM_OPT"] = "1"
+        self.run_cli(*args, code=1)
+        self.assertTrue((self.root / "target/dx/rssr-app/release/web/public").is_dir())
+        self.assertEqual(self.stage("web-bundle")["status"], "failed")
+        self.assertIn("wasm-opt failure despite exit 0", self.stage("web-bundle")["detail"])
+        for name in ["reader-theme-matrix", "small-viewport", "fixed-browser-feed"]:
+            self.assertEqual(self.stage(name)["status"], "blocked")
+        build_args = self.stage("web-bundle")["args"]
+        self.assertEqual(build_args[build_args.index("--debug-symbols") + 1], "false")
+        # A fresh successful run in the same log directory must not reuse the old failure.
+        del self.env["FAILED_WASM_OPT"]
+        self.run_cli(*args)
+        self.assertEqual(self.stage("web-bundle")["status"], "passed")
+        self.assertEqual(self.stage("fixed-browser-feed")["status"], "passed")
+
     def test_owned_descendants_after_success_and_failure(self):
         self.env.update(HOLD_STAGE="wasm-check", FIXTURE_PORT=str(free_port()), ORPHAN="1")
         for fail in ["", "wasm-check"]:

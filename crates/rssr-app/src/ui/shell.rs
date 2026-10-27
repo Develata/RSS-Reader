@@ -1,4 +1,4 @@
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, rc::Rc, sync::Arc};
 
 use dioxus::core::{Runtime, current_scope_id};
 use dioxus::prelude::*;
@@ -51,10 +51,17 @@ pub(crate) struct AppShellState {
     /// A read of the settings failed after settings were applied, with the app's count of applied
     /// settings then: shown until settings are applied again (review C4B-B-08).
     settings_reread_failure: Signal<Option<(UiFailure, u64)>>,
+    /// Preference writes and feed URL edits share one ordering boundary. A URL edit
+    /// must migrate the last selected source, including saves from a page just left.
+    workspace_write_order: Signal<Arc<tokio::sync::Mutex<()>>>,
     owner: ScopeId,
 }
 
 impl AppShellState {
+    pub(crate) fn workspace_write_order(self) -> Arc<tokio::sync::Mutex<()>> {
+        Arc::clone(&self.workspace_write_order.peek())
+    }
+
     pub(crate) fn entry_search(self) -> String {
         (self.entry_search)()
     }
@@ -325,6 +332,7 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         auto_refresh_started: use_signal(|| false),
         settings_reread_wanted: use_signal(|| false),
         settings_reread_failure: use_signal(|| None),
+        workspace_write_order: use_signal(|| Arc::new(tokio::sync::Mutex::new(()))),
         owner: current_scope_id(),
     }
 }

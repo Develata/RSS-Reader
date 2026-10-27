@@ -11,6 +11,8 @@
 | 正式签名 APK / AAB | 已发布 | 仓库最近发布记录 `v0.1.20` 含 `RSS-Reader-android-arm64-v8a-release.apk` 和 `.aab`；签名和 tag 版本在发布 workflow 验证 |
 | 真机交互 | 待验收 | 构建与浏览器触摸模拟不能证明 Android 系统返回、长按选择、下拉刷新或图片缩放 |
 
+2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/2026-10-25-android-back-and-persistent-storage.md)。这部分结果不替代下述其他设备/正式签名与功能验收。
+
 打 tag 的发布流程要求 Android signing secrets 齐全，否则 `build-android` 失败；手动 workflow dispatch 可用于不带长期签名的 debug 验证。正式签名包与临时 debug 签名包不能互相覆盖安装。卸载会清除本地订阅、文章和图片缓存；卸载前先导出配置，但配置导出本身不包含文章库和已读状态。`versionCode` / `versionName` 从发布 tag 派生，不读取 workspace `Cargo.toml` 的版本号。
 
 ## 本地构建 debug APK

@@ -19,12 +19,14 @@ pub use url_guard::{
 pub use app_state::{AppStateSnapshot, EntriesWorkspaceState, EntryGroupingPreference};
 pub use config_fingerprint::{ConfigFingerprint, FingerprintFeed};
 pub use entry::{
-    ArchiveFilter, Entry, EntryContent, EntryNavigation, EntryQuery, EntryRecord, EntrySummary,
-    MAX_MARK_READ_SELECTION, MarkReadOutcome, MarkReadPreview, ReadFilter, StarredFilter,
-    archive_cutoff_at, is_entry_archived, mark_read_selection_too_large, stored_published_at,
+    ArchiveFilter, Entry, EntryBatchAction, EntryBatchRequest, EntryContent, EntryNavigation,
+    EntryQuery, EntryRecord, EntrySummary, MAX_MARK_READ_SELECTION, MarkReadOutcome,
+    MarkReadPreview, ReadFilter, StarredFilter, archive_cutoff_at, is_entry_archived,
+    mark_read_selection_too_large, stored_published_at,
 };
 pub use feed::{
-    Feed, FeedSummary, FetchErrorKind, NewFeedSubscription, normalize_feed_url, public_fetch_error,
+    Feed, FeedEditDetails, FeedEditRequest, FeedSummary, FetchErrorKind, NewFeedSubscription,
+    normalize_feed_url, public_fetch_error,
 };
 pub use listed::{LISTED_TITLE_MARK, MAX_LISTED_TITLE_CHARS, listed_title};
 pub use repository::{

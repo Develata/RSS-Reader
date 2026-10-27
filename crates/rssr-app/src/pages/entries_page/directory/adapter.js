@@ -8,6 +8,8 @@ let disposed = false, epoch = 0, sequence = 0, inFlight = null;
 let raf = 0, dirty = true, anchors = [], lastPath = '';
 let input = {source: null, serial: 0, at: 0}, reportedInput = 0;
 let requestFollow = false, reflow = false, ack = null, navigation = null;
+let measuredRail = null, reportedVisible = null, lastRailTop = 0;
+let reveal = null;
 // One in flight. Latest explicit intent per control + observation/input keys;
 // pending size is bounded by this context's rendered controls, not scroll rate.
 const pending = new Map();
@@ -17,6 +19,7 @@ const listen = (target, type, handler, options = {}) =>
 const visible = e => !!e?.getClientRects().length && !!(e.offsetWidth || e.offsetHeight);
 const consumer = target => target instanceof Element ? target.closest(directorySelector) : null;
 const presentedGroup = target => consumer(target)?.dataset.directoryCurrentGroup || null;
+const presentedItem = target => consumer(target)?.dataset.directoryCurrentItem || null;
 
 function sendNext() {
     if (disposed || inFlight || !pending.size || !epoch) return;
@@ -30,10 +33,11 @@ function queue(key, kind, fields = {}) {
     pending.delete(key);
     pending.set(key, {epoch, sequence: ++sequence, kind, ...fields});
     sendNext();
+    return sequence;
 }
 function selectAnchor() {
     if (dirty) {
-        anchors = [...root.querySelectorAll('[data-entry-scroll-anchor]')];
+        anchors = [...root.querySelectorAll('[data-entry-scroll-anchor], [data-position-entry]')];
         dirty = false;
     }
     let candidate = null;
@@ -45,12 +49,25 @@ function selectAnchor() {
         break;
     }
     candidate ||= anchors.at(-1);
-    return {group: candidate?.dataset.entryScrollGroupAnchor || null, item: candidate?.dataset.entryScrollAnchor || null};
+    const section = candidate?.closest('[data-entry-scroll-anchor]');
+    return {group: section?.dataset.entryScrollGroupAnchor || null, item: section?.dataset.entryScrollAnchor || null,
+        leaf: candidate?.hasAttribute('data-position-entry') ? candidate.id : null};
 }
 function update() {
     raf = 0;
     if (disposed || !root.isConnected) { cleanup(); return; }
     refreshContext();
+    const rail = root.querySelector('[data-directory-consumer="rail"]');
+    if (rail !== measuredRail) {
+        resizeObserver.disconnect();
+        measuredRail = rail;
+        if (rail) resizeObserver.observe(rail);
+    }
+    const displayed = visible(rail);
+    if (displayed !== reportedVisible) {
+        reportedVisible = displayed;
+        queue('visibility', 'visibility', {visible: displayed});
+    }
     const path = selectAnchor(), signature = JSON.stringify(path);
     if (requestFollow || signature !== lastPath) {
         queue(requestFollow ? 'follow' : 'observe', requestFollow ? 'follow' : 'observe', {...path, reflow});
@@ -68,9 +85,11 @@ function refreshContext() {
     const next = Number(root.querySelector('[data-directory-controller]')?.dataset.directoryEpoch || 0);
     if (!next || next === epoch) return;
     epoch = next;
+    if (navigation?.sequence === pending.get('navigate')?.sequence) navigation = null;
     pending.clear();
     if (ack) inFlight = null;
     ack = null; lastPath = ''; dirty = true;
+    reportedVisible = null; lastRailTop = 0; reveal = null;
     // An in-flight prior epoch still receives its ack; its result is discarded.
     input = {source: null, serial: input.serial + 1, at: 0};
     requestFollow = false;
@@ -80,7 +99,22 @@ function align(command) {
     const rail = root.querySelector('[data-directory-consumer="rail"]');
     if (visible(rail)) {
         const links = [...rail.querySelectorAll('[data-directory-anchor]')];
-        const target = links.find(e => e.dataset.directoryAnchor === command.item && visible(e)) ||
+        const leaf = links.find(e => e.dataset.directoryAnchor === command.leaf && visible(e));
+        const block = command.item && document.getElementById('directory-articles-' + command.item);
+        if (command.leaf && !leaf && block?.dataset.virtualArticles === 'true') {
+            if (!block.__rssrVirtualWindow) return false;
+            if (!reveal || reveal.sequence !== command.sequence || reveal.epoch !== command.epoch) {
+                const request = reveal = {sequence: command.sequence, epoch: command.epoch, done: false};
+                block.__rssrVirtualWindow.reveal(command.leaf).then(() => {
+                    request.done = true;
+                    if (!disposed && reveal === request) finishCommand();
+                });
+                return false;
+            }
+            if (!reveal.done) return false;
+        }
+        const target = leaf ||
+            links.find(e => e.dataset.directoryAnchor === command.item && e.dataset.canToggle !== 'true' && visible(e)) ||
             links.find(e => e.dataset.directoryAnchor === command.group && visible(e));
         if (target) {
             const r = rail.getBoundingClientRect(), t = target.getBoundingClientRect();
@@ -98,19 +132,31 @@ function align(command) {
             else if (t.right > right) top.scrollLeft += t.right - right;
         }
     }
+    return true;
 }
 function finishCommand() {
     if (disposed) return;
     refreshContext();
-    if (navigation && navigation.contextKey !== root.dataset.positionKey) navigation = null;
-    if (navigation && Number(root.dataset.positionPage) === navigation.page && root.dataset.positionReady === 'true') {
+    const page = Number(root.dataset.positionPage);
+    if (navigation) {
+        // Watch the requested page transition even before its reply arrives.
+        // Once another page/context supersedes it, the old ack cannot revive it.
+        if (navigation.contextKey !== root.dataset.positionKey ||
+            (page !== navigation.page && (navigation.arrived || page !== navigation.originPage))) navigation = null;
+        else if (page === navigation.page) navigation.arrived = true;
+    }
+    if (navigation?.approved && page === navigation.page && root.dataset.positionReady === 'true') {
         const element = document.getElementById(navigation.anchor);
         if (element && root.contains(element)) {
             input = {source: null, serial: input.serial + 1, at: 0};
-            if (location.hash !== '#' + encodeURIComponent(navigation.anchor)) location.hash = navigation.anchor;
+            // A directory jump is a position inside this workspace, not a route.
+            // Extra WebView history entries consume Android Back as fragment navigation.
+            const hash = '#' + encodeURIComponent(navigation.anchor);
+            if (location.hash !== hash) history.replaceState(history.state, '', hash);
             element.scrollIntoView({behavior: 'smooth', block: 'start', inline: 'nearest'});
-            navigation = null;
         }
+        // The ready page no longer containing a target also retires the request.
+        navigation = null;
     }
     if (!ack) return;
     if (ack.epoch !== epoch) { ack = null; inFlight = null; sendNext(); return; }
@@ -118,19 +164,26 @@ function finishCommand() {
     // acknowledge the version; a frame callback alone is NOT a commit fence.
     const consumers = [...root.querySelectorAll(directorySelector)];
     if (!consumers.every(e => Number(e.dataset.directoryEpoch) === ack.epoch && Number(e.dataset.directoryRevision) >= ack.revision)) return;
-    if (ack.align && !pending.size) align(ack);
+    if (ack.restore_scroll) {
+        const rail = root.querySelector('[data-directory-consumer="rail"]');
+        if (visible(rail)) rail.scrollTop = lastRailTop;
+    }
+    if (ack.align && !pending.size && !align(ack)) return;
     ack = null; inFlight = null;
     sendNext();
 }
 function noteInput(event) {
     if (!event.isTrusted) return;
     const target = event.target;
+    const inside = consumer(target);
     if (event.type === 'keydown') {
-        if (!['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key) || event.ctrlKey || event.altKey || event.metaKey) return;
+        // Tab may traverse and scroll a virtual branch. Treat that as manual
+        // directory browsing, but never arm main-list following for outside Tab.
+        const directoryTab = event.key === 'Tab' && inside;
+        if ((!directoryTab && !['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key)) || event.ctrlKey || event.altKey || event.metaKey) return;
         if (target instanceof Element && (target.closest('input,textarea,select,[contenteditable="true"]') ||
             (event.key === ' ' && target.closest('button,a')))) return;
     }
-    const inside = consumer(target);
     if (!inside && target instanceof Element && !root.contains(target) && target !== document.documentElement && target !== document.body) return;
     if (!inside && event.type === 'pointerdown') {
         // A click in content isn't a scroll gesture. Only arm pointer input
@@ -147,12 +200,17 @@ function noteInput(event) {
     input = {source: inside ? 'directory' : 'main', serial: input.serial + 1, at: performance.now()};
     if (inside) {
         requestFollow = false;
-        queue('manual', 'manual', {rendered_group: presentedGroup(target), epoch: Number(inside.dataset.directoryEpoch)});
+        queue('manual', 'manual', {rendered_group: presentedGroup(target), rendered_item: presentedItem(target), epoch: Number(inside.dataset.directoryEpoch)});
     }
 }
 function onScroll(event) {
     const target = event.target;
-    if (consumer(target)) return; // Includes our own rail/top alignment.
+    if (consumer(target)) {
+        if (target === measuredRail && visible(target) && target.dataset.directoryRendered === 'true') {
+            lastRailTop = target.scrollTop;
+        }
+        return; // Includes our own rail/top alignment.
+    }
     const groups = root.querySelector('[data-layout="entry-groups"]');
     const isMain = target === document || target === window ||
         (target instanceof Element && groups && target.contains(groups));
@@ -179,20 +237,24 @@ function onClick(event) {
     // against a possibly newer observation. Click covers mouse/Enter/Space.
     const anchor = button.dataset.directoryAnchor;
     const rendered_group = presentedGroup(button);
+    const rendered_item = presentedItem(button);
     const renderedEpoch = Number(consumer(button).dataset.directoryEpoch);
     input = {source: 'directory', serial: input.serial + 1, at: performance.now()};
     requestFollow = false;
-    if (button.dataset.layout === 'entry-directory-toggle') {
-        queue('toggle:' + anchor, 'set_open', {anchor, open: button.dataset.open !== 'true', rendered_group, epoch: renderedEpoch});
+    if (button.dataset.canToggle === 'true') {
+        queue('toggle:' + anchor, 'set_open', {anchor, open: button.dataset.open !== 'true', rendered_group, rendered_item, epoch: renderedEpoch});
     } else {
-        queue('navigate', 'navigate', {anchor, page: Number(button.dataset.directoryPage), rendered_group,
-            epoch: renderedEpoch, context_key: root.dataset.positionKey});
+        const page = Number(button.dataset.directoryPage), originPage = Number(root.dataset.positionPage);
+        const contextKey = root.dataset.positionKey;
+        const request = queue('navigate', 'navigate', {anchor, page, rendered_group, rendered_item,
+            epoch: renderedEpoch, context_key: contextKey});
+        navigation = request ? {sequence: request, anchor, page, originPage, contextKey, arrived: page === originPage, approved: false} : null;
     }
 }
 function cleanup() {
     if (disposed) return;
     disposed = true;
-    abort.abort(); observer.disconnect(); pending.clear(); navigation = null; ack = null;
+    abort.abort(); observer.disconnect(); resizeObserver.disconnect(); pending.clear(); navigation = null; ack = null;
     if (raf) cancelAnimationFrame(raf);
     if (window[trackerKey]?.cleanup === cleanup) delete window[trackerKey];
 }
@@ -207,7 +269,9 @@ function whenSettled() {
             if (disposed || !root.isConnected) { clearTimeout(timer); reject(new Error('Directory disposed')); return; }
             refreshContext();
             const consumers = [...root.querySelectorAll(directorySelector)];
+            const windows = [...root.querySelectorAll('[data-virtual-articles="true"]')];
             const idle = epoch && !raf && !inFlight && !ack && !pending.size && !navigation &&
+                windows.every(e => e.__rssrVirtualWindow?.idle) &&
                 consumers.every(e => Number(e.dataset.directoryEpoch) === epoch);
             stable = idle ? stable + 1 : 0;
             if (stable >= 2) { clearTimeout(timer); resolve({epoch, sequence}); }
@@ -223,14 +287,18 @@ const observer = new MutationObserver(records => {
     if (records.some(m => m.type === 'childList' && !(m.target instanceof Element && consumer(m.target)))) {
         dirty = true; scheduleUpdate();
     }
+    if (records.some(m => m.target === root && m.type === 'attributes')) scheduleUpdate();
     finishCommand();
 });
 observer.observe(root, {subtree: true, childList: true, attributes: true,
-    attributeFilter: ['data-directory-epoch','data-directory-revision','data-position-page','data-position-ready']});
+    attributeFilter: ['data-directory-epoch','data-directory-revision','data-position-page','data-position-ready',
+        'data-directory-collapsed','data-mobile-directory-open']});
+const resizeObserver = new ResizeObserver(() => scheduleUpdate());
 listen(window, 'scroll', onScroll, {capture: true, passive: true});
 listen(window, 'resize', () => scheduleUpdate(true), {passive: true});
 for (const name of ['wheel','touchstart','touchmove','pointerdown','keydown']) listen(document, name, noteInput, {capture: true, passive: true});
 listen(root, 'click', onClick, {capture: true});
+listen(root, 'rssr:directory-window-commit', finishCommand);
 window[trackerKey] = {cleanup, scheduleUpdate, whenSettled};
 scheduleUpdate(true);
 try {
@@ -238,8 +306,22 @@ try {
         const command = await dioxus.recv();
         if (!command) { cleanup(); break; }
         if (disposed) break;
+        if (command.rejected === true) {
+            // This private channel is sequential with one request in flight.
+            // A malformed request may have no usable sequence. Drop it once,
+            // keep pending user input, and remeasure on the next normal update;
+            // never retry an invalid payload in a loop or reset Rust UI state.
+            if (navigation?.sequence === inFlight?.sequence) navigation = null;
+            ack = null; inFlight = null;
+            lastPath = ''; reportedVisible = null;
+            sendNext();
+            continue;
+        }
         if (command.sequence !== inFlight?.sequence) continue;
-        if (command.navigate) navigation = {anchor: command.navigate, page: command.page, contextKey: inFlight.context_key};
+        if (navigation?.sequence === command.sequence) {
+            if (command.navigate === navigation.anchor && command.page === navigation.page) navigation.approved = true;
+            else navigation = null;
+        }
         ack = command;
         finishCommand();
     }

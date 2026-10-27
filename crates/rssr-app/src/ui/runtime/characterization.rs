@@ -20,7 +20,6 @@ use rssr_infra::store::LibraryStore;
 
 use super::execute_ui_command;
 use crate::bootstrap::AppServices;
-use crate::pages::entries_page::intent::EntriesPageIntent;
 use crate::pages::feeds_page::intent::FeedsPageIntent;
 use crate::ui::commands::{
     EntriesCommand, FeedsCommand, ReaderCommand, SettingsCommand, ShellCommand, UiCommand,
@@ -536,27 +535,34 @@ async fn ui_commands_produce_the_recorded_intents() {
             entries(EntriesCommand::Bootstrap { load_preferences: true, load_feeds: false }),
         )
         .await;
-    let previewed = transcript
-        .run(
-            "preview mark read",
-            entries(EntriesCommand::PreviewMarkRead { query: EntryQuery::default() }),
-        )
-        .await;
-    let preview = previewed
-        .into_iter()
-        .find_map(|intent| match intent {
-            UiIntent::EntriesPage(EntriesPageIntent::BulkPreview(preview)) => Some(preview),
-            _ => None,
-        })
-        .expect("a preview");
+    for label in ["mark selected articles read", "repeat the same selection"] {
+        transcript
+            .run(
+                label,
+                entries(EntriesCommand::ApplySelection {
+                    request: rssr_domain::EntryBatchRequest {
+                        entry_ids: vec![1, 2],
+                        action: rssr_domain::EntryBatchAction::MarkRead,
+                    },
+                }),
+            )
+            .await;
+    }
     transcript
-        .run(
-            "confirm mark read",
-            entries(EntriesCommand::ConfirmMarkRead { preview: preview.clone() }),
-        )
+        .run("load feed editor", feeds(FeedsCommand::LoadEdit { feed_id: 1, generation: 1 }))
         .await;
     transcript
-        .run("confirm a stale preview", entries(EntriesCommand::ConfirmMarkRead { preview }))
+        .run(
+            "save feed editor",
+            feeds(FeedsCommand::SaveEdit {
+                edit: rssr_domain::FeedEditRequest {
+                    feed_id: 1,
+                    url: server.url("/a.xml"),
+                    custom_title: Some("Edited source".into()),
+                },
+                generation: 1,
+            }),
+        )
         .await;
 
     transcript.run("reader load", reader(ReaderCommand::LoadEntry { entry_id: 1 })).await;

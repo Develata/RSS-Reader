@@ -65,7 +65,7 @@ Web 装配与存储边界核对：2026-10-22（v0.2 C4c）。
 - SQLite / native 实现
 - browser persisted-state 实现
 - parser / fetch / WebDAV / OPML / JSON codec
-- 原生/服务器单库 `library.sqlite3`，正式 Web 的 `HttpBackend` 传输，以及仅演示使用的 `BrowserStore` 分片、Web Locks 与版本化提交
+- 原生 / 服务器单库 `library.sqlite3`、正式 Web 的 `HttpBackend` 传输，以及 Pages 演示复用共享 SQL 的内存 SQLite；不保留 BrowserStore 持久化路径
 
 这层实现存储、网络、解析等端口；业务结果和流程规则仍由 application 定义。
 
@@ -98,6 +98,8 @@ Web 装配与存储边界核对：2026-10-22（v0.2 C4c）。
 - semantic DOM
 
 页面 session 还负责自己发起的异步结果归属：Entries 只接纳最新查询，Reader 按文章身份及加载代际隔离迟到结果，Settings 保存区分提交快照与后续草稿。这些均为 UI 生命周期状态，不下沉到 domain / application，也不让 CSS 决定业务命令。
+
+Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；session 保留 Dioxus 任务作用域、命令执行及状态发布。具体边界见[原生界面前置模块](./native-ui-preparation.md)，单条/批量写入与偏好保存的编排仍由现有 session 承接。
 
 不再负责：
 

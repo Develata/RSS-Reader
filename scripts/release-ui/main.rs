@@ -9,7 +9,7 @@ use serde::Serialize;
 use std::{
     collections::HashSet,
     fs::{self, File, OpenOptions},
-    io::{self, Write},
+    io::{self, BufRead, BufReader, Write},
     net::TcpListener,
     path::{Path, PathBuf},
     process::Command,
@@ -305,8 +305,23 @@ fn execute(
     report.steps[index].pid = Some(child.id());
     report.write()?;
     let code = process::wait(&mut child, &mut tail, cancelled)?;
-    if step.name == "web-bundle" && code == 0 && !public.is_dir() {
-        return Err(io::Error::other(format!("Web build output not found: {}", public.display())));
+    if step.name == "web-bundle" && code == 0 {
+        // dx 0.7 can log an optimizer failure, keep the unoptimized input, and exit 0.
+        // Inspect the completed stage log before allowing consumers to use that bundle.
+        for line in BufReader::new(File::open(&log)?).lines() {
+            let line = line?;
+            if line.contains("wasm-opt failed") || line.contains("wasm_opt_failed") {
+                return Err(io::Error::other(
+                    "dx reported a wasm-opt failure despite exit 0; see web-build.log",
+                ));
+            }
+        }
+        if !public.is_dir() {
+            return Err(io::Error::other(format!(
+                "Web build output not found: {}",
+                public.display()
+            )));
+        }
     }
     Ok(code)
 }

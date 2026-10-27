@@ -2,6 +2,8 @@
 
 文章列表返回定位使用 `[data-layout="entry-card"][data-return-highlight="true"]`，短暂显示淡背景；不得把它解释为已读或收藏状态。主题应避免在这里改变尺寸、位置或加入闪烁动画。内部 `data-position-*` 字段用于 DOM 测量，不是主题稳定接口。
 
+来源目录包含来源、月份和文章三级；时间目录包含月份、日期和文章三级。月份 / 日期文字沿用 `entry-directory-link` 定位，右侧独立的 `entry-directory-branch-toggle` 展开文章；文章按钮使用 `entry-directory-link[data-directory-level="article"]`，当前文章带 `aria-current="location"`。默认样式将各级箭头统一放在右侧，文章容器仅保留 8px 左缩进；标签先于展开按钮的 DOM 顺序与视觉、键盘顺序一致。主题应保留展开箭头的点击范围及键盘焦点，允许文章标题两行显示；展开层级不改变主列表的勾选语义。折叠路径的文章节点不常驻 DOM。
+
 这份文档面向自定义主题作者，记录当前 UI 中可长期依赖的稳定样式接口。
 
 目标：
@@ -10,13 +12,13 @@
 - 让页面重构不轻易打碎主题
 - 给手写主题和 AI 生成主题提供同一份约束
 
-> 顶栏交互更新：`app-nav-shell[data-state]` 使用 `normal` / `search` / `collapsed`。展开时可用 R；收起时仅保留 `data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 窄箭头，触控范围至少 44×44px。R 的 `activate-home` 包含显式用户刷新，不能替换为 `data-nav="entries"`。旧 show/hide-top-nav、brand-name、reader-toolbar 已退役。来源 `entry-filters-source-chip` 现在是完整名称换行选择行；请勿用 ellipsis 隐藏核心名称。`entry-pagination` 是页面 panel 的同级固定控件，主题应保留底部内容空间。完整行为见 [命令参考](./frontend-command-reference.md#home搜索与阅读交互)。
+> 顶栏交互更新：`app-nav-shell[data-state]` 使用 `normal` / `search` / `collapsed`。展开时可用 R；收起时仅保留 `data-action="toggle-nav"` / `data-slot="app-nav-toggle"` 窄箭头，触控范围至少 44×44px。R 的 `activate-home` 包含显式用户刷新，不能替换为 `data-nav="entries"`。旧 show/hide-top-nav、brand-name、reader-toolbar 已退役。来源改为 `open-source-filter` 打开的勾选弹层，完整名称在弹层中换行；旧 source-chip 和来源未读槽位已退役。`entry-pagination` 是页面 panel 的同级固定控件，主题应保留底部内容空间。完整行为见 [命令参考](./frontend-command-reference.md#home搜索与阅读交互)。
 
 窄导航中的搜索输入应可换到下一行；默认容器断点为 328px，包含收起按钮的 48px 预留；搜索换行后使用首行箭头下方的完整行宽。主题覆盖导航宽度时应一起保留输入宽度和箭头触控空间，无新增选择器接口。
 
-文章列表每篇文章的「标已读 / 收藏」（`entry-card-actions` 内的 `.button[data-slot="entry-card-action"]`）默认是描边胶囊，只取 `--ink` / `--muted` / `--line` / `--line-soft`，特异性高于 `.button[data-variant="secondary"]`；主题要改它们请直接使用这条 selector。收起的筛选开关 `entry-controls-toggle` 内含可见文字 `entry-controls-toggle-label`。
+文章右侧已读／收藏使用 `[data-slot="entry-card-action"]` 图标按钮和 `aria-pressed` 状态。左侧 `select-entry` 是独立选择入口，16px 圆角方框、44px 点击范围。`data-selected="true"` 使用淡背景，不加整行描边；默认／悬停／键盘聚焦／已有选择分别表现。旧 `entry-controls-toggle` 与折叠标签已退役。
 
-生效的搜索、已读、收藏和来源条件放在面板外的 `entry-filter-summary`，文字槽位为 `entry-filter-summary-text`，`clear-entry-filters` 为清除入口。摘要允许换行，主题应在面板收起后保留它。
+生效的搜索、已读、收藏和来源条件放在筛选栏下的 `entry-filter-summary`，文字槽位为 `entry-filter-summary-text`，`clear-entry-filters` 为清除入口。摘要允许换行，主题应保留它；筛选栏现在常驻。
 
 Reader 元信息的整体留白与分隔线应施加在 `reader-meta-block`，`reader-meta` 表示其中单行，避免每行重复增加块级间距。底部四个按钮应适应等宽列，不能用超过列宽的最小宽度覆盖相邻点击区域。Amethyst Glass 已采用上述布局；旧预设保留身份，重新应用后取得新样式。
 
@@ -231,7 +233,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-action="activate-home"`
 - `data-action="toggle-search"`
 - `data-action="toggle-nav"`
-- `data-action="show-entry-controls"` / `hide-entry-controls`
+- `data-action="show-entry-controls"` / `hide-entry-controls`（2026-10-24 退役）
 - `data-action="clear-entry-filters"`
 - `data-action="preview-mark-filtered-read"` / `confirm-mark-filtered-read` / `cancel-mark-filtered-read`
 - `data-action="entry-page-previous"`
@@ -253,7 +255,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-field="starred-filter-starred"`
 - `data-field="starred-filter-unstarred"`
 - `data-field="entry-source-filter"`
-- `data-field="entry-grouping-mode"`
+- `data-field="entry-grouping-mode"`（2026-10-24 退役）
 - `data-field="show-archived"`
 - `data-field="feed-url-input"`
 - `data-field="config-text"`
@@ -311,13 +313,13 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-layout="entry-directory-grandchildren"`
 - `data-layout="entry-directory-link"`
 - `data-layout="entry-directory-toggle"`
-- `data-layout="entry-top-directory"`
-- `data-layout="entry-top-directory-chip"`
+- `data-layout="entry-top-directory"`（2026-10-24 退役）
+- `data-layout="entry-top-directory-chip"`（2026-10-24 退役）
 - `data-layout="entry-filters"`
 - `data-layout="entry-filter-summary"`
-- `data-layout="entry-filters-toggle"`
-- `data-layout="entry-filters-sources"`
-- `data-layout="entry-filters-source-grid"`
+- `data-layout="entry-filters-toggle"`（2026-10-24 退役）
+- `data-layout="entry-filters-sources"`（2026-10-24 退役）
+- `data-layout="entry-filters-source-grid"`（2026-10-24 退役）
 
 ### 阅读页
 
@@ -340,12 +342,12 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-slot="entry-directory-heading"`
 - `data-slot="entry-directory-title"`
 - `data-slot="entry-directory-meta"`
-- `data-slot="entry-filters-sources-label"`
+- `data-slot="entry-filters-sources-label"`（2026-10-24 退役）
 - `data-slot="entry-filter-summary-text"`
 - `data-slot="feed-card-title"`
 - `data-slot="feed-card-meta"`
 - `data-slot="entry-card-title"`
-- `data-slot="entry-filters-source-unread-count"`：来源全部未读数，含 0，弱化行内数字
+- `data-slot="entry-filters-source-unread-count"`（2026-10-24 退役，统计移至订阅页）
 - `data-slot="entry-card-meta"`
 - `data-slot="page-intro"`
 - `data-slot="reader-title"`
@@ -373,6 +375,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `starred | unstarred`
 - `html | text`
 - `empty | populated`
+- 阅读页根节点：`pending | loaded | error`；`loaded` 表示当前路由文章内容已就绪，加载期间使用 `pending` 和 `aria-busy="true"`。
 
 ### `data-variant`
 
@@ -429,7 +432,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 
 应用底色与边线：
 
-- `--app-bg` / `--app-bg-dark`：视口底色（亮 / 暗）
+- `--app-bg` / `--app-bg-dark`：视口底色（亮 / 暗），默认使用纯暖米色 / 纯深灰；主题仍可覆写为自己的底色或底纹。
 - `--line-soft`：组件级细边线（`--line` 用于分隔线与较强边框）
 
 表面：
@@ -636,14 +639,20 @@ cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/
 Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重置。
 完整时间显示设备本地数值偏移，零偏移或回退显示 UTC；卡片与年月日分组共用加载时转换后的时间。
 
-`data-layout="entry-filters-source-chip"` 继续保留。数字槽位
-`data-slot="entry-filters-source-unread-count"` 使用弱化行内文本；控件可访问名称仍为来源名，
-通过 `aria-describedby` 关联“未读 N 篇”，可见数字不重复朗读。
-计数来自 `FeedSummary.unread_count`，不由当前文章集合计算；成功标记后重查订阅汇总，失败不预减计数。
+来源未读数字已移至 Subscribe，来自 `FeedSummary.unread_count`，不受当前文章筛选影响。
 
-## 批量已读
+## 阅读工作区样式接口（2026-10-24）
 
-`[data-layout=entry-bulk-read]` 为可换行的行内操作区，`data-state` 为 `idle` 或 `confirm`。按钮动作接口为 `preview-mark-filtered-read`、`confirm-mark-filtered-read`、`cancel-mark-filtered-read`，沿用 `data-slot=confirm-hint`。样式在 `assets/styles/entries.css`，按钮最小高度 44px；反馈复用 StatusBanner。
+默认样式补充于 `assets/styles/reading-workspace.css`，颜色继续消费主题 token。新增 `--selection-line`、`--selection-line-active`、`--selection-hover`、`--selection-row-bg` 从当前 shell 的主题派生；不要把变量固定在根节点造成深色模式失配。
+
+- 列表 `entries-main` 与 `entry-directory-rail` 为独立面板，12px 间距；目录 ≤1000px 收起，`open-directory` / `close-directory` 控制显示。旧横向 `entry-top-directory` / chip 已退役。
+- `open-source-filter` 打开 `#source-filter-dialog`；`.source-choice` 保留完整名称，`apply-source-filter` 应用。来源名称与 URL 的编辑只在 Subscribe 的 `edit-feed` / `#feed-edit-dialog` / `save-feed-edit`。
+- `select-entry`、`select-current-page`、`mark-selected-read`、`archive-selected` 是当前多选动作接口；已读／收藏状态按钮原 `mark-read` / `toggle-starred` 保留。旧 `entry-bulk-read` 和 preview/confirm/cancel-mark-filtered-read 已退役。
+- 来源／时间使用 `.entry-group-toggle`、`group-by-source` / `group-by-time`、`aria-pressed`，替代 `data-field=entry-grouping-mode` 的 select。
+- `entry-pagination` 保持页面同级、底部居中，两箭头靠近。主题必须保留 safe-area 与内容末尾空间，不能把箭头拉到面板两端。
+- `stats-grid` 卡片 `data-stat` 为 `feeds` / `entries` / `unread` / `archived`。来源统计不再出现在文章筛选弹层。
+
+下方历史选择器清单如包含已退役项，以本节及命令参考中的迁移说明为准；保留其它现有布局／槽位供主题继续使用。
 
 ## 网站首页发现候选
 

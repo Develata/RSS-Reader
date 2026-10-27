@@ -8,18 +8,12 @@ use dioxus::mobile::{
 };
 use dioxus::prelude::*;
 
+#[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
+mod android_bridge;
+#[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
+mod back_capture;
 #[cfg(target_os = "android")]
-thread_local! {
-    static BACK_CAPTURE_PENDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-#[cfg(target_os = "android")]
-struct BackCaptureGuard;
-#[cfg(target_os = "android")]
-impl Drop for BackCaptureGuard {
-    fn drop(&mut self) {
-        BACK_CAPTURE_PENDING.set(false);
-    }
-}
+static BACK_CAPTURE: back_capture::BackCaptureGate = back_capture::BackCaptureGate::new();
 
 /// 首页上第一次按返回后，等第二次按下的时长；过了就收起提示，重新计。
 #[cfg(target_os = "android")]
@@ -58,10 +52,9 @@ fn navigate_back_after_capture(navigator: Navigator, fallback_route: Option<AppR
     {
         return false;
     }
-    if BACK_CAPTURE_PENDING.replace(true) {
+    let Some(guard) = BACK_CAPTURE.try_acquire() else {
         return true;
-    }
-    let guard = BackCaptureGuard;
+    };
     let route = history().current_route();
     spawn(async move {
         let _guard = guard;
@@ -85,8 +78,8 @@ pub fn use_mobile_back_navigation(fallback_route: Option<AppRoute>) -> Signal<bo
 pub(crate) fn use_mobile_back_navigation_with_dismiss(
     fallback_route: Option<AppRoute>,
     dismiss: impl Fn() -> bool + 'static,
-) {
-    use_back_navigation(fallback_route, dismiss);
+) -> Signal<bool> {
+    use_back_navigation(fallback_route, dismiss)
 }
 
 fn use_back_navigation(
@@ -134,7 +127,7 @@ fn use_back_navigation(
                 navigate_back_after_capture(navigator, fallback_route.clone());
             } else if exit_hint() {
                 exit_hint.set(false);
-                android::move_task_to_back();
+                android_bridge::background_task();
             } else {
                 exit_hint.set(true);
                 let round = hint_round() + 1;
@@ -147,63 +140,21 @@ fn use_back_navigation(
                 });
             }
         });
-        use_future(move || async move {
-            loop {
-                android::BACK_REQUESTS.notified().await;
-                on_back.call(());
-            }
+        let registration = use_hook(move || {
+            let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+            let registration = android_bridge::register(sender);
+            spawn(async move {
+                while receiver.recv().await.is_some() {
+                    on_back.call(());
+                }
+            });
+            registration
         });
+        use_drop(move || android_bridge::unregister(registration));
     }
 
     #[cfg(not(target_os = "android"))]
     let _ = (fallback_route, dismiss);
 
     exit_hint
-}
-
-#[cfg(target_os = "android")]
-mod android {
-    use std::{
-        panic::{AssertUnwindSafe, catch_unwind},
-        sync::LazyLock,
-    };
-
-    use anyhow::Context;
-    use jni::{JNIEnv, JavaVM, objects::JObject};
-    use tokio::sync::Notify;
-
-    /// 系统返回键。MainActivity 不让 WebView 沿它自己的历史后退（应用内跳转不进那份历史，
-    /// 它只记页内锚点，后退只会无声地弹掉锚点），而是经 JNI 通知这里，由当前页面处理。
-    /// 只唤醒已经在等的页面：换页途中按下的那一次丢掉，不会留到下一页才生效。
-    pub(super) static BACK_REQUESTS: LazyLock<Notify> = LazyLock::new(Notify::new);
-
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_dev_dioxus_main_MainActivity_requestAppBack(
-        _env: JNIEnv,
-        _activity: JObject,
-    ) {
-        if catch_unwind(AssertUnwindSafe(|| BACK_REQUESTS.notify_waiters())).is_err() {
-            tracing::error!("Android 返回键 JNI 回调发生 panic，已阻止其跨越 FFI 边界");
-        }
-    }
-
-    /// 首页上确认退出：Activity 退到后台而不结束，与 Android 12 起根 Activity 的默认返回
-    /// 一致，也不会在下次打开时再起一个应用实例。
-    pub(super) fn move_task_to_back() {
-        if let Err(error) = call_exit_to_background() {
-            tracing::error!("无法让应用退到后台：{error:#}");
-        }
-    }
-
-    fn call_exit_to_background() -> anyhow::Result<()> {
-        let context = ndk_context::android_context();
-        let vm =
-            unsafe { JavaVM::from_raw(context.vm().cast()) }.context("无法访问 Android JavaVM")?;
-        let mut env =
-            vm.attach_current_thread().context("无法把返回键处理线程附加到 Android JavaVM")?;
-        let activity = unsafe { JObject::from_raw(context.context().cast()) };
-        env.call_method(&activity, "exitToBackground", "()V", &[])
-            .context("无法调用 MainActivity.exitToBackground")?;
-        Ok(())
-    }
 }

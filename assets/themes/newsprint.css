@@ -202,11 +202,11 @@ body:has(.theme-dark) {
 }
 
 [data-layout="app-nav-shell"] {
-  padding: 8px 10px;
+  padding: 0 10px;
 }
 
 [data-layout="app-nav-links"] {
-  gap: 8px;
+  gap: 0;
 }
 
 [data-nav] {

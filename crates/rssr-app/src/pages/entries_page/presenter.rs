@@ -14,7 +14,7 @@ use super::{
 
 /// 投影里持有的条目集合。
 ///
-/// 只对外暴露分组键（下标 + `id` + `feed_title` + `published_at`），**取不到** `title` /
+/// 只对外暴露分组键（下标 + `id` + `feed_id` + `feed_title` + `published_at`），**取不到** `title` /
 /// `is_read` / `is_starred`：因为本类型的相等性刻意忽略这些字段，memo 里缓存的这份数据在
 /// 标记切换后就是过期的。卡片需要的完整条目在渲染时从最新状态解析
 /// （`EntriesPageFacade::entry_at`），不经过这份缓存。
@@ -42,6 +42,7 @@ impl GroupingEntries {
             .map(|(index, entry)| EntryGroupKey {
                 index,
                 id: entry.id,
+                feed_id: entry.feed_id,
                 feed_title: entry.feed_title.as_str(),
                 published_at: entry.published_at,
             })
@@ -52,7 +53,7 @@ impl GroupingEntries {
 impl PartialEq for GroupingEntries {
     /// 相等 ⟺ 由这批条目派生出的分组树完全一致。
     ///
-    /// 只比较分组真正依赖的字段（`id` / `feed_title` / `published_at`）以及数量和顺序。
+    /// 只比较分组真正依赖的字段（`id` / `feed_id` / `feed_title` / `published_at`）以及数量和顺序。
     /// `title` / `is_read` / `is_starred` **刻意不比较**：它们只出现在卡片上，而卡片是渲染时
     /// 按下标从最新状态解析的，不受这份缓存影响。切换已读/收藏因此不再重建分组树。
     ///
@@ -66,6 +67,7 @@ impl PartialEq for GroupingEntries {
                     // 没被改动的条目共享同一个 Arc，指针相等即可短路。
                     Arc::ptr_eq(left, right)
                         || (left.id == right.id
+                            && left.feed_id == right.feed_id
                             && left.published_at == right.published_at
                             && left.published_at.map(|at| at.offset())
                                 == right.published_at.map(|at| at.offset())
@@ -77,7 +79,7 @@ impl PartialEq for GroupingEntries {
 /// presenter 真正依赖的那部分状态。
 ///
 /// Dioxus 的信号订阅粒度是「整个信号」，读任何一个字段都会订阅整份 `EntriesPageState`，
-/// 于是 `SetStatus`、`SetControlsHidden` 这类与分组毫无关系的 intent 也会让 presenter 失效、
+/// 于是 `SetStatus`、`ToggleSelected` 这类与分组毫无关系的 intent 也会让 presenter 失效、
 /// 重建两棵分组树。把依赖收窄成这个投影后，可以用 memo 链：投影 memo 每次状态变化都会重算，
 /// 但它的值没变时，presenter memo 不会重算。
 ///
@@ -149,7 +151,7 @@ pub(crate) struct EntriesPagePresenter {
 impl EntriesPagePresenter {
     /// 从 [`EntriesPresenterInput`] 派生这一屏要渲染的内容。
     ///
-    /// 归档筛选与计数已经由存储层完成（见 `EntriesPageState::entry_query` 与
+    /// 归档筛选与计数已经由存储层完成（见 `EntriesPageState::entry_query_scope` 与
     /// `EntriesListService::list_entries`），因此这里拿到的条目就是可显示集合，
     /// 不再需要当前时间。输入是一个窄投影，因此本函数只在真正影响输出的字段变化时才会重跑。
     ///
@@ -283,11 +285,8 @@ impl GroupingOutcome {
             paged_groups.iter().map(|group| group.anchor_id.clone()).collect();
         let (active_group_anchor, active_directory_anchor) =
             find_active_source_anchors(&all_groups, current_entry_index(paged_keys));
-        let directory_sources = build_directory_sources(
-            &all_groups,
-            active_group_anchor.as_deref(),
-            active_directory_anchor.as_deref(),
-        );
+        let directory_sources =
+            build_directory_sources(&all_groups, active_group_anchor.as_deref());
         let group_nav_items = build_group_nav_items(&all_groups, active_group_anchor.as_deref());
 
         Self {
@@ -377,14 +376,61 @@ mod tests {
         leaf_cards(presenter).into_iter().map(|card| card.index).collect()
     }
 
+    #[test]
+    fn source_identity_does_not_depend_on_custom_display_names() {
+        let mut state = EntriesPageState::new();
+        state.grouping_mode = EntryGroupingMode::Source;
+        for names in [["Same", "Same"], ["A/B", "A B"]] {
+            state.entries = vec![
+                entry(1, 10, names[0], "2026-04-04T08:00:00Z"),
+                entry(2, 20, names[1], "2026-04-04T07:00:00Z"),
+            ]
+            .into();
+            let presenter =
+                EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+            assert_eq!(
+                presenter.directory_sources.len(),
+                2,
+                "different feed IDs keep separate source groups"
+            );
+            assert_ne!(
+                presenter.directory_sources[0].anchor_id, presenter.directory_sources[1].anchor_id,
+                "display-name slugs cannot collide"
+            );
+            let first_anchor = presenter.directory_sources[0].anchor_id.clone();
+            Arc::make_mut(&mut Arc::make_mut(&mut state.entries)[0]).feed_title = "Renamed".into();
+            let renamed =
+                EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+            assert_eq!(
+                first_anchor, renamed.directory_sources[0].anchor_id,
+                "renaming keeps the navigation identity"
+            );
+        }
+        state.grouping_mode = EntryGroupingMode::Time;
+        state.entries = vec![
+            entry(1, 10, "Same", "2026-04-04T08:00:00Z"),
+            entry(2, 20, "Same", "2026-04-04T07:00:00Z"),
+        ]
+        .into();
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+        assert_eq!(presenter.time_grouped_entries[0].dates[0].sources.len(), 2);
+        let original_input = EntriesPresenterInput::from_state(&state, None);
+        Arc::make_mut(&mut Arc::make_mut(&mut state.entries)[0]).feed_id = 30;
+        assert!(
+            original_input != EntriesPresenterInput::from_state(&state, None),
+            "the grouping memo must track source identity"
+        );
+    }
+
     /// Reproducible CPU projection probe; excludes storage, browser layout and network.
     /// Run alone in release mode with --ignored --nocapture --test-threads=1.
     #[test]
     #[ignore = "manual performance measurement"]
     fn measure_entries_projection() {
         use std::{hint::black_box, time::Instant};
-        for count in [800, 2000] {
-            let mut state = EntriesPageState::new(true);
+        for count in [800, 2000, 5000] {
+            let mut state = EntriesPageState::new();
             state.entries_page_size = 50;
             state.entries = (0..count)
                 .map(|index| {
@@ -444,14 +490,15 @@ mod tests {
     /// 这些字段一旦被误加进 `EntriesPresenterInput`，分组树就会为状态提示之类的变化重建。
     #[test]
     fn presenter_input_excludes_state_that_does_not_change_rendering() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
 
         // 每次切换已读/收藏都会附带发一条 SetStatus。
         state.status = "已将《X》标记为已读。".to_string();
         state.status_tone = "info".to_string();
-        state.controls_hidden = !state.controls_hidden;
+        state.selected_entry_ids = Arc::new([1].into_iter().collect());
+        state.pending_entry_writes = Arc::new([1].into_iter().collect());
         state.show_archived = !state.show_archived;
         state.read_filter = rssr_domain::ReadFilter::UnreadOnly;
         state.starred_filter = rssr_domain::StarredFilter::StarredOnly;
@@ -472,7 +519,7 @@ mod tests {
     /// 切换已读/收藏不再重建两棵树。
     #[test]
     fn only_grouping_relevant_entry_fields_invalidate_the_projection() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
         let original = (*state.entries[0]).clone();
@@ -547,7 +594,7 @@ mod tests {
     /// 所以这里断言的是「投影字段变化能被看见」，不是「它影响分组」。
     #[test]
     fn presenter_input_includes_every_field_that_changes_rendering() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         let baseline = EntriesPresenterInput::from_state(&state, None);
 
@@ -577,7 +624,7 @@ mod tests {
     /// 它的下标仍然指向同一批条目。这条测试就是这条不变量的守卫。
     #[test]
     fn reusing_the_cached_tree_keeps_indices_pointing_at_the_same_entries() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 10;
         state.entries = vec![
             entry(1, 1, "Alpha", "2026-04-04T08:00:00Z"),
@@ -614,7 +661,7 @@ mod tests {
     /// 活动锚点为 `None`。分页相关标量在这里也有独立取值（`total_pages == 0`、`page_start == 0`）。
     #[test]
     fn empty_entry_list_produces_an_empty_presenter() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.current_page = 3;
 
         for mode in [EntryGroupingMode::Time, EntryGroupingMode::Source] {
@@ -638,7 +685,7 @@ mod tests {
     /// 若退化成页内相对下标，第 2 页的卡片会解析到第 1 页的条目上。
     #[test]
     fn paged_group_leaves_carry_absolute_indices() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 2;
         state.current_page = 2;
         state.entries = vec![
@@ -663,7 +710,7 @@ mod tests {
     /// 因此 `feed_id` 必须留在投影里，且两条路由要给出不同结果。
     #[test]
     fn browsing_a_single_feed_hides_the_source_filter() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries = vec![entry(1, 1, "Alpha", "2026-04-04T08:00:00Z")].into();
         state.feeds = vec![feed(1, "Alpha", "https://example.com/alpha.xml")].into();
 
@@ -680,7 +727,7 @@ mod tests {
 
     #[test]
     fn presenter_uses_page_slice_for_rendering_and_full_scope_for_directory() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 2;
         state.current_page = 2;
         state.grouping_mode = EntryGroupingMode::Time;
@@ -723,7 +770,7 @@ mod tests {
 
     #[test]
     fn presenter_marks_directory_item_for_current_page_first_entry() {
-        let mut state = EntriesPageState::new(true);
+        let mut state = EntriesPageState::new();
         state.entries_page_size = 1;
         state.current_page = 2;
         state.grouping_mode = EntryGroupingMode::Source;
@@ -736,9 +783,40 @@ mod tests {
         let presenter =
             EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
 
-        assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-group-beta"));
+        assert_eq!(presenter.active_group_anchor.as_deref(), Some("entry-source-2"));
         assert!(presenter.group_nav_items.iter().any(|item| item.is_active));
         assert!(presenter.directory_sources.iter().any(|item| item.is_active));
-        assert!(presenter.default_expanded_directory_sections.contains("entry-group-beta"));
+        assert!(presenter.default_expanded_directory_sections.contains("entry-source-2"));
+    }
+
+    #[test]
+    fn directory_and_paged_list_share_anchors_when_a_bucket_spans_pages() {
+        let mut state = EntriesPageState::new();
+        state.entries_page_size = 1;
+        state.current_page = 2;
+        state.entries = vec![
+            entry(11, 1, "Alpha", "2026-04-04T08:00:00Z"),
+            entry(12, 1, "Alpha", "2026-04-04T07:00:00Z"),
+        ]
+        .into();
+        state.grouping_mode = EntryGroupingMode::Source;
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+        let month = &presenter.directory_sources[0].months[0];
+        assert_eq!(month.anchor_id, presenter.source_grouped_entries[0].months[0].anchor_id);
+        assert_eq!(presenter.active_directory_anchor.as_deref(), Some(month.anchor_id.as_str()));
+        assert_eq!(month.entry_cards.len(), 2);
+        assert_eq!(month.entry_cards[1].index, 1);
+        assert_eq!(month.entry_cards[1].id, 12);
+        state.grouping_mode = EntryGroupingMode::Time;
+        let presenter =
+            EntriesPagePresenter::from_input(&EntriesPresenterInput::from_state(&state, None));
+        let date = &presenter.directory_months[0].dates[0];
+        assert_eq!(date.anchor_id, presenter.time_grouped_entries[0].dates[0].anchor_id);
+        assert_eq!(presenter.active_directory_anchor.as_deref(), Some(date.anchor_id.as_str()));
+        assert_eq!(date.entry_cards.len(), 2);
+        assert_eq!(date.entry_cards[0].id, 11);
+        assert_eq!(date.entry_cards[1].id, 12);
+        assert_eq!(date.entry_cards[1].index, 1);
     }
 }

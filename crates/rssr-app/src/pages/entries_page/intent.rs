@@ -7,14 +7,21 @@ use crate::ui::failure::UiFailure;
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesPageIntent {
+    ToggleSelected(i64),
+    TogglePageSelection,
+    ClearSelection,
+    ReloadEntries,
+    EntryWriteStarted(i64),
+    EntryWriteFinished(i64),
+    SelectionApplied {
+        ids: Vec<i64>,
+        action: rssr_domain::EntryBatchAction,
+        count: u64,
+    },
     BeginBulk {
         writing: bool,
     },
     CancelBulk,
-    BulkPreview(rssr_domain::MarkReadPreview),
-    BulkApplied(u64),
-    /// The preview or the confirmed write failed; an unknown outcome also drops the preview
-    /// (the write may have applied).
     BulkFailed(UiFailure),
 
     ApplyLoadedSettings(UserSettings),
@@ -77,7 +84,6 @@ pub(crate) enum EntriesPageIntent {
     SetCurrentPage(u32),
     GoToNextPage,
     GoToPreviousPage,
-    SetControlsHidden(bool),
 }
 
 impl EntriesPageIntent {

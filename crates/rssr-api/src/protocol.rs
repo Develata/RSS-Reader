@@ -92,6 +92,7 @@ pub mod routes {
     pub const ENTRY_READ: &str = "/api/v1/entries/{entry_id}/read";
     pub const ENTRY_STARRED: &str = "/api/v1/entries/{entry_id}/starred";
     pub const ENTRY_ASSETS: &str = "/api/v1/entries/{entry_id}/localize-assets";
+    pub const ENTRY_BATCH: &str = "/api/v1/entries/batch";
     pub const MARK_READ: &str = "/api/v1/entries/mark-read";
     pub const FEEDS: &str = "/api/v1/feeds";
     pub const FEED: &str = "/api/v1/feeds/{feed_id}";

@@ -12,6 +12,7 @@ const TOKEN_CONSUMING_SHEETS: &[(&str, &str)] = &[
     ("entries.css", include_str!("../../../assets/styles/entries.css")),
     ("reader.css", include_str!("../../../assets/styles/reader.css")),
     ("responsive.css", include_str!("../../../assets/styles/responsive.css")),
+    ("reading-workspace.css", include_str!("../../../assets/styles/reading-workspace.css")),
 ];
 
 const PUBLIC_TOKENS: &[&str] = &[

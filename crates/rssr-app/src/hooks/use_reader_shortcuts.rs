@@ -2,6 +2,8 @@ use std::{cell::Cell, rc::Rc};
 
 use dioxus::prelude::*;
 
+use super::reader_shortcut_policy::{self, ReaderShortcut, ShortcutKey};
+
 use crate::{pages::reader_page::ReaderPageSession, router::AppRoute};
 
 /// 阅读页快捷键：J 或 → 下一篇未读，K 或 ← 上一篇未读，M 切换已读，F 切换收藏。
@@ -12,20 +14,32 @@ use crate::{pages::reader_page::ReaderPageSession, router::AppRoute};
 pub fn use_reader_shortcuts(session: ReaderPageSession) {
     let navigator = use_navigator();
     // 每次渲染都换成最新的 session：换文章时组件不重建，页面监听只建一次。
-    let handle = use_callback(move |action: String| match action.as_str() {
-        "previous" => {
-            if let Some(target) = session.previous_entry_target() {
-                navigator.push(AppRoute::ReaderPage { entry_id: target });
+    let handle = use_callback(move |key: String| {
+        match reader_shortcut_policy::resolve(false, false, || match key.as_str() {
+            "ArrowLeft" => ShortcutKey::Previous,
+            "ArrowRight" => ShortcutKey::Next,
+            value => {
+                let mut chars = value.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => ShortcutKey::Character(c),
+                    _ => ShortcutKey::Other,
+                }
             }
-        }
-        "next" => {
-            if let Some(target) = session.next_entry_target() {
-                navigator.push(AppRoute::ReaderPage { entry_id: target });
+        }) {
+            Some(ReaderShortcut::Previous) => {
+                if let Some(target) = session.previous_entry_target() {
+                    navigator.push(AppRoute::ReaderPage { entry_id: target });
+                }
             }
+            Some(ReaderShortcut::Next) => {
+                if let Some(target) = session.next_entry_target() {
+                    navigator.push(AppRoute::ReaderPage { entry_id: target });
+                }
+            }
+            Some(ReaderShortcut::ToggleRead) => session.toggle_read(true),
+            Some(ReaderShortcut::ToggleStarred) => session.toggle_starred(true),
+            _ => {}
         }
-        "read" => session.toggle_read(true),
-        "star" => session.toggle_starred(true),
-        _ => {}
     });
     let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
     let cleanup = Rc::clone(&bridge);

@@ -390,3 +390,158 @@ async fn search_title_treats_like_wildcards_as_literals() {
     still_unread.sort_unstable();
     assert_eq!(still_unread, vec!["1000 done", "C:path", "axb"]);
 }
+
+/// The selection is frozen by ID, bounded, idempotent, and shared by native/Pages SQL.
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn selected_archive_is_atomic_and_counts_the_union_with_automatic_archive() {
+    use rssr_application::{EntriesListService, EntryBatchService};
+    use rssr_domain::{EntryBatchAction, EntryBatchRequest};
+    use rssr_infra::store::LibraryWorkspaceEdits;
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/a.xml").await;
+    let now = OffsetDateTime::parse("2026-10-27T12:00:00Z", &Rfc3339).unwrap();
+    library
+        .seed(
+            feed.id,
+            vec![
+                library::published("old", "Old", Some(now - time::Duration::days(700))),
+                library::entry("undated"),
+                library::published("recent", "Recent", Some(now)),
+            ],
+        )
+        .await;
+    let rows = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
+    let id = |title: &str| rows.iter().find(|r| r.title == title).unwrap().id;
+    let service =
+        EntryBatchService::new(Arc::new(LibraryWorkspaceEdits::new(library.store.clone())));
+    let request = EntryBatchRequest {
+        entry_ids: vec![id("undated"), id("undated"), id("Old")],
+        action: EntryBatchAction::Archive,
+    };
+    assert_eq!(service.apply(request.clone()).await.unwrap(), 2);
+    assert_eq!(service.apply(request).await.unwrap(), 0, "repeating changes nothing");
+    let lists = EntriesListService::new(
+        Arc::new(library.entries.clone()),
+        Arc::new(library.queries.clone()),
+    );
+    for archive_filter in [ArchiveFilter::ExcludeManual, ArchiveFilter::exclude_archived(now, 6)] {
+        let page =
+            lists.list_entries(&EntryQuery { archive_filter, ..Default::default() }).await.unwrap();
+        assert_eq!(page.entries.len(), 1);
+        assert_eq!(page.entries[0].title, "Recent");
+        assert_eq!(page.archived_count, 2, "automatic/manual overlap is counted once");
+    }
+    assert_eq!(lists.list_entries(&EntryQuery::default()).await.unwrap().entries.len(), 3);
+    library.seed(feed.id, vec![library::entry("undated")]).await;
+    assert_eq!(
+        library
+            .entries
+            .count_entries(&EntryQuery {
+                archive_filter: ArchiveFilter::OnlyManual,
+                ..Default::default()
+            })
+            .await
+            .unwrap(),
+        2,
+        "refresh preserves archive flags"
+    );
+    for ids in [vec![], vec![0], vec![1; rssr_domain::MAX_ENTRIES_PAGE_SIZE as usize + 1]] {
+        let error = service
+            .apply(EntryBatchRequest { entry_ids: ids, action: EntryBatchAction::MarkRead })
+            .await
+            .unwrap_err();
+        assert_eq!(
+            rssr_application::classify(&error).kind,
+            rssr_application::ErrorKind::InvalidInput
+        );
+    }
+    library.exec("CREATE TRIGGER fail_second_read BEFORE UPDATE OF is_read ON entries WHEN NEW.title = 'undated' BEGIN SELECT RAISE(ABORT, 'injected'); END;").await;
+    let error = service
+        .apply(EntryBatchRequest {
+            entry_ids: rows.iter().map(|r| r.id).collect(),
+            action: EntryBatchAction::MarkRead,
+        })
+        .await;
+    assert!(error.is_err());
+    assert_eq!(
+        library
+            .entries
+            .count_entries(&EntryQuery { read_filter: ReadFilter::ReadOnly, ..Default::default() })
+            .await
+            .unwrap(),
+        0,
+        "a partial batch cannot commit"
+    );
+}
+
+/// URL changes preserve articles, migrate the source filter atomically, and fence old refreshes.
+#[cfg_attr(not(target_arch = "wasm32"), tokio::test)]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+async fn feed_edit_keeps_identity_and_refuses_duplicate_or_partially_saved_changes() {
+    use rssr_application::{FeedEditService, RefreshStorePort};
+    use rssr_domain::{AppStateRepository, AppStateSnapshot, FeedEditRequest};
+    use rssr_infra::store::LibraryWorkspaceEdits;
+    let library = Library::memory().await;
+    let feed = library.add_feed("https://example.com/old.xml").await;
+    library.seed(feed.id, vec![library::entry("kept")]).await;
+    let item = library.entries.list_entries(&EntryQuery::default()).await.unwrap()[0].id;
+    library.entries.set_read(item, true).await.unwrap();
+    library.entries.set_starred(item, true).await.unwrap();
+    let mut state = AppStateSnapshot::default();
+    state.entries_workspace.selected_feed_urls = vec![feed.url.to_string()];
+    library.app_state.update(Box::new(move |stored| *stored = state)).await.unwrap();
+    let old_target = library.refresh.get_target(feed.id).await.unwrap().unwrap();
+    let service = FeedEditService::new(Arc::new(LibraryWorkspaceEdits::new(library.store.clone())));
+    let changed = FeedEditRequest {
+        feed_id: feed.id,
+        url: " https://example.com/new.xml#ignored ".into(),
+        custom_title: Some("  My source  ".into()),
+    };
+    service.update(changed).await.unwrap();
+    let details = service.details(feed.id).await.unwrap();
+    assert_eq!(details.url, "https://example.com/new.xml");
+    assert_eq!(details.custom_title.as_deref(), Some("My source"));
+    assert_eq!(
+        library.app_state.load().await.unwrap().entries_workspace.selected_feed_urls,
+        std::slice::from_ref(&details.url)
+    );
+    let stale = library
+        .refresh
+        .commit(&old_target, library::updated(vec![library::entry("obsolete")]))
+        .await
+        .unwrap_err();
+    // Generation fencing preserves the store's existing removed/replaced-target contract.
+    assert_eq!(rssr_application::classify(&stale).kind, rssr_application::ErrorKind::NotFound);
+    let kept = library.entries.list_entries(&EntryQuery::default()).await.unwrap();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].id, item);
+    assert!(kept[0].is_read && kept[0].is_starred);
+    let other = library.add_feed("https://example.com/other.xml").await;
+    let error = service
+        .update(FeedEditRequest {
+            feed_id: feed.id,
+            url: other.url.to_string(),
+            custom_title: Some("must not apply".into()),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(rssr_application::classify(&error).kind, rssr_application::ErrorKind::Conflict);
+    assert_eq!(service.details(feed.id).await.unwrap(), details);
+    library.exec("CREATE TRIGGER fail_state BEFORE UPDATE ON app_settings BEGIN SELECT RAISE(ABORT, 'injected'); END;").await;
+    assert!(
+        service
+            .update(FeedEditRequest {
+                feed_id: feed.id,
+                url: "https://example.com/third.xml".into(),
+                custom_title: None
+            })
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        service.details(feed.id).await.unwrap(),
+        details,
+        "source update rolls back with its filter migration"
+    );
+}

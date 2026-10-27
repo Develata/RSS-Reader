@@ -12,6 +12,7 @@ pub(crate) mod intent;
 mod presenter;
 mod pull_refresh;
 pub(crate) mod reducer;
+mod request_lifecycle;
 mod session;
 pub(crate) mod state;
 
@@ -26,11 +27,10 @@ use self::{
     session::EntriesPageSession,
     state::EntriesPageState,
 };
-use crate::ui::initial_entry_controls_hidden;
 use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,
-    hooks::use_mobile_back_navigation::use_mobile_back_navigation,
+    hooks::use_mobile_back_navigation::use_mobile_back_navigation_with_dismiss,
     router::AppRoute,
     ui::{AppShellState, use_reactive_side_effect, use_reactive_task, use_startup_route_bus},
 };
@@ -63,13 +63,51 @@ pub fn FeedEntriesPage(feed_id: i64) -> Element {
 }
 
 fn entries_page_content(feed_id: Option<i64>) -> Element {
-    let exit_hint = use_mobile_back_navigation(feed_id.map(|_| AppRoute::FeedsPage {}));
-
     let ui = use_context::<AppShellState>();
     let facade = use_entries_page_workspace(feed_id, ui);
     let directory_state = use_signal(directory::DirectoryState::default);
+    let mut directory_collapsed = use_signal(|| false);
+    let mut mobile_directory_open = use_signal(|| false);
+    let source_filter_open = use_signal(|| false);
+    let exit_hint = use_mobile_back_navigation_with_dismiss(
+        feed_id.map(|_| AppRoute::FeedsPage {}),
+        move || {
+            let mut source_filter_open = source_filter_open;
+            let mut mobile_directory_open = mobile_directory_open;
+            if *source_filter_open.peek() {
+                source_filter_open.set(false);
+                true
+            } else if *mobile_directory_open.peek() {
+                mobile_directory_open.set(false);
+                true
+            } else {
+                false
+            }
+        },
+    );
+    let mut directory_was_open = use_signal(|| false);
+    use_effect(move || {
+        let open = mobile_directory_open();
+        if open == *directory_was_open.peek() {
+            return;
+        }
+        directory_was_open.set(open);
+        let target = if open { "close-directory" } else { "open-directory" };
+        // DOM adapter only moves focus; Rust continues to own open/close and directory state.
+        let _ = document::eval(&format!(
+            "document.querySelector('[data-action={target}]')?.focus({{preventScroll:true}})"
+        ));
+    });
     use_context_provider(|| directory::DirectoryStore(directory_state));
-    let controls = render_entry_controls(&facade);
+    let controls = render_entry_controls(
+        &facade,
+        source_filter_open,
+        mobile_directory_open(),
+        EventHandler::new(move |_| {
+            directory_collapsed.set(false);
+            mobile_directory_open.set(true);
+        }),
+    );
     let pagination = render_entry_pagination_controls(&facade);
 
     rsx! {
@@ -79,6 +117,9 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             "data-position-key": facade.position_key(),
             "data-position-page": "{facade.current_page()}",
             "data-position-ready": if facade.positions_ready() { "true" } else { "false" },
+            "data-has-selection": facade.selected_count() > 0,
+            "data-directory-collapsed": directory_collapsed(),
+            "data-mobile-directory-open": mobile_directory_open(),
             directory::DirectoryBridge {
                 model: facade.directory_model(),
                 context_key: facade.position_key(),
@@ -88,11 +129,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             if feed_id.is_none() { pull_refresh::PullRefresh {} }
             div { "data-layout": "entries-layout",
                 div { "data-layout": "entries-main",
-                    div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "entries",
-                        div { "data-slot": "page-section-row",
-                            h1 { "data-slot": "page-title", "{entries_page_title(feed_id)}" }
-                        }
-                    }
+                    { controls }
                     if feed_id.is_some() {
                         div { "data-layout": "entries-page-backlink",
                             Link {
@@ -108,9 +145,8 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                         message: facade.status_message().to_string(),
                         tone: facade.status_tone().to_string(),
                         announce: true,
+                        visually_hidden: facade.entries_loaded() && facade.status_tone() == "info",
                     }
-                    { bulk::render_bulk_controls(&facade) }
-                    { controls }
                     if facade.entries_is_empty() {
                         if facade.entries_loaded() {
                             div { "data-layout": "entries-page-state", "data-state": "empty",
@@ -166,7 +202,7 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                 }
                             } else {
                                 for group in facade.source_grouped_entries() {
-                                    section { key: "{group.title}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
+                                    section { key: "{group.anchor_id}", id: "{group.anchor_id}", "data-layout": "entry-group", "data-grouping-mode": "source", "data-group-level": "source",
                                         div { "data-layout": "entry-group-header", "data-group-level": "primary",
                                             h2 { "data-slot": "entry-group-title", "{group.title}" }
                                             p { "data-slot": "entry-group-meta", "{group.subtitle}" }
@@ -193,7 +229,11 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                     }
                 }
                 if !facade.group_nav_items().is_empty() {
-                    directory::DirectoryRail { model: facade.directory_model(), grouping_mode: facade.grouping_mode() }
+                    if mobile_directory_open() {
+                        button { class: "directory-backdrop", aria_label: "关闭目录", onclick: move |_| mobile_directory_open.set(false) }
+                    }
+                    directory::DirectoryRail { model: facade.directory_model(), grouping_mode: facade.grouping_mode(),
+                        on_close: move |_| { directory_collapsed.set(true); mobile_directory_open.set(false); } }
                 }
             }
         }
@@ -207,16 +247,15 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
 }
 
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
-    let state = use_signal(|| EntriesPageState::new(initial_entry_controls_hidden()));
-    let query_generation = use_signal(|| 0);
-    let bootstrap_generation = use_signal(|| 0);
-    let session = EntriesPageSession::new(feed_id, state, query_generation, bootstrap_generation);
+    let state = use_signal(EntriesPageState::new);
+    let requests = use_signal(request_lifecycle::EntriesRequestLifecycle::default);
+    let session = EntriesPageSession::new(feed_id, state, requests);
     let state_snapshot = Arc::new(session.snapshot());
     // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
     //
     // 信号订阅粒度是「整个信号」，所以第一个 memo 每次状态变化都会重算——但它很便宜
     // （只做 Arc 指针拷贝与少量标量）。关键在于它的值没变时，第二个 memo 不会重算，
-    // 于是 `SetStatus`（每次切换已读/收藏都会发一条）、`SetControlsHidden` 这类与分组
+    // 于是 `SetStatus`（每次切换已读/收藏都会发一条）、`ToggleSelected` 这类与分组
     // 无关的 intent 不再重建两棵分组树。
     let presenter_input = use_memo(move || {
         session.with_state(|state| EntriesPresenterInput::from_state(state, feed_id))
@@ -231,7 +270,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
-    let bulk_revision = state_snapshot.bulk_revision;
+    let reload_revision = state_snapshot.reload_revision;
     let requery_revision = state_snapshot.requery_revision;
     let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
     let show_archived = state_snapshot.show_archived;
@@ -244,13 +283,8 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         state_snapshot.query_clock_trigger(feed_id, query_search.clone(), library_revision),
         current_time_utc,
     );
-    let facade = EntriesPageFacade::new(
-        ui,
-        session,
-        Arc::clone(&state_snapshot),
-        presenter.cloned(),
-        query_now,
-    );
+    let facade =
+        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
     let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), query_now);
 
     use_reactive_side_effect(
@@ -271,6 +305,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         // 首次挂载不是筛选切换；异步加载可能先完成，不能随后把恢复页码重置为 1。
         if *previous_search.peek() != next {
             previous_search.set(next);
+            session.dispatch(intent::EntriesPageIntent::ClearSelection);
             session.dispatch(intent::EntriesPageIntent::SetCurrentPage(state::FIRST_PAGE_NUMBER));
         }
     });
@@ -289,7 +324,7 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
             entries_ready,
             entry_query.clone(),
             library_revision,
-            bulk_revision,
+            reload_revision,
             requery_revision,
         ),
         move |(_, entries_ready, entry_query, _, _, _)| {
@@ -328,8 +363,4 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
     );
 
     facade
-}
-
-fn entries_page_title(feed_id: Option<i64>) -> &'static str {
-    if feed_id.is_some() { "订阅文章" } else { "文章" }
 }

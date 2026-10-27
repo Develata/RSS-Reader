@@ -73,7 +73,10 @@ fn compose_library_ports(
     let entries = Arc::new(LibraryEntries::new(store.clone()));
     let mutations = Arc::new(LibraryMutations::new(store.clone()));
     let settings = Arc::new(LibrarySettings::new(store.clone()));
+    let workspace_edits = Arc::new(crate::store::LibraryWorkspaceEdits::new(store.clone()));
     let use_cases = AppUseCases::compose(AppCompositionInput {
+        entry_batch: workspace_edits.clone(),
+        feed_edit: workspace_edits,
         feed_repository: Arc::new(LibraryFeeds::new(store.clone())),
         entry_index_repository: entries.clone(),
         settings_repository: settings.clone(),

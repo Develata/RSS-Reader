@@ -1,180 +1,133 @@
+use super::{dialog::Dialog, icon::Icon};
 use dioxus::prelude::*;
 use rssr_domain::{ReadFilter, StarredFilter};
+use std::collections::BTreeSet;
+
+mod source_draft;
+use source_draft::{Selection, SourceFilterDraft};
 
 #[component]
 pub fn EntryFilters(
-    search: String,
+    source_filter_open: Signal<bool>,
     read_filter: ReadFilter,
     starred_filter: StarredFilter,
     available_sources: Vec<(i64, String, String, u64)>,
     selected_feed_urls: Vec<String>,
-    on_search: EventHandler<String>,
     on_change_read_filter: EventHandler<ReadFilter>,
     on_change_starred_filter: EventHandler<StarredFilter>,
     on_change_selected_feed_urls: EventHandler<Vec<String>>,
 ) -> Element {
     rsx! {
         div { "data-layout": "entry-filters",
-            label {
-                class: "sr-only",
-                r#for: "entry-search-title",
-                "按标题搜索"
-            }
-            input {
-                id: "entry-search-title",
-                name: "search_title",
-                class: "text-input",
-                "data-field": "search-title",
-                value: "{search}",
-                placeholder: "按标题搜索",
-                oninput: move |event| on_search.call(event.value())
-            }
-            label { "data-layout": "entry-filters-toggle",
-                input {
-                    name: "filter_unread",
-                    r#type: "checkbox",
-                    "data-field": "read-filter-unread",
-                    checked: matches!(read_filter, ReadFilter::UnreadOnly),
-                    onchange: move |event| {
-                        on_change_read_filter.call(if event.checked() {
-                            ReadFilter::UnreadOnly
-                        } else {
-                            ReadFilter::All
-                        })
-                    }
-                }
-                span { "仅未读" }
-            }
-            label { "data-layout": "entry-filters-toggle",
-                input {
-                    name: "filter_read",
-                    r#type: "checkbox",
-                    "data-field": "read-filter-read",
-                    checked: matches!(read_filter, ReadFilter::ReadOnly),
-                    onchange: move |event| {
-                        on_change_read_filter.call(if event.checked() {
-                            ReadFilter::ReadOnly
-                        } else {
-                            ReadFilter::All
-                        })
-                    }
-                }
-                span { "仅已读" }
-            }
-            label { "data-layout": "entry-filters-toggle",
-                input {
-                    name: "filter_starred",
-                    r#type: "checkbox",
-                    "data-field": "starred-filter-starred",
-                    checked: matches!(starred_filter, StarredFilter::StarredOnly),
-                    onchange: move |event| {
-                        on_change_starred_filter.call(if event.checked() {
-                            StarredFilter::StarredOnly
-                        } else {
-                            StarredFilter::All
-                        })
-                    }
-                }
-                span { "仅收藏" }
-            }
-            label { "data-layout": "entry-filters-toggle",
-                input {
-                    name: "filter_unstarred",
-                    r#type: "checkbox",
-                    "data-field": "starred-filter-unstarred",
-                    checked: matches!(starred_filter, StarredFilter::UnstarredOnly),
-                    onchange: move |event| {
-                        on_change_starred_filter.call(if event.checked() {
-                            StarredFilter::UnstarredOnly
-                        } else {
-                            StarredFilter::All
-                        })
-                    }
-                }
-                span { "仅未收藏" }
-            }
             if !available_sources.is_empty() {
-                div { "data-layout": "entry-filters-sources",
-                    p { "data-slot": "entry-filters-sources-label", "按来源筛选" }
-                    div { "data-layout": "entry-filters-source-grid", role: "group", aria_label: "选择来源",
-                        for (feed_id, title, url, unread_count) in available_sources {
-                            {
-                                let is_selected = selected_feed_urls.contains(&url);
-                                // 只在真的被点击时才算出新的选中集合：此前对每个 chip 都提前
-                                // 构造一份候选 Vec 并做 push + sort + dedup，而其中只有被点的
-                                // 那一个会被用到。
-                                // 注意仍然为每个 chip 克隆了一份当前选中集合（闭包要拥有它），
-                                // 省掉的是那次多余的排序去重，不是这份克隆本身。
-                                let current_selection = selected_feed_urls.clone();
-                                rsx! {
-                                    label {
-                                        "data-layout": "entry-filters-source-chip",
-                                        "data-state": if is_selected { "selected" } else { "unselected" },
-                                        "aria-label": "{title}",
-                                        title: "{title}",
-                                        input {
-                                            r#type: "checkbox",
-                                            "data-field": "entry-source-filter",
-                                            "aria-label": "{title}",
-                                            "aria-describedby": "source-unread-{feed_id}",
-                                            checked: is_selected,
-                                            onchange: move |_| on_change_selected_feed_urls.call(toggle_source_selection(&current_selection, &url))
-                                        }
-                                        span {
-                                            "{title}"
-                                            span {
-                                                "data-slot": "entry-filters-source-unread-count",
-                                                "aria-hidden": "true",
-                                                " · {unread_count}"
-                                            }
-                                        }
-                                        span { class: "sr-only", id: "source-unread-{feed_id}", "未读 {unread_count} 篇" }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                SourceChooser { open: source_filter_open, available_sources, selected_feed_urls, on_apply: on_change_selected_feed_urls }
+            }
+            div { class: "entry-status-filters", role: "group", aria_label: "文章状态筛选",
+                FilterButton { icon: "check", label: "仅已读", active: read_filter == ReadFilter::ReadOnly,
+                    onclick: move |_| on_change_read_filter.call(if read_filter == ReadFilter::ReadOnly { ReadFilter::All } else { ReadFilter::ReadOnly }) }
+                FilterButton { icon: "circle", label: "仅未读", active: read_filter == ReadFilter::UnreadOnly,
+                    onclick: move |_| on_change_read_filter.call(if read_filter == ReadFilter::UnreadOnly { ReadFilter::All } else { ReadFilter::UnreadOnly }) }
+                FilterButton { icon: "star", label: "仅未收藏", active: starred_filter == StarredFilter::UnstarredOnly,
+                    onclick: move |_| on_change_starred_filter.call(if starred_filter == StarredFilter::UnstarredOnly { StarredFilter::All } else { StarredFilter::UnstarredOnly }) }
+                FilterButton { icon: "star", filled: true, label: "仅收藏", active: starred_filter == StarredFilter::StarredOnly,
+                    onclick: move |_| on_change_starred_filter.call(if starred_filter == StarredFilter::StarredOnly { StarredFilter::All } else { StarredFilter::StarredOnly }) }
             }
         }
     }
 }
 
-/// 在已选来源集合里切换一个 URL，返回排序去重后的新集合。
-fn toggle_source_selection(selected: &[String], url: &str) -> Vec<String> {
-    if selected.iter().any(|current| current == url) {
-        return selected.iter().filter(|current| current.as_str() != url).cloned().collect();
-    }
-
-    let mut next = selected.to_vec();
-    next.push(url.to_string());
-    next.sort();
-    next.dedup();
-    next
+#[component]
+fn FilterButton(
+    icon: &'static str,
+    label: &'static str,
+    active: bool,
+    #[props(default)] filled: bool,
+    onclick: EventHandler<MouseEvent>,
+) -> Element {
+    rsx! { button { r#type: "button", class: "workspace-icon-button filter-icon", title: label, aria_label: label, aria_pressed: active,
+    onclick, Icon { name: icon, filled } } }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::toggle_source_selection;
-
-    #[test]
-    fn adds_then_removes_a_source_keeping_the_set_sorted_and_deduped() {
-        let selected = vec!["https://b.example/feed".to_string()];
-
-        let added = toggle_source_selection(&selected, "https://a.example/feed");
-        assert_eq!(
-            added,
-            vec!["https://a.example/feed".to_string(), "https://b.example/feed".to_string(),]
-        );
-
-        let removed = toggle_source_selection(&added, "https://a.example/feed");
-        assert_eq!(removed, selected);
-    }
-
-    #[test]
-    fn toggling_an_already_selected_source_does_not_duplicate_it() {
-        let selected = vec!["https://a.example/feed".to_string()];
-
-        assert!(toggle_source_selection(&selected, "https://a.example/feed").is_empty());
+#[component]
+fn SourceChooser(
+    mut open: Signal<bool>,
+    available_sources: Vec<(i64, String, String, u64)>,
+    selected_feed_urls: Vec<String>,
+    on_apply: EventHandler<Vec<String>>,
+) -> Element {
+    let mut draft = use_signal(SourceFilterDraft::default);
+    let all_urls =
+        available_sources.iter().map(|(_, _, url, _)| url.clone()).collect::<BTreeSet<_>>();
+    crate::ui::use_reactive_side_effect(all_urls.clone(), move |urls| {
+        if *open.peek() {
+            draft.write().reconcile(urls);
+        }
+    });
+    let selection = draft.read().selection();
+    let all_selected = selection == Selection::All;
+    let open_urls = all_urls.clone();
+    let applied_urls = selected_feed_urls.clone();
+    let apply_urls = all_urls.clone();
+    let selected_count = draft.read().selected_count();
+    crate::ui::use_reactive_side_effect(
+        (open(), all_selected, selected_count),
+        move |(open, all, count)| {
+            if open {
+                // `indeterminate` is a DOM property, not an HTML attribute. Rust
+                // owns the selection; this adapter only projects its mixed state.
+                let mixed = !all && count > 0;
+                let _ = document::eval(&format!(
+                    "const checkbox = document.getElementById('source-filter-all'); if (checkbox) checkbox.indeterminate = {mixed};"
+                ));
+            }
+        },
+    );
+    rsx! {
+        button { id: "source-filter-trigger", r#type: "button", class: "source-filter-trigger", aria_haspopup: "dialog", aria_expanded: open(),
+            aria_label: if selected_feed_urls.is_empty() { "筛选来源：全部来源".to_string() } else { format!("筛选来源：已选 {} 个", selected_feed_urls.len()) },
+            title: "筛选来源", "data-action": "open-source-filter",
+            onclick: move |_| { draft.set(SourceFilterDraft::begin(open_urls.clone(), &applied_urls)); open.set(true); },
+            span { if selected_feed_urls.is_empty() { "全部来源" } else { "…" } }
+            Icon { name: "chevron-down" }
+        }
+        if open() {
+            Dialog { id: "source-filter-dialog", label: "筛选来源", anchor: Some("source-filter-trigger"), on_close: move |_| { draft.write().clear(); open.set(false); },
+                div { class: "workspace-dialog-heading",
+                    h2 { "筛选来源" }
+                    button { class: "workspace-icon-button", aria_label: "关闭来源筛选", onclick: move |_| { draft.write().clear(); open.set(false); }, Icon { name: "close" } }
+                }
+                input { class: "text-input", r#type: "search", aria_label: "搜索来源", placeholder: "搜索来源", value: draft.read().search().to_owned(), oninput: move |event| draft.write().set_search(event.value()) }
+                label { class: "source-choice source-choice-all",
+                    input { id: "source-filter-all", r#type: "checkbox", checked: all_selected,
+                        aria_checked: if all_selected { "true" } else if selected_count > 0 { "mixed" } else { "false" },
+                        aria_label: "全部来源", onchange: move |_| draft.write().toggle_all() }
+                    span { "全部来源" } small { "已选 {selected_count}" }
+                }
+                div { class: "source-choices",
+                    for (id, title, url, unread) in available_sources.iter().filter(|(_, title, url, _)| draft.read().matches(title, url)) {
+                        { let url = url.clone(); let checked = draft.read().is_selected(&url);
+                          rsx! { label { key: "{id}", class: "source-choice", "data-layout": "entry-filters-source-chip",
+                            input { r#type: "checkbox", checked, aria_label: "{title}", aria_describedby: "source-unread-{id}", "data-field": "entry-source-filter", onchange: move |event| draft.write().set_selected(&url, event.checked()) }
+                            span { "{title}" }
+                            small { id: "source-unread-{id}", "data-slot": "entry-filters-source-unread-count", aria_label: "未读 {unread} 篇", "· {unread}" }
+                          } }
+                        }
+                    }
+                }
+                div { class: "workspace-dialog-actions",
+                    button { class: "button", "data-variant": "secondary", onclick: move |_| { draft.write().clear(); open.set(false); }, "取消" }
+                    button { class: "button", disabled: selected_count == 0, "data-action": "apply-source-filter", onclick: move |_| {
+                        let value = {
+                            let mut draft = draft.write();
+                            draft.reconcile(apply_urls.clone());
+                            draft.apply_value()
+                        };
+                        if let Some(value) = value {
+                            draft.write().clear(); on_apply.call(value); open.set(false);
+                        }
+                    }, "应用" }
+                }
+            }
+        }
     }
 }

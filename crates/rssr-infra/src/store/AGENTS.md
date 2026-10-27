@@ -11,9 +11,11 @@
 - `files.rs`：文件层面的事——身份探测（`immutable=1`）、创建锁、暂存文件与原子发布。
 - `migrate.rs` + `migrations/`：基线 schema 与迁移器（应用 id、LF 校验和、单事务）。
 - `feeds.rs` / `entries.rs` / `documents.rs` / `mutations.rs` / `refresh.rs`：各领域端口的 SQL 实现；`refresh.rs` 持有刷新序号 `I/P/D` 的规则。
+- `workspace_edits.rs`：显式文章集合的批量标记 / 手动归档、保留订阅身份的编辑事务；地址变化在同一事务中失效旧刷新 ticket 并迁移已选来源地址。
 - `queries.rs`：application 的聚合查询端口（`LibraryQueryPort`），每个方法一次读事务，只组合上面各文件已有的查询函数。
 - `import.rs`：v0.1.x 旧库的单向导入（只读快照、迁移历史核对、整库映射、校验后发布）。
 - `local.rs`：各平台数据目录规则与“打开或导入”入口；GUI、CLI 与界面偏好共用。
+- `local/android_storage.rs`：Android 私有目录与旧位置的保留式迁移；校验、锁和完整快照都在平台适配边界内，不能改变共享仓储语义。
 - `codec.rs` / `error.rs`：时间与 URL 编解码、错误分类。
 
 ## 关键原则

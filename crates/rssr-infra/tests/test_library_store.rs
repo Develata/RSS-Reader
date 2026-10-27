@@ -775,7 +775,7 @@ async fn concurrent_first_opens_migrate_once() {
         })
         .await
         .unwrap();
-    assert_eq!(history, 1);
+    assert_eq!(history, 2, "baseline and manual-archive migration are each recorded once");
     insert_feed(&stores[0], "https://a.test").await.unwrap();
     for store in &stores {
         assert_eq!(store.journal_mode(), "wal");

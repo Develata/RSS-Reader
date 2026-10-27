@@ -66,7 +66,12 @@ impl EntriesListService {
                 archive_filter: ArchiveFilter::OnlyArchived { cutoff },
                 ..query.clone()
             }),
-            ArchiveFilter::All | ArchiveFilter::OnlyArchived { .. } => None,
+            ArchiveFilter::ExcludeManual => {
+                Some(EntryQuery { archive_filter: ArchiveFilter::OnlyManual, ..query.clone() })
+            }
+            ArchiveFilter::All | ArchiveFilter::OnlyArchived { .. } | ArchiveFilter::OnlyManual => {
+                None
+            }
         };
         // One entry past the bound tells whether more matched, without a second query.
         let shown = query.limit.unwrap_or(MAX_LISTED_ENTRIES).min(MAX_LISTED_ENTRIES);

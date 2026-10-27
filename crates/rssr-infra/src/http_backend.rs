@@ -649,6 +649,30 @@ impl Backend for HttpBackend {
         .await
     }
 
+    async fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> Result<u64> {
+        self.write(
+            Method::POST,
+            routes::ENTRY_BATCH,
+            Some(encode(&request)?),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
+    }
+    async fn feed_edit_details(&self, feed_id: i64) -> Result<rssr_domain::FeedEditDetails> {
+        self.read(&protocol::feed(feed_id), None).await
+    }
+    async fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> Result<()> {
+        self.write(
+            Method::PATCH,
+            &protocol::feed(edit.feed_id),
+            Some(encode(&edit)?),
+            self.timeouts.request,
+            MAX_ANSWER_BYTES,
+        )
+        .await
+    }
+
     async fn load_feeds_snapshot(&self) -> Result<FeedsSnapshotOutcome> {
         self.read(routes::FEEDS, None).await
     }

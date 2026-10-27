@@ -9,6 +9,19 @@ use rssr_application::{ConfigImportOutcome, OpmlImportOutcome};
 
 pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
     match command {
+        FeedsCommand::LoadEdit { feed_id, generation } => {
+            let result = async { backend().await?.feed_edit_details(feed_id).await }
+                .await
+                .map_err(|e| UiFailure::new("读取来源", e));
+            feeds_intents(vec![FeedsPageIntent::EditLoaded { feed_id, generation, result }])
+        }
+        FeedsCommand::SaveEdit { edit, generation } => {
+            let feed_id = edit.feed_id;
+            let result = async { backend().await?.update_subscription(edit).await }
+                .await
+                .map_err(|e| UiFailure::new("保存来源", e));
+            feeds_intents(vec![FeedsPageIntent::EditSaved { feed_id, generation, result }])
+        }
         FeedsCommand::LoadSnapshot => {
             match async { backend().await?.load_feeds_snapshot().await }.await {
                 Ok(outcome) => {
@@ -16,6 +29,8 @@ pub(super) async fn execute(command: FeedsCommand) -> Vec<UiIntent> {
                         feeds: outcome.feeds,
                         feed_count: outcome.feed_count,
                         entry_count: outcome.entry_count,
+                        unread_count: outcome.unread_count,
+                        archived_count: outcome.archived_count,
                         fingerprint: outcome.fingerprint,
                     }))])
                 }

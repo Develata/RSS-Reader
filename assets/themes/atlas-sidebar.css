@@ -218,7 +218,7 @@ body:has(.theme-dark) {
   align-content: start;
   align-self: start;
   /* Keep the shared five-icon Reader row and expanded search usable in the rail. */
-  padding: 8px;
+  padding: 0 8px;
   border-radius: 26px;
   background: var(--atlas-rail-bg);
   box-shadow: var(--atlas-rail-shadow);
@@ -228,12 +228,17 @@ body:has(.theme-dark) {
   [data-page]:has(> [data-layout="app-nav-shell"][data-state="collapsed"]) {
     grid-template-columns: 44px minmax(0, 1fr);
   }
+
+  /* The navigation occupies another column, so the directory needs no top-bar clearance. */
+  .app-shell [data-page="entries"] [data-layout="entry-directory-rail"] {
+    top: calc(24px + var(--safe-area-top));
+  }
 }
 
 [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
 [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
   display: flex;
-  gap: 6px;
+  gap: 0;
 }
 
 [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-nav],
@@ -287,7 +292,7 @@ body:has(.theme-dark) {
   [data-layout="reader-page"] > [data-layout="app-nav-shell"] {
     position: sticky;
     top: calc(8px + var(--safe-area-top));
-    margin-bottom: 20px;
+    margin-bottom: 6px;
   }
 
   [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],

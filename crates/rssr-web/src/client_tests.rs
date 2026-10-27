@@ -155,6 +155,39 @@ async fn every_operation_through_the_client_answers_what_the_backend_answers() {
         "mark read",
     );
 
+    let details = client.feed_edit_details(feed_a).await.unwrap();
+    same(&details, direct.feed_edit_details(feed_a).await.unwrap(), "feed edit details");
+    let edit = rssr_domain::FeedEditRequest {
+        feed_id: feed_a,
+        url: details.url,
+        custom_title: Some("My source".into()),
+    };
+    client.update_subscription(edit.clone()).await.unwrap();
+    direct.update_subscription(edit).await.unwrap();
+    same(
+        client.feed_edit_details(feed_a).await.unwrap(),
+        direct.feed_edit_details(feed_a).await.unwrap(),
+        "saved feed edit",
+    );
+    let batch = rssr_domain::EntryBatchRequest {
+        entry_ids: vec![image, image],
+        action: rssr_domain::EntryBatchAction::Archive,
+    };
+    same(
+        client.apply_entry_batch(batch.clone()).await.unwrap(),
+        direct.apply_entry_batch(batch).await.unwrap(),
+        "archive explicit selection",
+    );
+    let visible = EntryQuery {
+        archive_filter: rssr_domain::ArchiveFilter::ExcludeManual,
+        ..Default::default()
+    };
+    same(
+        client.list_entries(&visible).await.unwrap(),
+        direct.list_entries(&visible).await.unwrap(),
+        "manual archive query",
+    );
+
     client.remember_opened_feed(feed_a).await.unwrap();
     direct.remember_opened_feed(feed_a).await.unwrap();
     let workspace = EntriesWorkspaceState {
@@ -447,6 +480,28 @@ impl Backend for Observed {
         });
         ended.await.map_err(|_| BackendError::new(ErrorCode::Internal, "no write-back"))?;
         Ok(true)
+    }
+
+    async fn apply_entry_batch(
+        &self,
+        request: rssr_domain::EntryBatchRequest,
+    ) -> rssr_api::Result<u64> {
+        self.note("apply_entry_batch");
+        self.library.apply_entry_batch(request).await
+    }
+    async fn feed_edit_details(
+        &self,
+        feed_id: i64,
+    ) -> rssr_api::Result<rssr_domain::FeedEditDetails> {
+        self.note("feed_edit_details");
+        self.library.feed_edit_details(feed_id).await
+    }
+    async fn update_subscription(
+        &self,
+        edit: rssr_domain::FeedEditRequest,
+    ) -> rssr_api::Result<()> {
+        self.note("update_subscription");
+        self.library.update_subscription(edit).await
     }
 
     async fn load_feeds_snapshot(&self) -> rssr_api::Result<FeedsSnapshotOutcome> {

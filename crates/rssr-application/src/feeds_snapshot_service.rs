@@ -10,6 +10,8 @@ pub struct FeedsSnapshotOutcome {
     pub feeds: Vec<FeedSummary>,
     pub feed_count: u64,
     pub entry_count: u64,
+    pub unread_count: u64,
+    pub archived_count: u64,
     /// What a configuration import from this page expects to replace.
     pub fingerprint: ConfigFingerprint,
 }
@@ -26,11 +28,19 @@ impl FeedsSnapshotService {
 
     /// The subscriptions and the configuration fingerprint from one read snapshot.
     pub async fn load_snapshot(&self) -> anyhow::Result<FeedsSnapshotOutcome> {
-        let FeedsOverview { feeds, fingerprint } =
+        let FeedsOverview { feeds, fingerprint, archived_count } =
             self.queries.feeds_overview().await.context("读取订阅失败")?;
         let feed_count = feeds.len() as u64;
         let entry_count = feeds.iter().map(|feed| feed.entry_count).sum();
-        Ok(FeedsSnapshotOutcome { feeds, feed_count, entry_count, fingerprint })
+        let unread_count = feeds.iter().map(|feed| feed.unread_count).sum();
+        Ok(FeedsSnapshotOutcome {
+            feeds,
+            feed_count,
+            entry_count,
+            unread_count,
+            archived_count,
+            fingerprint,
+        })
     }
 }
 

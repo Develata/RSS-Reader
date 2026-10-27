@@ -3,7 +3,7 @@ use std::sync::Arc;
 use dioxus::prelude::*;
 use rssr_domain::EntrySummary;
 
-use crate::{datetime::format_date, router::AppRoute};
+use crate::{components::icon::Icon, datetime::format_date, router::AppRoute};
 
 use super::{facade::EntriesPageFacade, groups::EntryCardRef, session::EntriesPageSession};
 
@@ -22,53 +22,84 @@ pub(super) fn render_entry_card_at(
         return rsx! {};
     };
 
-    render_entry_card(entry, facade.session(), list_edge_state(position, total))
+    let selected = facade.is_selected(entry.id);
+    let write_pending = facade.entry_write_pending(entry.id);
+    render_entry_card(
+        entry,
+        facade.session(),
+        list_edge_state(position, total),
+        selected,
+        facade.bulk_busy(),
+        write_pending,
+    )
 }
 
 fn render_entry_card(
     entry: Arc<EntrySummary>,
     session: EntriesPageSession,
     list_edge: &'static str,
+    selected: bool,
+    busy: bool,
+    write_pending: bool,
 ) -> Element {
     let read_title = entry.title.clone();
     let starred_title = entry.title.clone();
     let read_entry = Arc::clone(&entry);
     let starred_entry = Arc::clone(&entry);
+    let id = entry.id;
+    let read_icon = if entry.is_read { "check" } else { "circle" };
 
     rsx! {
         li {
             key: "{entry.id}",
+            id: super::groups::entry_anchor_id(entry.id),
             "data-layout": "entry-card",
             "data-position-entry": "{entry.id}",
             "data-variant": "reading",
             "data-list-edge": "{list_edge}",
-            Link {
+            "data-selected": selected,
+            "data-read": entry.is_read,
+            label { class: "entry-select-hit", title: "选择文章",
+                input { r#type: "checkbox", class: "entry-select-box", aria_label: "选择文章：{entry.title}",
+                    "data-action": "select-entry", checked: selected, disabled: busy,
+                    onchange: move |_| session.dispatch(super::intent::EntriesPageIntent::ToggleSelected(id)),
+                }
+            }
+            div { class: "entry-card-copy",
+              Link {
                 "data-slot": "entry-card-title",
                 to: AppRoute::ReaderPage { entry_id: entry.id },
                 "{entry.title}"
-            }
+              }
             div { "data-slot": "entry-card-meta",
                 "{entry.feed_title}"
                 if let Some(date) = format_date(entry.published_at) { " · {date}" }
-                if entry.is_read { " · 已读" } else { " · 未读" }
-                if entry.is_starred { " · 已收藏" }
+              }
             }
-            div { "data-layout": "entry-card-actions",
+            div { "data-layout": "entry-card-actions", aria_busy: write_pending,
                 button {
-                    class: "button",
+                    class: "workspace-icon-button",
                     "data-variant": "secondary",
                     "data-slot": "entry-card-action",
                     "data-action": "mark-read",
+                    aria_label: if entry.is_read { "标为未读" } else { "标为已读" },
+                    title: if entry.is_read { "标为未读" } else { "标为已读" },
+                    aria_pressed: entry.is_read,
+                    disabled: busy || write_pending,
                     onclick: move |_| {
                         session.toggle_read(read_entry.id, read_title.clone(), read_entry.is_read);
                     },
-                    if entry.is_read { "标未读" } else { "标已读" }
+                    Icon { name: read_icon }
                 }
                 button {
-                    class: "button",
+                    class: "workspace-icon-button",
                     "data-variant": "secondary",
                     "data-slot": "entry-card-action",
                     "data-action": "toggle-starred",
+                    aria_label: if entry.is_starred { "取消收藏" } else { "收藏文章" },
+                    title: if entry.is_starred { "取消收藏" } else { "收藏文章" },
+                    aria_pressed: entry.is_starred,
+                    disabled: busy || write_pending,
                     onclick: move |_| {
                         session.toggle_starred(
                             starred_entry.id,
@@ -76,7 +107,7 @@ fn render_entry_card(
                             starred_entry.is_starred,
                         );
                     },
-                    if entry.is_starred { "取消收藏" } else { "收藏" }
+                    Icon { name: "star", filled: entry.is_starred }
                 }
             }
         }

@@ -1,6 +1,6 @@
-//! 顶栏搜索词与文章区控件收起状态的持久化。旧 nav_hidden 字段/键不再读取；导航收起仅在会话内保存。
+//! 顶栏搜索词的持久化。导航收起仅在会话内保存；文章筛选栏现在始终可见。
 //!
-//! 这几项此前只有 Web 端存进 `localStorage`，桌面与 Android 每次启动都回到默认搜索和筛选控件状态。
+//! 搜索词此前只有 Web 端存进 `localStorage`，桌面与 Android 每次启动都回到默认搜索。
 //! 同一个界面元素在不同平台记不记得住，属于平台差异漏进了产品语义，因此统一为三端都记住。
 //!
 //! 首帧同步读取：`use_app_shell_state` 在首帧就要拿到值。若改走 `AppStateSnapshot`
@@ -10,9 +10,8 @@
 //!
 //! 落盘格式（原生端）：数据库同目录下的 `shell-prefs.json`。字段全部走 `Default` 兜底，
 //! 文件缺失、损坏、字段增减一律回落到默认值，不做版本协商也不做迁移——这是一份随时可以
-//! 丢弃重建的界面偏好，为它引入迁移责任不划算。注意 `entry_controls_hidden` 的默认值是
-//! `true`（控件默认收起），因此 `ShellPrefs` 手写 `Default` 实现而不是派生——派生的
-//! `bool::default()` 会把老文件里缺失的该字段读成「展开」，等于倒退默认体验。
+//! 丢弃重建的界面偏好，为它引入迁移责任不划算。原生端继续回写旧 `entry_controls_hidden`
+//! 字段及其历史默认值，以便旧版本回退读取；新版 UI 不消费该字段。
 //! Web 端沿用原有的 `localStorage` 键，老用户已经存下的值不会因为这次改动丢失。
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -31,9 +30,7 @@ mod platform {
         entry_controls_hidden: bool,
     }
 
-    /// 控件默认收起：老版本写出的偏好文件没有 `entry_controls_hidden` 字段，
-    /// 反序列化走 `Default` 兜底时必须落回 `true`，否则老用户升级后控件
-    /// 会莫名变成展开。
+    /// 保留历史默认值，仅用于旧版本偏好往返兼容。
     impl Default for ShellPrefs {
         fn default() -> Self {
             Self { entry_search: String::new(), entry_controls_hidden: true }
@@ -131,14 +128,6 @@ mod platform {
         update(|prefs| prefs.entry_search = value.to_string());
     }
 
-    pub(super) fn initial_entry_controls_hidden() -> bool {
-        locked().entry_controls_hidden
-    }
-
-    pub(super) fn remember_entry_controls_hidden(hidden: bool) {
-        update(|prefs| prefs.entry_controls_hidden = hidden);
-    }
-
     #[cfg(test)]
     mod tests {
         use super::{ShellPrefs, decode};
@@ -200,7 +189,6 @@ mod platform {
 mod platform {
     /// 键名沿用改动前的取值，老用户存在浏览器里的搜索词继续生效；旧导航折叠键不再读取。
     const ENTRY_SEARCH_KEY: &str = "rssr-entry-search";
-    const ENTRY_CONTROLS_HIDDEN_KEY: &str = "rssr-entry-controls-hidden";
 
     fn storage() -> Option<web_sys::Storage> {
         web_sys::window()?.local_storage().ok().flatten()
@@ -217,18 +205,6 @@ mod platform {
             let _ = storage.set_item(ENTRY_SEARCH_KEY, value);
         }
     }
-
-    pub(super) fn initial_entry_controls_hidden() -> bool {
-        storage()
-            .and_then(|storage| storage.get_item(ENTRY_CONTROLS_HIDDEN_KEY).ok().flatten())
-            .is_none_or(|value| value == "1")
-    }
-
-    pub(super) fn remember_entry_controls_hidden(hidden: bool) {
-        if let Some(storage) = storage() {
-            let _ = storage.set_item(ENTRY_CONTROLS_HIDDEN_KEY, if hidden { "1" } else { "0" });
-        }
-    }
 }
 
 pub(crate) fn initial_entry_search() -> String {
@@ -237,12 +213,4 @@ pub(crate) fn initial_entry_search() -> String {
 
 pub(crate) fn remember_entry_search(value: &str) {
     platform::remember_entry_search(value);
-}
-
-pub(crate) fn initial_entry_controls_hidden() -> bool {
-    platform::initial_entry_controls_hidden()
-}
-
-pub(crate) fn remember_entry_controls_hidden(hidden: bool) {
-    platform::remember_entry_controls_hidden(hidden);
 }

@@ -9,6 +9,42 @@ pub(crate) struct FeedsPageFacade {
 }
 
 impl FeedsPageFacade {
+    pub(crate) fn edit_feed(&self, id: i64) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::EditRequested(id));
+    }
+    pub(crate) fn edit_open(&self) -> bool {
+        self.snapshot.edit_feed_id.is_some()
+    }
+    pub(crate) fn edit_details(&self) -> Option<&rssr_domain::FeedEditDetails> {
+        self.snapshot.edit_details.as_ref()
+    }
+    pub(crate) fn edit_busy(&self) -> bool {
+        self.snapshot.edit_busy
+    }
+    pub(crate) fn edit_error(&self) -> Option<&str> {
+        self.snapshot.edit_error.as_deref()
+    }
+    pub(crate) fn edit_close(&self) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::EditClosed);
+    }
+    pub(super) fn session(&self) -> FeedsPageSession {
+        self.session
+    }
+    pub(crate) fn edit_title(&self, value: String) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::EditTitleChanged(value));
+    }
+    pub(crate) fn edit_url(&self, value: String) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::EditUrlChanged(value));
+    }
+    pub(crate) fn edit_save(&self) {
+        self.session.dispatch_intent(super::intent::FeedsPageIntent::EditSaveRequested);
+    }
+    pub(crate) fn unread_count(&self) -> u64 {
+        self.snapshot.unread_count
+    }
+    pub(crate) fn archived_count(&self) -> u64 {
+        self.snapshot.archived_count
+    }
     pub(crate) fn new(session: FeedsPageSession, snapshot: FeedsPageState) -> Self {
         Self { session, snapshot }
     }

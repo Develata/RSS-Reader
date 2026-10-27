@@ -95,7 +95,18 @@ impl LibraryQueryPort for LibraryQueries {
         Ok(self
             .store
             .read(|conn| {
+                let settings: UserSettings = load(conn, USER_SETTINGS_KEY)?;
+                let archive_filter = match rssr_domain::archive_cutoff_at(
+                    crate::platform_clock::now_utc(),
+                    settings.archive_after_months,
+                ) {
+                    Some(cutoff) => rssr_domain::ArchiveFilter::OnlyArchived { cutoff },
+                    None => rssr_domain::ArchiveFilter::OnlyManual,
+                };
+                let archived_count =
+                    count_entries(conn, &EntryQuery { archive_filter, ..Default::default() })?;
                 Ok(FeedsOverview {
+                    archived_count,
                     feeds: list_summaries(conn)?,
                     fingerprint: config_fingerprint(conn)?,
                 })

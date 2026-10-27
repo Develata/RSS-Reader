@@ -77,17 +77,24 @@ impl Filtered {
                 self.push(" AND entries.is_starred = 0");
             }
         }
-        // Archiving looks at published_at only; entries without one are never archived.
+        // Manual archive is independent of publication time; automatic archive uses published_at.
         match query.archive_filter {
             ArchiveFilter::All => {}
+            ArchiveFilter::ExcludeManual => {
+                self.push(" AND entries.is_archived = 0");
+            }
+            ArchiveFilter::OnlyManual => {
+                self.push(" AND entries.is_archived = 1");
+            }
             ArchiveFilter::ExcludeArchived { cutoff } => {
-                self.push(" AND (entries.published_at IS NULL OR entries.published_at >= ")
+                self.push(" AND entries.is_archived = 0 AND (entries.published_at IS NULL OR entries.published_at >= ")
                     .bind(format_time(cutoff)?)
                     .push(")");
             }
             ArchiveFilter::OnlyArchived { cutoff } => {
-                self.push(" AND entries.published_at IS NOT NULL AND entries.published_at < ")
-                    .bind(format_time(cutoff)?);
+                self.push(" AND (entries.is_archived = 1 OR (entries.published_at IS NOT NULL AND entries.published_at < ")
+                    .bind(format_time(cutoff)?)
+                    .push("))");
             }
         }
         // Literal substring of the folded title (`%` and `_` are not wildcards), matching the

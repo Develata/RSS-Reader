@@ -168,7 +168,7 @@ dx_args=(build --platform web --package rssr-app --locked)
 if [[ "$profile" == release ]]; then
   cargo_profile_args=(--release)
   cargo_dir="release"
-  dx_args+=(--release)
+  dx_args+=(--release --debug-symbols false)
 fi
 exe_suffix=""
 case "$(uname -s)" in

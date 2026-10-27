@@ -18,6 +18,8 @@ pub trait AppStateServicesPort: AppStateRepository + AppStatePort + Send + Sync 
 impl<T> AppStateServicesPort for T where T: AppStateRepository + AppStatePort + Send + Sync + ?Sized {}
 
 pub struct AppCompositionInput {
+    pub entry_batch: Arc<dyn crate::EntryBatchPort>,
+    pub feed_edit: Arc<dyn crate::FeedEditPort>,
     pub feed_repository: Arc<dyn FeedRepository>,
     pub entry_index_repository: Arc<dyn EntryIndexRepository>,
     pub settings_repository: Arc<dyn SettingsRepository>,
@@ -38,6 +40,8 @@ pub struct AppCompositionInput {
 
 #[derive(Clone)]
 pub struct AppUseCases {
+    pub entry_batch_service: crate::EntryBatchService,
+    pub feed_edit_service: crate::FeedEditService,
     pub feed_catalog_service: FeedCatalogService,
     pub feed_service: FeedService,
     pub settings_service: SettingsService,
@@ -68,6 +72,8 @@ impl AppUseCases {
         let app_state_service = AppStateService::new(input.app_state.clone());
 
         Self {
+            entry_batch_service: crate::EntryBatchService::new(input.entry_batch),
+            feed_edit_service: crate::FeedEditService::new(input.feed_edit),
             feed_catalog_service,
             feed_service: feed_service.clone(),
             settings_service: settings_service.clone(),

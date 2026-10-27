@@ -2,13 +2,9 @@ use rssr_domain::{EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntriesCommand {
-    PreviewMarkRead {
-        query: EntryQuery,
+    ApplySelection {
+        request: rssr_domain::EntryBatchRequest,
     },
-    ConfirmMarkRead {
-        preview: rssr_domain::MarkReadPreview,
-    },
-
     Bootstrap {
         load_preferences: bool,
         load_feeds: bool,

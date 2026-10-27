@@ -79,6 +79,10 @@ js-sys = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "stream"] }
 wasm-bindgen-futures = "0.4"
 
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21.1"
+ndk-context = "0.1.1"
+
 [dev-dependencies]
 rssr-application = { path = "../rssr-application" }
 

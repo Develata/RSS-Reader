@@ -84,6 +84,27 @@ OS 关闭最后一个句柄时也回收其后代。每个阶段有自己的 Job 
 
 ## 调用与依赖
 
+### Web release 构建约定
+
+本地与 CI 一致，使用与产品依赖匹配的 dx 0.7.9，并显式关闭发布包的 DWARF 调试信息：
+
+```powershell
+dx build --platform web --package rssr-app --release --locked --debug-symbols false
+```
+
+这保留 `wasm-opt -Oz` 的完整优化；debug 构建仍保留调试信息。当前 Windows 样例在
+Binaryen 127 / 129 保留 DWARF 时出现 `0xc0000409`，移除 DWARF 后优化与写出通过。
+仅设置 `Dioxus.toml` 的 `web.wasm_opt.debug = false` 不足以替代命令行参数，dx 0.7.10
+会用默认开启的 `--debug-symbols` 覆盖该值。具体复现与版本边界见
+[2026-10-27 修复记录](../handoffs/2026-10-27-wasm-opt-release-build.md)。
+
+dx 0.7 会在优化器失败后保留未优化的输入并返回 0。聚合入口现在额外检查本轮完整的
+`web-build.log`；出现 `wasm-opt failed` / `wasm_opt_failed` 时，bundle 阶段失败并阻止后续
+依赖阶段。直接调用 dx 时也必须核对优化日志及本次实际产物；`--skip-build` 仍只表示复用，
+不追认先前产物的优化结果。
+
+### 运行验收入口
+
 ```bash
 # 原有接口继续使用；首次会构建独立 CLI，以后 Cargo 复用缓存。
 bash scripts/run_release_ui_regression.sh --release --full --no-serve

@@ -4,6 +4,8 @@ use crate::ui::failure::UiFailure;
 
 #[derive(Debug, Clone)]
 pub(crate) struct FeedsPageSnapshot {
+    pub(crate) unread_count: u64,
+    pub(crate) archived_count: u64,
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) feed_count: u64,
     pub(crate) entry_count: u64,
@@ -12,6 +14,21 @@ pub(crate) struct FeedsPageSnapshot {
 
 #[derive(Debug, Clone)]
 pub(crate) enum FeedsPageIntent {
+    EditRequested(i64),
+    EditLoaded {
+        feed_id: i64,
+        generation: u64,
+        result: Result<rssr_domain::FeedEditDetails, UiFailure>,
+    },
+    EditTitleChanged(String),
+    EditUrlChanged(String),
+    EditClosed,
+    EditSaveRequested,
+    EditSaved {
+        feed_id: i64,
+        generation: u64,
+        result: Result<(), UiFailure>,
+    },
     FeedCandidates {
         token: u64,
         page_url: url::Url,
@@ -67,7 +84,10 @@ impl FeedsPageIntent {
     /// The backend failure this intent carries.
     pub(crate) fn failure(&self) -> Option<&UiFailure> {
         match self {
-            Self::SnapshotLoaded(Err(failure)) | Self::Failed(failure) => Some(failure),
+            Self::SnapshotLoaded(Err(failure))
+            | Self::Failed(failure)
+            | Self::EditLoaded { result: Err(failure), .. }
+            | Self::EditSaved { result: Err(failure), .. } => Some(failure),
             _ => None,
         }
     }

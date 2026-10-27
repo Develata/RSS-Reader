@@ -25,11 +25,14 @@ pub struct Migration {
 
 /// Ordered by version, starting at 1 without gaps. Migrations must not contain statements that
 /// cannot run inside a transaction (`PRAGMA`, `VACUUM`, `ATTACH`, `BEGIN`, `COMMIT`).
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "baseline",
-    sql: include_str!("migrations/0001_baseline.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration { version: 1, name: "baseline", sql: include_str!("migrations/0001_baseline.sql") },
+    Migration {
+        version: 2,
+        name: "manual_archive",
+        sql: include_str!("migrations/0002_manual_archive.sql"),
+    },
+];
 
 /// SHA-384 of the SQL with CRLF converted to LF.
 pub fn checksum(sql: &str) -> Vec<u8> {
@@ -179,7 +182,7 @@ mod tests {
         let application_id: i32 =
             connection.query_row("PRAGMA application_id", [], |row| row.get(0)).unwrap();
         assert_eq!(application_id, APPLICATION_ID);
-        assert_eq!(applied(&connection), [1]);
+        assert_eq!(applied(&connection), MIGRATIONS.iter().map(|m| m.version).collect::<Vec<_>>());
         migrate(&mut connection, "2026-10-14T00:00:00Z").unwrap();
         let recorded_at: String = connection
             .query_row("SELECT applied_at FROM schema_migrations WHERE version = 1", [], |row| {
@@ -187,6 +190,36 @@ mod tests {
             })
             .unwrap();
         assert_eq!(recorded_at, NOW);
+    }
+
+    #[test]
+    fn released_baseline_upgrades_without_rewriting_its_history_or_article_flags() {
+        let mut connection = connection();
+        migrate_with(&mut connection, &MIGRATIONS[..1], NOW).unwrap();
+        connection.execute_batch("INSERT INTO feeds (id, url, created_at, updated_at) VALUES (1, 'u', 't', 't');
+            INSERT INTO entries (id, feed_id, external_id, dedup_key, title, title_search, first_seen_at, is_read, is_starred, created_at, updated_at)
+            VALUES (1, 1, 'e', 'e', 'Kept', 'kept', 't', 1, 1, 't', 't');").unwrap();
+        migrate(&mut connection, "2026-10-27T00:00:00Z").unwrap();
+        let flags: (i64, i64, i64) = connection
+            .query_row(
+                "SELECT is_read, is_starred, is_archived FROM entries WHERE id = 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(flags, (1, 1, 0));
+        let recorded: String = connection
+            .query_row("SELECT applied_at FROM schema_migrations WHERE version = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(recorded, NOW);
+        connection.execute("UPDATE entries SET is_archived = 1 WHERE id = 1", []).unwrap();
+        migrate(&mut connection, NOW).unwrap();
+        let archived: i64 = connection
+            .query_row("SELECT is_archived FROM entries WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(archived, 1);
     }
 
     #[test]

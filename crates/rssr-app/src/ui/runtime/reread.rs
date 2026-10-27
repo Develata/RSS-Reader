@@ -20,8 +20,10 @@ use crate::ui::failure::TONE_UNKNOWN;
 use crate::ui::runtime::backend::test_host;
 
 /// Every backend operation that writes, or starts something.
-const WRITES: [&str; 16] = [
+const WRITES: [&str; 18] = [
     "update_settings",
+    "apply_entry_batch",
+    "update_subscription",
     "set_entry_read",
     "set_entry_starred",
     "save_entries_workspace_if_changed",
@@ -84,7 +86,7 @@ async fn a_read_after_an_unknown_write_claims_no_success() {
 
     // The entry list: a flag write.
     backend.fail("set_entry_read", unknown.clone());
-    let mut entries = EntriesPageState::new(false);
+    let mut entries = EntriesPageState::new();
     reduce_entries_page_intent(&mut entries, EntriesPageIntent::PreferencesLoaded);
     let write = UiCommand::Entries(EntriesCommand::SetRead {
         entry_id: 1,

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::ui::AppShellState;
 use rssr_domain::{EntrySummary, ReadFilter, StarredFilter};
-use time::OffsetDateTime;
 
 use super::{
     groups::{EntryCardRef, EntryGroupNavItem, EntryMonthGroup, EntrySourceGroup},
@@ -20,11 +19,24 @@ pub(crate) struct EntriesPageFacade {
     session: EntriesPageSession,
     snapshot: Arc<EntriesPageState>,
     presenter: Arc<EntriesPagePresenter>,
-    /// 列表查询所用的“现在”；批量已读预览必须与屏幕上的列表用同一个归档分界。
-    query_now: OffsetDateTime,
 }
 
 impl EntriesPageFacade {
+    pub(crate) fn selected_count(&self) -> usize {
+        self.snapshot.selected_entry_ids.len()
+    }
+    pub(crate) fn is_selected(&self, id: i64) -> bool {
+        self.snapshot.selected_entry_ids.contains(&id)
+    }
+    pub(crate) fn page_selection_state(&self) -> &'static str {
+        if self.selected_count() == 0 {
+            "false"
+        } else if self.selected_count() == self.snapshot.current_page_entries().len() {
+            "true"
+        } else {
+            "mixed"
+        }
+    }
     pub(crate) fn position_key(&self) -> String {
         self.snapshot.position_key(self.session.feed_id(), Some(&self.ui.entry_search()))
     }
@@ -36,19 +48,12 @@ impl EntriesPageFacade {
     pub(crate) fn bulk_busy(&self) -> bool {
         self.snapshot.bulk_busy
     }
-    pub(crate) fn bulk_preview(&self) -> Option<&rssr_domain::MarkReadPreview> {
-        self.snapshot.bulk_preview.as_ref()
+    pub(crate) fn entry_write_pending(&self, id: i64) -> bool {
+        self.snapshot.pending_entry_writes.contains(&id)
     }
-    pub(crate) fn preview_mark_read(&self) {
-        let search = self.ui.entry_search();
-        let search = (!search.trim().is_empty()).then_some(search);
-        self.session.preview_mark_read(self.snapshot.entry_query(
-            self.session.feed_id(),
-            search,
-            self.query_now,
-        ));
+    pub(crate) fn has_pending_entry_writes(&self) -> bool {
+        !self.snapshot.pending_entry_writes.is_empty()
     }
-
     /// presenter 由调用方通过 `use_memo` 缓存后传入：它是 state 的纯函数，没必要每次重绘
     /// 都重建一遍分组树。
     pub(crate) fn new(
@@ -56,17 +61,12 @@ impl EntriesPageFacade {
         session: EntriesPageSession,
         snapshot: Arc<EntriesPageState>,
         presenter: Arc<EntriesPagePresenter>,
-        query_now: OffsetDateTime,
     ) -> Self {
-        Self { ui, session, snapshot, presenter, query_now }
+        Self { ui, session, snapshot, presenter }
     }
 
     pub(crate) fn entry_search(&self) -> String {
         self.ui.entry_search()
-    }
-
-    pub(crate) fn set_entry_search(&self, value: String) {
-        self.ui.set_entry_search(value);
     }
 
     pub(crate) fn clear_filters(&self) {
@@ -116,20 +116,12 @@ impl EntriesPageFacade {
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
-    pub(crate) fn controls_hidden(&self) -> bool {
-        self.snapshot.controls_hidden
-    }
-
     pub(crate) fn grouping_mode(&self) -> EntryGroupingMode {
         self.snapshot.grouping_mode
     }
 
     pub(crate) fn show_archived(&self) -> bool {
         self.snapshot.show_archived
-    }
-
-    pub(crate) fn archive_after_months(&self) -> u32 {
-        self.snapshot.archive_after_months
     }
 
     pub(crate) fn read_filter(&self) -> ReadFilter {
@@ -208,10 +200,6 @@ impl EntriesPageFacade {
         self.presenter.archived_count
     }
 
-    pub(crate) fn page_size(&self) -> usize {
-        self.presenter.page_size
-    }
-
     pub(crate) fn current_page(&self) -> u32 {
         self.presenter.current_page
     }
@@ -237,26 +225,23 @@ impl EntriesPageFacade {
     }
 
     pub(super) fn directory_model(&self) -> super::directory::DirectoryModel {
-        super::directory::DirectoryModel(Arc::clone(&self.presenter))
+        super::directory::DirectoryModel::new(
+            Arc::clone(&self.presenter),
+            Arc::clone(&self.snapshot.entries),
+        )
     }
 
-    /// 匹配的文章多于列表返回的上限。
     pub(crate) fn entries_truncated(&self) -> bool {
         self.presenter.truncated
     }
-
     pub(crate) fn truncated_entries_message(&self) -> String {
         format!(
             "只显示最新的 {} 篇文章，请用筛选或搜索缩小范围。",
             rssr_application::MAX_LISTED_ENTRIES
         )
     }
-
     pub(crate) fn archived_entries_message(&self) -> String {
-        format!(
-            "当前已自动归档 {} 篇较旧文章，可勾选“显示已归档文章”查看。",
-            self.archived_entry_count()
-        )
+        format!("当前已归档 {} 篇文章，可打开“显示已归档文章”查看。", self.archived_entry_count())
     }
 
     pub(crate) fn source_filter_options(&self) -> &[(i64, String, String, u64)] {
@@ -301,11 +286,7 @@ impl EntriesPageFacade {
     }
 
     pub(crate) fn archived_entries_state_message(&self) -> &'static str {
-        "当前结果中的文章都已被自动归档，勾选“显示已归档文章”即可查看。"
-    }
-
-    pub(crate) fn set_controls_hidden(&self, hidden: bool) {
-        self.session.dispatch(EntriesPageIntent::SetControlsHidden(hidden));
+        "当前结果中的文章都已归档，勾选“显示已归档文章”即可查看。"
     }
 
     pub(crate) fn set_grouping_mode(&self, mode: EntryGroupingMode) {

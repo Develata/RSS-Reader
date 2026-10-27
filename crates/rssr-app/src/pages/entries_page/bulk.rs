@@ -1,23 +1,18 @@
-use super::{facade::EntriesPageFacade, intent::EntriesPageIntent};
+use super::facade::EntriesPageFacade;
+use crate::components::icon::Icon;
 use dioxus::prelude::*;
+use rssr_domain::EntryBatchAction;
 
 pub(super) fn render_bulk_controls(facade: &EntriesPageFacade) -> Element {
-    let preview_facade = facade.clone();
     let session = facade.session();
-    let busy = facade.bulk_busy();
-    let count = facade.bulk_preview().map(|p| p.unread_entry_ids.len());
+    let disabled =
+        facade.selected_count() == 0 || facade.bulk_busy() || facade.has_pending_entry_writes();
     rsx! {
-        div { "data-layout": "entry-bulk-read", "data-state": if count.is_some_and(|count| count > 0) { "confirm" } else { "idle" }, aria_busy: busy,
-            if let Some(count) = count.filter(|count| *count > 0) {
-                p { "data-slot": "confirm-hint", "将把当前筛选结果中的 {count} 篇未读文章标为已读。" }
-                button { class: "button", "data-action": "confirm-mark-filtered-read", disabled: busy, aria_busy: busy,
-                    onclick: move |_| session.confirm_mark_read(), "确认标为已读" }
-                button { class: "button", "data-action": "cancel-mark-filtered-read", disabled: busy,
-                    onclick: move |_| session.dispatch(EntriesPageIntent::CancelBulk), "取消" }
-            } else {
-                button { class: "button", "data-action": "preview-mark-filtered-read", disabled: busy,
-                    onclick: move |_| preview_facade.preview_mark_read(), "将筛选结果标为已读" }
-            }
+        div { class: "entry-bulk-actions", role: "group", aria_label: "所选文章操作", aria_busy: facade.bulk_busy(),
+            button { class: "workspace-icon-button", disabled, title: "将所选文章标为已读", aria_label: "将所选文章标为已读", "data-action": "mark-selected-read",
+                onclick: move |_| session.apply_selection(EntryBatchAction::MarkRead), Icon { name: "double-check" } }
+            button { class: "workspace-icon-button", disabled, title: "归档所选文章", aria_label: "归档所选文章", "data-action": "archive-selected",
+                onclick: move |_| session.apply_selection(EntryBatchAction::Archive), Icon { name: "archive" } }
         }
     }
 }

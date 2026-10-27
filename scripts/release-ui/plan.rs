@@ -171,7 +171,8 @@ pub fn build(options: &Options) -> Vec<Step> {
     );
     let mut build_args = words("build --platform web --package rssr-app --locked");
     if options.release {
-        build_args.push("--release".into());
+        // Match CI: retain -Oz optimization, without the Windows DWARF rewrite crash.
+        build_args.extend(words("--release --debug-symbols false"));
     }
     add("web-bundle", "bundle", web || fixed, "dx", build_args, "web-build.log", None);
     let auth = web_auth(options);

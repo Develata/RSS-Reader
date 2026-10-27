@@ -45,6 +45,7 @@ pub struct StartupState {
 /// import from this page expects.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeedsOverview {
+    pub archived_count: u64,
     pub feeds: Vec<FeedSummary>,
     pub fingerprint: ConfigFingerprint,
 }
@@ -164,6 +165,7 @@ pub(crate) mod test_support {
 
         async fn feeds_overview(&self) -> rssr_domain::Result<FeedsOverview> {
             Ok(FeedsOverview {
+                archived_count: 0,
                 feeds: needed(&self.feeds).list_summaries().await?,
                 fingerprint: self.config_fingerprint().await?,
             })

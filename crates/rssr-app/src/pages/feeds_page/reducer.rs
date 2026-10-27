@@ -17,6 +17,102 @@ pub(crate) fn reduce_feeds_page_intent(
     intent: FeedsPageIntent,
 ) -> Vec<UiCommand> {
     match intent {
+        FeedsPageIntent::EditRequested(feed_id) => {
+            if state.edit_busy && state.edit_details.is_some() {
+                return Vec::new();
+            }
+            if state.pending_delete_feed.is_some() || state.pending_config_import {
+                state.status.clear();
+                state.status_revision = state.status_revision.wrapping_add(1);
+            }
+            clear_pending_confirmations(state);
+            state.edit_generation = state.edit_generation.wrapping_add(1);
+            state.edit_feed_id = Some(feed_id);
+            state.edit_details = None;
+            state.edit_error = None;
+            state.edit_busy = true;
+            vec![UiCommand::Feeds(FeedsCommand::LoadEdit {
+                feed_id,
+                generation: state.edit_generation,
+            })]
+        }
+        FeedsPageIntent::EditLoaded { feed_id, generation, result } => {
+            // A second visit to the same feed must not accept the first visit's
+            // delayed read, especially after the new draft has begun saving.
+            if state.edit_feed_id == Some(feed_id)
+                && state.edit_generation == generation
+                && state.edit_busy
+                && state.edit_details.is_none()
+            {
+                state.edit_busy = false;
+                match result {
+                    Ok(details) => state.edit_details = Some(details),
+                    Err(error) => state.edit_error = Some(error.message()),
+                }
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditTitleChanged(title) => {
+            if !state.edit_busy
+                && let Some(edit) = &mut state.edit_details
+            {
+                edit.custom_title = (!title.is_empty()).then_some(title);
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditUrlChanged(url) => {
+            if !state.edit_busy
+                && let Some(edit) = &mut state.edit_details
+            {
+                edit.url = url;
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditClosed => {
+            if !state.edit_busy || state.edit_details.is_none() {
+                state.edit_generation = state.edit_generation.wrapping_add(1);
+                state.edit_feed_id = None;
+                state.edit_details = None;
+                state.edit_error = None;
+                state.edit_busy = false;
+            }
+            Vec::new()
+        }
+        FeedsPageIntent::EditSaveRequested => {
+            if state.edit_busy {
+                return Vec::new();
+            }
+            let Some(edit) = &state.edit_details else {
+                return Vec::new();
+            };
+            state.edit_busy = true;
+            state.edit_error = None;
+            vec![UiCommand::Feeds(FeedsCommand::SaveEdit {
+                generation: state.edit_generation,
+                edit: rssr_domain::FeedEditRequest {
+                    feed_id: edit.feed_id,
+                    url: edit.url.clone(),
+                    custom_title: edit.custom_title.clone(),
+                },
+            })]
+        }
+        FeedsPageIntent::EditSaved { feed_id, generation, result } => {
+            if state.edit_feed_id == Some(feed_id) && state.edit_generation == generation {
+                state.edit_busy = false;
+                match result {
+                    Ok(()) => {
+                        state.edit_feed_id = None;
+                        state.edit_details = None;
+                        state.edit_error = None;
+                        state.reload_tick += 1;
+                        state.status = "来源已更新。".into();
+                        state.status_tone = "success".into();
+                    }
+                    Err(error) => state.edit_error = Some(error.message()),
+                }
+            }
+            Vec::new()
+        }
         FeedsPageIntent::FeedCandidates { token, page_url, candidates } => {
             if token == state.add_token
                 && state.adding_feed_url.as_deref() == Some(state.feed_url.as_str())
@@ -174,6 +270,8 @@ pub(crate) fn reduce_feeds_page_intent(
                     }
                     state.feed_count = snapshot.feed_count;
                     state.entry_count = snapshot.entry_count;
+                    state.unread_count = snapshot.unread_count;
+                    state.archived_count = snapshot.archived_count;
                     state.feeds = snapshot.feeds;
                     state.fingerprint = Some(snapshot.fingerprint);
                 }
@@ -230,6 +328,99 @@ fn clear_pending_confirmations(state: &mut FeedsPageState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn edit_details() -> rssr_domain::FeedEditDetails {
+        rssr_domain::FeedEditDetails {
+            feed_id: 42,
+            url: "https://example.com/feed".into(),
+            original_title: Some("Original".into()),
+            custom_title: None,
+        }
+    }
+
+    #[test]
+    fn editing_clears_previous_destructive_confirmations() {
+        let mut state = FeedsPageState::new();
+        for confirmation in [
+            FeedsPageIntent::RemoveFeedRequested { feed_id: 42, feed_title: "Original".into() },
+            FeedsPageIntent::ImportConfigRequested,
+        ] {
+            reduce_feeds_page_intent(&mut state, confirmation);
+            reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
+            reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditClosed);
+            assert_eq!(state.pending_delete_feed, None);
+            assert!(!state.pending_config_import);
+        }
+        assert!(
+            reduce_feeds_page_intent(
+                &mut state,
+                FeedsPageIntent::RemoveFeedRequested { feed_id: 42, feed_title: "Original".into() },
+            )
+            .is_empty(),
+            "deleting after an edit must require a fresh confirmation"
+        );
+    }
+
+    #[test]
+    fn old_edit_load_cannot_replace_reopened_draft_or_release_save_gate() {
+        let mut state = FeedsPageState::new();
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
+        let older = state.edit_generation;
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditClosed);
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
+        let latest = state.edit_generation;
+        assert_ne!(older, latest);
+        // A late failure must not dismiss the new visit's loading state either.
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditLoaded {
+                feed_id: 42,
+                generation: older,
+                result: Err(crate::ui::failure::plain("old read failed")),
+            },
+        );
+        assert!(state.edit_busy);
+        assert!(state.edit_error.is_none());
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditLoaded {
+                feed_id: 42,
+                generation: latest,
+                result: Ok(edit_details()),
+            },
+        );
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditTitleChanged("My draft".into()));
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditSaveRequested);
+        // The first visit's read finishes after the second visit has started saving.
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditLoaded {
+                feed_id: 42,
+                generation: older,
+                result: Ok(edit_details()),
+            },
+        );
+        assert_eq!(state.edit_details.as_ref().unwrap().custom_title.as_deref(), Some("My draft"));
+        assert!(state.edit_busy, "a stale read must not make an in-flight save dismissible");
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditSaved { feed_id: 42, generation: older, result: Ok(()) },
+        );
+        assert_eq!(state.edit_feed_id, Some(42));
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditClosed);
+        assert_eq!(state.edit_feed_id, Some(42), "saving still blocks dismissal");
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditSaved {
+                feed_id: 42,
+                generation: latest,
+                result: Err(crate::ui::failure::plain("save failed")),
+            },
+        );
+        assert!(!state.edit_busy);
+        assert_eq!(state.edit_error.as_deref(), Some("测试失败：save failed"));
+        assert_eq!(state.edit_details.unwrap().custom_title.as_deref(), Some("My draft"));
+    }
 
     #[test]
     fn remove_feed_first_request_sets_pending_without_command() {
@@ -388,6 +579,8 @@ mod tests {
             folder: None,
         };
         FeedsPageIntent::SnapshotLoaded(Ok(crate::pages::feeds_page::intent::FeedsPageSnapshot {
+            unread_count: 0,
+            archived_count: 0,
             feeds: Vec::new(),
             feed_count: 1,
             entry_count: 0,

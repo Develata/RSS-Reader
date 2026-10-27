@@ -4,7 +4,7 @@
 //! - Linux: installed under `/usr/bin` -> `$XDG_DATA_HOME/rss-reader` (default
 //!   `~/.local/share/rss-reader`); otherwise portable, next to the executable (`RSS-Reader/`);
 //! - macOS: `~/Library/Application Support/RSS-Reader` (an app bundle is read-only once signed);
-//! - Android: `$HOME/RSS-Reader` (the app's private directory);
+//! - Android: `Context.filesDir/RSS-Reader` (verified relocation from legacy HOME, originals retained);
 //! - other platforms: next to the executable (`RSS-Reader/`).
 //!
 //! The first open in a data directory without a library imports a v0.1.x library found in that
@@ -25,6 +25,9 @@ use super::import::{self, ImportOutcome, V01Library};
 /// File name of the library in a data directory.
 pub const LIBRARY_FILE: &str = "library.sqlite3";
 
+#[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
+mod android_storage;
+
 const LOCAL_DATA_DIR_NAME: &str = "RSS-Reader";
 
 fn io_error(message: impl Into<String>) -> StoreError {
@@ -35,15 +38,7 @@ fn io_error(message: impl Into<String>) -> StoreError {
 pub fn local_data_dir() -> StoreResult<PathBuf> {
     #[cfg(target_os = "android")]
     {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .filter(|path| !path.as_os_str().is_empty())
-            .or_else(|| {
-                let fallback = std::env::temp_dir();
-                (!fallback.as_os_str().is_empty()).then_some(fallback)
-            })
-            .ok_or_else(|| io_error("Android 环境未提供可写的 HOME 目录"))?;
-        Ok(home.join(LOCAL_DATA_DIR_NAME))
+        android_storage::data_dir().map_err(|error| io_error(format!("{error:#}")))
     }
     #[cfg(target_os = "macos")]
     {

@@ -57,7 +57,9 @@ class MainActivity : WryActivity() {
         }
         super.onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() = requestAppBack()
+            override fun handleOnBackPressed() {
+                if (!dispatchSystemBack()) moveTaskToBack(true)
+            }
         })
     }
 
@@ -102,7 +104,7 @@ class MainActivity : WryActivity() {
 
     private external fun completeThemeCssExport(status: Int, message: String)
 
-    private external fun requestAppBack()
+    private external fun dispatchSystemBack(): Boolean
 
     private companion object {
         const val STATUS_SUCCESS = 0

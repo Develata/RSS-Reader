@@ -10,23 +10,13 @@ use rssr_domain::EntriesWorkspaceState;
 
 pub(super) async fn execute(command: EntriesCommand) -> Vec<UiIntent> {
     match command {
-        EntriesCommand::PreviewMarkRead { query } => {
-            let result = async { backend().await?.preview_mark_read(&query).await }.await;
+        EntriesCommand::ApplySelection { request } => {
+            let ids = request.entry_ids.clone();
+            let action = request.action;
+            let result = async { backend().await?.apply_entry_batch(request).await }.await;
             vec![UiIntent::EntriesPage(match result {
-                Ok(preview) => EntriesPageIntent::BulkPreview(preview),
-                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("预览批量已读", error)),
-            })]
-        }
-        EntriesCommand::ConfirmMarkRead { preview } => {
-            let result = async { backend().await?.mark_read_if_unchanged(&preview).await }.await;
-            vec![UiIntent::EntriesPage(match result {
-                Ok(rssr_domain::MarkReadOutcome::Applied { changed_count }) => {
-                    EntriesPageIntent::BulkApplied(changed_count)
-                }
-                Ok(rssr_domain::MarkReadOutcome::SelectionChanged { preview }) => {
-                    EntriesPageIntent::BulkPreview(preview)
-                }
-                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("批量标为已读", error)),
+                Ok(count) => EntriesPageIntent::SelectionApplied { ids, action, count },
+                Err(error) => EntriesPageIntent::BulkFailed(UiFailure::new("处理所选文章", error)),
             })]
         }
 
