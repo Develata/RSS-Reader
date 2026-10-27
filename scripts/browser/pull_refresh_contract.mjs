@@ -22,6 +22,40 @@ async function boundaryTouch(client, kind, {x = 180, y, touches = 1, target = '.
 const phaseIs = phase =>
   `document.querySelector('[data-slot="pull-refresh"]').dataset.state === ${JSON.stringify(phase)}`;
 
+// Start trusted input on visible, noninteractive content, not a viewport pixel
+// that can become a filter button after a toolbar layout/theme change. Leave
+// the finger down so callers can test release, cancellation, or a second finger.
+export async function dragPull(client, distance, target = '[data-slot="page-title"]') {
+  // Refresh feedback can briefly cover the title; wait for the real hit target.
+  const origin = await waitFor(client, `(() => {
+    const root = document.querySelector('[data-page="entries"][data-entry-scope="all"]');
+    for (const node of root.querySelectorAll(${JSON.stringify(target)})) {
+      const rect = node.getBoundingClientRect();
+      const top = Math.max(rect.top, 1);
+      const bottom = Math.min(rect.bottom, innerHeight - ${distance} - 1);
+      const left = Math.max(rect.left, 1);
+      const right = Math.min(rect.right, innerWidth - 1);
+      if (bottom <= top || right <= left) continue;
+      const x = (left + right) / 2;
+      const y = (top + bottom) / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (node.contains(hit) && !hit.closest('input, textarea, select, button, a, [contenteditable]')) {
+        return {x, y};
+      }
+    }
+    return null;
+  })()`);
+  const {x, y} = origin;
+  await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{id: 1, x, y}]});
+  for (let step = 1; step <= 8; step++) {
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchMove', touchPoints: [{id: 1, x, y: y + distance * step / 8}],
+    });
+    await sleep(35);
+  }
+  return {x, y: y + distance};
+}
+
 // These fixtures exercise the real DOM adapter and Rust bridge. Synthetic events
 // keep native scrolling and selection collapse from changing the exclusion being
 // tested; trusted CDP touch coverage remains below and in the main suite.
@@ -126,21 +160,12 @@ export async function checkPullReleaseContracts(client, {assertThat, requestCoun
       {before, actual: requestCount()});
   }
 
-  const x = await evaluate(client, 'Math.round(innerWidth / 2)');
   for (const ending of ['second-finger', 'cancel']) {
-    await client.send('Input.dispatchTouchEvent', {
-      type: 'touchStart', touchPoints: [{id: 1, x, y: 145}],
-    });
-    for (let step = 1; step <= 8; step++) {
-      await client.send('Input.dispatchTouchEvent', {
-        type: 'touchMove', touchPoints: [{id: 1, x, y: 145 + 130 * step / 8}],
-      });
-      await sleep(35);
-    }
+    const {x, y} = await dragPull(client, 130);
     await waitFor(client, phaseIs('armed'));
     if (ending === 'second-finger') {
       await client.send('Input.dispatchTouchEvent', {
-        type: 'touchStart', touchPoints: [{id: 1, x, y: 275}, {id: 2, x: x + 30, y: 275}],
+        type: 'touchStart', touchPoints: [{id: 1, x, y}, {id: 2, x: x + 30, y}],
       });
       await waitFor(client, phaseIs('idle'));
     }

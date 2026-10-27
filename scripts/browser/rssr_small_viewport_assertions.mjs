@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkDirectoryContracts } from './directory_contract.mjs';
 import { measureDirectory } from './directory_performance.mjs';
-import { checkPullReleaseContracts } from './pull_refresh_contract.mjs';
+import { checkPullReleaseContracts, dragPull } from './pull_refresh_contract.mjs';
 import { checkSourceFilterContracts } from './source_filter_contract.mjs';
 
 import {
@@ -701,13 +701,8 @@ async function waitForPaused(pending) {
   if (!pending.length) throw new Error('Refresh did not issue a feed request within 10 seconds');
 }
 
-async function touchPull(client, fromY, toY) {
-  const x = Math.round(width / 2);
-  await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x, y: fromY}]});
-  for (let step = 1; step <= 8; step++) {
-    await client.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x, y: fromY + (toY - fromY) * step / 8}]});
-    await sleep(35);
-  }
+async function touchPull(client, distance, target) {
+  await dragPull(client, distance, target);
   const phase = await evaluate(client, `document.querySelector('[data-slot="pull-refresh"]')?.dataset.state`);
   await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
   await sleep(150);
@@ -868,15 +863,17 @@ async function checkHomeRefreshAndGestures(client) {
     // Real CDP touch events, not synthetic reducer calls. Start on the page header.
     await evaluate(client, 'window.scrollTo(0, 0)');
     const beforePull = requestCount;
-    assertThat('short pull stays below threshold', (await touchPull(client, 145, 190)) !== 'armed');
+    const shortPhase = await touchPull(client, 45);
+    assertThat('short pull tracks movement below threshold', shortPhase === 'pulling', {phase: shortPhase});
     assertThat('short pull does not refresh', requestCount === beforePull, {beforePull, requestCount});
     await checkPullReleaseContracts(client, {assertThat, requestCount: () => requestCount});
     await evaluate(client, 'window.scrollTo(0, 350)');
-    await touchPull(client, 145, 260);
+    await waitFor(client, 'scrollY > 1');
+    await touchPull(client, 115, '[data-slot="entry-card-meta"]');
     assertThat('pull starting away from top does not refresh', requestCount === beforePull, {requestCount});
     await evaluate(client, 'window.scrollTo(0, 0)');
     hold = true;
-    const phase = await touchPull(client, 145, 275);
+    const phase = await touchPull(client, 130);
     assertThat('top pull arms at threshold', phase === 'armed', {phase});
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'refreshing'`);
     await clickSelector(client, '[data-action="activate-home"]');
