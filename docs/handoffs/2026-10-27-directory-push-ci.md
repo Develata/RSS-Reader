@@ -3,10 +3,11 @@
 - 日期：2026-10-27
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
-- 当前产品 HEAD：`de7c54af85dc611388e383b61361db4bd5a4472a`
-- 相关 commit：`c22a58d9..de7c54af` 共 8 个已推送提交；本记录 commit: pending。
+- 当前产品 HEAD：`5ab77f5afdd07a29b1de36def300b9b1ce6d7eed`
+- 相关 commit：`c22a58d9..de7c54af` 共 8 个已推送提交；CI 修复 `5ab77f5a` 已推送。
+  本次结果补记随其后的仅文档提交保存，可用 `git log -- docs/handoffs/2026-10-27-directory-push-ci.md` 定位。
 - 相关 tag / release：N/A；未合并、打 tag 或发布。
-- 状态：`draft`，修复后的本地验证已通过，等待第二轮 CI。
+- 状态：`validated`，本地验证及修复提交的 24 项远端 CI 均通过。
 
 ## 工作摘要
 
@@ -68,15 +69,19 @@
 - 同一命令使用 `--port 18111 --preset atlas-sidebar --log-dir target/ci-push-20261027/local-final-atlas`：
   通过，178 项断言。两轮均涵盖旧 Atlas 的 Entries / Reader 搜索；搜索输入实际为 174×44px。
 - 两个修改的 `.mjs` 通过 `node --check`；任务范围内 `git diff --check` 通过。
-- 第二轮远端 CI：pending，提交后以新 head 运行既有 `ci.yml`。
+- [第二轮 CI 40528971172](https://github.com/Develata/RSS-Reader/actions/runs/40528971172)：
+  `workflow_dispatch`，attempt 1，head `5ab77f5afdd07a29b1de36def300b9b1ce6d7eed`，
+  `completed / success`；24/24 个 job 全部通过，包含默认、Atlas、Newsprint、Midnight Ledger、
+  Amethyst Glass 五主题及最终 `lint-and-test` 汇总。
+- `git ls-remote` 回读的分支 SHA 与上述修复提交一致。
 - 上一轮本地优化构建和 172 项浏览器断言见
   [wasm-opt 修复记录](2026-10-27-wasm-opt-release-build.md)；它们不代替本次远端 CI。
 - 本次不新增人工 UI / Android 实机验收。
 
 ## 结果
 
-- 原有八个提交推送完成；CI 暴露的问题已修复并通过本地 release 及完整默认 / Atlas 回归，
-  五主题最终远端 CI 待验证。
+- 原有八个提交和后续修复均推送完成；首轮 CI 暴露的问题已经闭环，修复提交的 24 项 CI 全通过。
+- PR #32 仍为 draft，GitHub 回读 `mergeable=false`；CI 成功不代表可直接合并。
 
 ## 风险与后续事项
 
