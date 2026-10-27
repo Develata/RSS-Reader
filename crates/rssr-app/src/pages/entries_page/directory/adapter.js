@@ -33,6 +33,7 @@ function queue(key, kind, fields = {}) {
     pending.delete(key);
     pending.set(key, {epoch, sequence: ++sequence, kind, ...fields});
     sendNext();
+    return sequence;
 }
 function selectAnchor() {
     if (dirty) {
@@ -84,6 +85,7 @@ function refreshContext() {
     const next = Number(root.querySelector('[data-directory-controller]')?.dataset.directoryEpoch || 0);
     if (!next || next === epoch) return;
     epoch = next;
+    if (navigation?.sequence === pending.get('navigate')?.sequence) navigation = null;
     pending.clear();
     if (ack) inFlight = null;
     ack = null; lastPath = ''; dirty = true;
@@ -135,8 +137,15 @@ function align(command) {
 function finishCommand() {
     if (disposed) return;
     refreshContext();
-    if (navigation && navigation.contextKey !== root.dataset.positionKey) navigation = null;
-    if (navigation && Number(root.dataset.positionPage) === navigation.page && root.dataset.positionReady === 'true') {
+    const page = Number(root.dataset.positionPage);
+    if (navigation) {
+        // Watch the requested page transition even before its reply arrives.
+        // Once another page/context supersedes it, the old ack cannot revive it.
+        if (navigation.contextKey !== root.dataset.positionKey ||
+            (page !== navigation.page && (navigation.arrived || page !== navigation.originPage))) navigation = null;
+        else if (page === navigation.page) navigation.arrived = true;
+    }
+    if (navigation?.approved && page === navigation.page && root.dataset.positionReady === 'true') {
         const element = document.getElementById(navigation.anchor);
         if (element && root.contains(element)) {
             input = {source: null, serial: input.serial + 1, at: 0};
@@ -145,8 +154,9 @@ function finishCommand() {
             const hash = '#' + encodeURIComponent(navigation.anchor);
             if (location.hash !== hash) history.replaceState(history.state, '', hash);
             element.scrollIntoView({behavior: 'smooth', block: 'start', inline: 'nearest'});
-            navigation = null;
         }
+        // The ready page no longer containing a target also retires the request.
+        navigation = null;
     }
     if (!ack) return;
     if (ack.epoch !== epoch) { ack = null; inFlight = null; sendNext(); return; }
@@ -234,8 +244,11 @@ function onClick(event) {
     if (button.dataset.canToggle === 'true') {
         queue('toggle:' + anchor, 'set_open', {anchor, open: button.dataset.open !== 'true', rendered_group, rendered_item, epoch: renderedEpoch});
     } else {
-        queue('navigate', 'navigate', {anchor, page: Number(button.dataset.directoryPage), rendered_group, rendered_item,
-            epoch: renderedEpoch, context_key: root.dataset.positionKey});
+        const page = Number(button.dataset.directoryPage), originPage = Number(root.dataset.positionPage);
+        const contextKey = root.dataset.positionKey;
+        const request = queue('navigate', 'navigate', {anchor, page, rendered_group, rendered_item,
+            epoch: renderedEpoch, context_key: contextKey});
+        navigation = request ? {sequence: request, anchor, page, originPage, contextKey, arrived: page === originPage, approved: false} : null;
     }
 }
 function cleanup() {
@@ -298,13 +311,17 @@ try {
             // A malformed request may have no usable sequence. Drop it once,
             // keep pending user input, and remeasure on the next normal update;
             // never retry an invalid payload in a loop or reset Rust UI state.
+            if (navigation?.sequence === inFlight?.sequence) navigation = null;
             ack = null; inFlight = null;
             lastPath = ''; reportedVisible = null;
             sendNext();
             continue;
         }
         if (command.sequence !== inFlight?.sequence) continue;
-        if (command.navigate) navigation = {anchor: command.navigate, page: command.page, contextKey: inFlight.context_key};
+        if (navigation?.sequence === command.sequence) {
+            if (command.navigate === navigation.anchor && command.page === navigation.page) navigation.approved = true;
+            else navigation = null;
+        }
         ack = command;
         finishCommand();
     }

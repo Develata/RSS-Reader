@@ -1,6 +1,6 @@
 # 原生界面前置模块边界
 
-核对日期：2026-10-26。本文件记录当前阅读分支已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
+核对日期：2026-10-27。本文件记录当前阅读分支已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
 
 ## 已有可独立测试的 Rust 规则
 
@@ -33,6 +33,8 @@
 - 可见范围桥接独立于展开/跟随桥接，单条在途；回复等待本窗口 revision 提交后执行。显式定位/聚焦后丢弃定位前排队的几何事实，下一帧重新测量，避免旧视口卸载新焦点。两条通道共用消息损坏恢复逻辑。
 - 未挂载的跟随目标通过 Rust 全局引用找到逻辑行，先挂载后对齐；Tab/Shift+Tab 和方向键可跨越窗口边界，Home/End 可到分支首末篇，真实边界保留 Tab 离开分支的默认行为。
 - 自动跟随的窗口回复只负责挂载目标，实际对齐统一由目录控制器适配器在确认没有更新的手动意图后执行；窗口适配器仅为显式键盘聚焦执行定位，不能让迟到的自动回复覆盖用户滚动。目录内 Tab/Shift+Tab 属于手动浏览，目录外 Tab 不作为主列表滚动输入。
+- 每个窗口适配器同时绑定挂载节点、目录 epoch 和实例所有权；在异步回复后仍须重新检查。筛选、分页、分组或路由替换窗口后，旧回复不能测量、滚动或聚焦新目录，旧等待必须释放。
+- 目录定位的 DOM 执行请求从点击时绑定序号、查询上下文、原页和目标页。Rust 接受且目标页提交后才能滚动；其他页面或查询取代该请求后，旧回复不能重建它，即使用户随后又返回原目标页。已就绪页面若已无该目标，也应结束等待。这是宿主等待提交的生命周期，不改变 Rust 的目标页判定、全局引用或分页 reducer。
 
 ## 阅读快捷键的使用约束
 
@@ -55,6 +57,7 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - 纯状态与策略：`cargo test -p rssr-app --locked`。
 - 目录实际行为：`scripts/browser/rssr_small_viewport_assertions.mjs --directory-only true`，包含日期/来源/文章层级、跨页、手动/跟随、显隐和选择保持。
 - 不启动预览服务的回归：先构建 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。Playwright 在隔离无头 Chrome 内提供构建文件与测试数据；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样可离线回归旧目录通道。
+- `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。
 - 阅读位置及快捷键：`scripts/browser/rssr_reading_position_acceptance.cjs`，包含返回、切文、M/F、修饰键/IME、正文测量次数。
 - 具体源码身份、命令和平台范围见 [2026-10-26 交接](../handoffs/2026-10-26-native-ui-preparation.md)。编译、浏览器运行、原生设备运行和性能结论分别记录。
 

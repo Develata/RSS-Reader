@@ -3,23 +3,30 @@ const root = document.getElementById(windowId);
 const rail = root?.closest('[data-directory-consumer="rail"]');
 if (!root || !rail) return;
 root.__rssrVirtualWindow?.cleanup();
+const directoryEpoch = rail.dataset.directoryEpoch;
 let disposed = false, frame = 0, sequence = 0, inFlight = null, reply = null, signature = '';
 const pending = new Map(), abort = new AbortController();
 const listen = (target, type, fn, options = {}) => target.addEventListener(type, fn, {...options, signal: abort.signal});
 const number = value => Math.round(value * 4) / 4;
+function current() {
+    return !disposed && root.isConnected && rail.isConnected && rail.dataset.directoryEpoch === directoryEpoch &&
+        root.__rssrVirtualWindow?.cleanup === cleanup;
+}
 function sendNext() {
-    if (disposed || inFlight || !pending.size) return;
+    if (!current()) { cleanup(); return; }
+    if (inFlight || !pending.size) return;
     const [key, request] = pending.entries().next().value;
     pending.delete(key); inFlight = request;
     dioxus.send({...request.fact, sequence: ++sequence});
 }
 function queue(key, fact, resolve) {
+    if (!current()) { resolve?.(false); cleanup(); return; }
     pending.get(key)?.resolve?.(false);
     pending.set(key, {fact, resolve}); sendNext();
 }
 function measure() {
     frame = 0;
-    if (disposed || !root.isConnected) return;
+    if (!current()) { cleanup(); return; }
     const r = rail.getBoundingClientRect(), b = root.getBoundingClientRect();
     if (!r.width || !r.height || !b.width) return;
     const fact = {kind: 'measure', top: number(r.top + rail.clientTop - b.top), viewport: rail.clientHeight,
@@ -31,6 +38,7 @@ function measure() {
 }
 function schedule() { if (!disposed && !frame) frame = requestAnimationFrame(measure); }
 function finish() {
+    if (!current()) { cleanup(); return; }
     if (!reply || Number(root.dataset.windowRevision) < reply.revision) return;
     const command = reply;
     reply = null;
@@ -82,6 +90,7 @@ function cleanup() {
     disposed = true; abort.abort(); observer.disconnect(); resize.disconnect();
     if (frame) cancelAnimationFrame(frame);
     inFlight?.resolve?.(false); pending.forEach(request => request.resolve?.(false)); pending.clear();
+    inFlight = null; reply = null;
     if (root.__rssrVirtualWindow?.cleanup === cleanup) delete root.__rssrVirtualWindow;
 }
 root.__rssrVirtualWindow = {
@@ -94,6 +103,9 @@ schedule();
 try {
     while (!disposed) {
         const command = await dioxus.recv();
+        // recv can resume after a filter/page change retired this DOM window.
+        // Check ownership again before applying any old geometry or focus.
+        if (!current()) { cleanup(); break; }
         if (!command) { cleanup(); break; }
         if (command.rejected) {
             inFlight?.resolve?.(false); inFlight = null; reply = null; signature = ''; sendNext(); continue;
