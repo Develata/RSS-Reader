@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：`feat/reading-workspace-20261024`
 - 修改前 HEAD：`6b3aa3b0da92e50e4dd018b71d37d2503cee2c24`
-- 相关 commit：箭头 `119dc73f`；间距补充为本记录与 CSS 的同一提交，准确提交号见本文件 `git log -1`。
+- 相关 commit：箭头 `119dc73f`；间距 `9ba17dda`；Penpot 同步记录为本文件最新提交，准确提交号见 `git log -1 -- docs/handoffs/2026-10-27-directory-disclosure-size.md`。
 - 相关 tag / release：N/A；未发布、未 push。
-- 状态：`validated`（代码）；Penpot 同步待服务恢复。
+- 状态：`validated`（代码及 Penpot 局部同步）。
 
 ## 工作摘要
 
@@ -50,8 +50,12 @@
 ## 结果与待跟进
 
 - 代码修正与浏览器验证完成；重新构建/部署后可使用新样式。
-- Penpot MCP 两次返回 HTTP 522；普通浏览器编辑页导航也超时。备用连接要求重新认证，未修改认证配置。因此本轮没有写入 Penpot，不得声称设计稿已同步。
-- Penpot 恢复后，同步当前基准画板中的 `entry-directory-branch-toggle` 图形，以及文章条目 4px 上下内边距、至少 44px 高度、与日期文字对齐的缩进。保留状态、历史页和原有交互；重新导出并保存命名版本。
+- 早先 Penpot MCP 返回 HTTP 522；用户重新打开后连接恢复，现已完成同步。未修改认证配置。
+- Penpot rev 357：更新 16 张现有画板的 43 个 `entry-directory-branch-toggle` 和 69 个文章条目。替换为原生可编辑 5px 绘制盒矢量箭头，保留 44×44px 控件与展开方向、主题颜色；文章容器左缩进 38px，行内水平 padding 8px，标题与父级标签对齐。双行高度 46.375px，单行最小 44px；同步后续分组位置与目录背景高度。
+- 保留 55 个唯一画板及 capture-key、原页面分类、06 独立提案和 90–94 历史稿。画板仅新增 `directory-refinement=9ba17dda` 标记；00 使用说明补充局部增量，不将全文件标记为新 HEAD 基准。
+- 修改前命名版本：`Before 5px directory spacing sync · 2026-10-27`；完成版本：`Directory 5px and spacing · 9ba17dda · 2026-10-27`，已通过 `findVersions()` 回读，创建时间 `2026-10-27T12:39:38.000Z`。
+- `currentFile.validate()` 返回空错误列表。几何回读检查：43 个按钮均 44×44、均包含 5px 标记箭头；69 个条目的缩进、行高和连续排列全部通过，当前画板范围未发现遗漏的旧分支箭头。
+- 实际导出复核：默认桌面目录、手机来源分组目录浮层、完整深色桌面。未逐张视觉复核其余 13 张画板，也未将静态设计稿校验当作全平台运行验收。本轮同步未修改应用源码，沿用上述构建与浏览器验证。
 - 其他任务的 dirty / untracked / deleted 文件保持不动。
 
 ## 给下一位 Agent 的备注
@@ -59,3 +63,4 @@
 - 证据目录：`C:/Users/QQ/.codex/visualizations/2026/10/26/01a1779a-f271-7ec2-ab70-c1ef756f9ffb`。
 - 截图：`directory-arrow-5px-desktop.png`、`directory-arrow-5px-mobile.png`、`directory-arrow-5px-dark-mobile.png`、`directory-arrow-5px-desktop-final.png`（最后一张为深色）。
 - Penpot 文件和既有画板清单见 `docs/design/penpot-code-baseline.md` 及证据目录的 `penpot-final-audit.json`；不要将本次局部修正标记为全文件重新对齐最新 HEAD。
+- 本轮审计：`penpot-directory-spacing-audit.json`；导出：`penpot-directory-spacing-desktop.png`、`penpot-directory-spacing-mobile.png`、`penpot-directory-spacing-dark.png`，均在上述证据目录。几何数据、更新数量、文件版本及命名版本已记录。
