@@ -105,6 +105,9 @@
 .directory-month-heading [data-slot="entry-directory-title"] { font-size: 0.75rem; white-space: nowrap; }
 .directory-month-heading > [data-layout="entry-directory-link"] { gap: 4px; padding-right: 4px; }
 .directory-month-toggle { flex: 0 0 44px; width: 44px; height: 44px; }
+.directory-month-toggle svg { display: none; }
+.directory-month-toggle::before { content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); flex: 0 0 5px; }
+.directory-month-toggle[data-open="true"]::before { transform: rotate(45deg); }
 [data-layout="entry-directory-articles"] { display: grid; min-width: 0; padding-left: 22px; }
 [data-page="entries"] [data-directory-level="article"] { min-height: 40px; }
 [data-page="entries"] [data-directory-level="article"] [data-slot="entry-directory-title"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.5; }
