@@ -1,6 +1,53 @@
+//! Read-only directory rendering. State transitions stay in `controller.rs`;
+//! event delegation consumes the stable `data-directory-*` attributes below.
 use super::{DirectoryModel, DirectoryState, DirectoryStore};
-use crate::pages::entries_page::state::EntryGroupingMode;
+use crate::pages::entries_page::{
+    groups::{EntryCardRef, EntryDirectoryDate, EntryDirectorySourceMonth},
+    state::EntryGroupingMode,
+};
 use dioxus::prelude::*;
+
+const VIRTUAL_ARTICLE_THRESHOLD: usize = 80;
+
+#[derive(Clone, Copy)]
+enum ArticleBranchKind {
+    Date,
+    SourceMonth,
+}
+
+/// Borrowed display metadata shared by the two grouping trees; no second model.
+struct ArticleBranch<'a> {
+    kind: ArticleBranchKind,
+    anchor: &'a str,
+    title: &'a str,
+    subtitle: &'a str,
+    target_page: u32,
+    cards: &'a [EntryCardRef],
+}
+
+impl<'a> ArticleBranch<'a> {
+    fn date(date: &'a EntryDirectoryDate) -> Self {
+        Self {
+            kind: ArticleBranchKind::Date,
+            anchor: &date.anchor_id,
+            title: &date.title,
+            subtitle: &date.subtitle,
+            target_page: date.target_page,
+            cards: &date.entry_cards,
+        }
+    }
+
+    fn source_month(month: &'a EntryDirectorySourceMonth) -> Self {
+        Self {
+            kind: ArticleBranchKind::SourceMonth,
+            anchor: &month.anchor_id,
+            title: &month.title,
+            subtitle: &month.subtitle,
+            target_page: month.target_page,
+            cards: &month.entry_cards,
+        }
+    }
+}
 
 #[component]
 pub(crate) fn DirectoryRail(
@@ -31,19 +78,11 @@ pub(crate) fn DirectoryRail(
                 if grouping_mode == EntryGroupingMode::Time {
                     for month in &model.directory_months {
                         div { "data-layout": "entry-directory-section", key: "{month.anchor_id}",
-                            { toggle(&state, &month.anchor_id, &month.title, &month.subtitle, true) }
+                            { group_toggle(&state, &month.anchor_id, &month.title, &month.subtitle, EntryGroupingMode::Time) }
                             div { "data-layout": "entry-directory-children", "data-directory-section-body": "true",
                                 "data-open-base": boolean(state.is_open(&month.anchor_id)), "data-open": boolean(state.is_open(&month.anchor_id)),
                               if state.is_open(&month.anchor_id) {
-                                for date in &month.dates {
-                                    div { key: "{date.anchor_id}", "data-layout": "entry-directory-date-branch",
-                                        div { class: "directory-month-heading",
-                                            { link(&state, &month.anchor_id, &date.anchor_id, &date.title, &date.subtitle, date.target_page, true) }
-                                            { articles_toggle(&state, &date.anchor_id, &date.title) }
-                                        }
-                                        { articles(&state, &model, &date.anchor_id, &date.entry_cards) }
-                                    }
-                                }
+                                { month.dates.iter().map(|date| article_branch(&state, &model, &month.anchor_id, ArticleBranch::date(date))) }
                               }
                             }
                         }
@@ -51,19 +90,11 @@ pub(crate) fn DirectoryRail(
                 } else {
                     for source in &model.directory_sources {
                         div { "data-layout": "entry-directory-section", key: "{source.anchor_id}",
-                            { toggle(&state, &source.anchor_id, &source.title, &source.subtitle, false) }
+                            { group_toggle(&state, &source.anchor_id, &source.title, &source.subtitle, EntryGroupingMode::Source) }
                             div { "data-layout": "entry-directory-grandchildren", "data-directory-section-body": "true",
                                 "data-open-base": boolean(state.is_open(&source.anchor_id)), "data-open": boolean(state.is_open(&source.anchor_id)),
                               if state.is_open(&source.anchor_id) {
-                                for month in &source.months {
-                                    div { key: "{month.anchor_id}", "data-layout": "entry-directory-month-branch",
-                                        div { class: "directory-month-heading",
-                                            { link(&state, &source.anchor_id, &month.anchor_id, &month.title, &month.subtitle, month.target_page, false) }
-                                            { articles_toggle(&state, &month.anchor_id, &month.title) }
-                                        }
-                                        { articles(&state, &model, &month.anchor_id, &month.entry_cards) }
-                                    }
-                                }
+                                { source.months.iter().map(|month| article_branch(&state, &model, &source.anchor_id, ArticleBranch::source_month(month))) }
                               }
                             }
                         }
@@ -75,13 +106,35 @@ pub(crate) fn DirectoryRail(
     }
 }
 
-fn articles(
+fn article_branch(
+    state: &DirectoryState,
+    model: &DirectoryModel,
+    parent_anchor: &str,
+    branch: ArticleBranch<'_>,
+) -> Element {
+    let layout = match branch.kind {
+        ArticleBranchKind::Date => "entry-directory-date-branch",
+        ArticleBranchKind::SourceMonth => "entry-directory-month-branch",
+    };
+    rsx! {
+        div { key: "{branch.anchor}", "data-layout": layout,
+            div { class: "directory-branch-heading",
+                // Navigation stays left of disclosure in visual and keyboard order.
+                { branch_link(state, parent_anchor, &branch) }
+                { branch_toggle(state, branch.anchor, branch.title) }
+            }
+            { article_rows(state, model, branch.anchor, branch.cards) }
+        }
+    }
+}
+
+fn article_rows(
     state: &DirectoryState,
     model: &DirectoryModel,
     anchor: &str,
-    cards: &[super::super::groups::EntryCardRef],
+    cards: &[EntryCardRef],
 ) -> Element {
-    if state.is_open(anchor) && cards.len() > 80 {
+    if state.is_open(anchor) && cards.len() > VIRTUAL_ARTICLE_THRESHOLD {
         return rsx! { super::virtual_articles::VirtualArticles {
             key: "{state.epoch()}:{anchor}", model: model.clone(), anchor: anchor.to_owned(),
             epoch: state.epoch(), active: state.active_leaf().map(str::to_owned),
@@ -89,31 +142,28 @@ fn articles(
     }
     rsx! {
         div { id: "directory-articles-{anchor}", "data-layout": "entry-directory-articles",
-            // Both grouping modes share identity checks and global page mapping.
             // Only expanded paths mount article nodes; the projection keeps refs.
             if state.is_open(anchor) {
-                for (card, entry) in cards.iter().filter_map(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry))) {
-                    DirectoryArticle { key: "{entry.id}", entry: std::sync::Arc::clone(entry),
-                        active: state.active_leaf() == Some(&super::super::groups::entry_anchor_id(entry.id)),
-                        page: (card.index / model.page_size.max(1)) as u32 + 1 }
+                for article in cards.iter().filter_map(|card| model.resolve_article(card)) {
+                    DirectoryArticle { key: "{article.entry.id}", entry: std::sync::Arc::clone(article.entry),
+                        active: state.active_leaf() == Some(&super::super::groups::entry_anchor_id(article.entry.id)),
+                        page: article.page }
                 }
             }
         }
     }
 }
 
-fn articles_toggle(state: &DirectoryState, anchor: &str, title: &str) -> Element {
+fn branch_toggle(state: &DirectoryState, anchor: &str, title: &str) -> Element {
     let open = state.is_open(anchor);
-    let icon = if open { "chevron-down" } else { "chevron-right" };
     let verb = if open { "收起" } else { "展开" };
     rsx! {
         button {
-            r#type: "button", class: "workspace-icon-button directory-month-toggle",
+            r#type: "button", class: "workspace-icon-button directory-branch-toggle",
             "data-layout": "entry-directory-branch-toggle", "data-directory-anchor": anchor,
             "data-can-toggle": "true", "data-open": boolean(open),
             aria_expanded: boolean(open), aria_controls: "directory-articles-{anchor}",
             aria_label: "{verb}{title}的文章",
-            crate::components::icon::Icon { name: icon }
         }
     }
 }
@@ -146,20 +196,26 @@ fn boolean(value: bool) -> &'static str {
     if value { "true" } else { "false" }
 }
 
-fn toggle(
+fn group_toggle(
     state: &DirectoryState,
     anchor: &str,
     title: &str,
     subtitle: &str,
-    time: bool,
+    grouping_mode: EntryGroupingMode,
 ) -> Element {
     let open = state.is_open(anchor);
+    let (level, nav, action) = match grouping_mode {
+        EntryGroupingMode::Time => ("month", Some("entry-directory-month"), None),
+        EntryGroupingMode::Source => (
+            "source",
+            None,
+            Some(if open { "collapse-directory-source" } else { "expand-directory-source" }),
+        ),
+    };
     rsx! {
         button { "data-layout": "entry-directory-toggle", r#type: "button",
             "data-directory-kind": "group", "data-directory-anchor": anchor,
-            "data-directory-level": if time { "month" } else { "source" },
-            "data-nav": if time { Some("entry-directory-month") } else { None },
-            "data-action": if time { None } else if open { Some("collapse-directory-source") } else { Some("expand-directory-source") },
+            "data-directory-level": level, "data-nav": nav, "data-action": action,
             "data-active": boolean(state.active_group() == Some(anchor)),
             "data-can-toggle": "true", "data-open-base": boolean(open), "data-open": boolean(open),
             aria_disabled: "false", aria_expanded: boolean(open),
@@ -169,24 +225,19 @@ fn toggle(
     }
 }
 
-fn link(
-    state: &DirectoryState,
-    group: &str,
-    anchor: &str,
-    title: &str,
-    subtitle: &str,
-    page: u32,
-    date: bool,
-) -> Element {
+fn branch_link(state: &DirectoryState, group: &str, branch: &ArticleBranch<'_>) -> Element {
+    let (level, nav) = match branch.kind {
+        ArticleBranchKind::Date => ("date", "entry-directory-date"),
+        ArticleBranchKind::SourceMonth => ("month", "entry-directory-month"),
+    };
     rsx! {
-        button { key: "{anchor}", "data-layout": "entry-directory-link", r#type: "button",
+        button { key: "{branch.anchor}", "data-layout": "entry-directory-link", r#type: "button",
             "data-directory-kind": "item", "data-directory-group-anchor": group,
-            "data-directory-level": if date { "date" } else { "month" },
-            "data-nav": if date { "entry-directory-date" } else { "entry-directory-month" },
-            "data-directory-anchor": anchor, "data-directory-page": "{page}",
-            "data-active": boolean(state.active_item() == Some(anchor)),
-            span { "data-slot": "entry-directory-title", "{title}" }
-            span { "data-slot": "entry-directory-meta", title: subtitle, "{compact_count(subtitle)}" }
+            "data-directory-level": level, "data-nav": nav,
+            "data-directory-anchor": branch.anchor, "data-directory-page": "{branch.target_page}",
+            "data-active": boolean(state.active_item() == Some(branch.anchor)),
+            span { "data-slot": "entry-directory-title", "{branch.title}" }
+            span { "data-slot": "entry-directory-meta", title: branch.subtitle, "{compact_count(branch.subtitle)}" }
         }
     }
 }

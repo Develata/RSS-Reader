@@ -225,7 +225,7 @@ impl EntriesPageFacade {
     }
 
     pub(super) fn directory_model(&self) -> super::directory::DirectoryModel {
-        super::directory::DirectoryModel(
+        super::directory::DirectoryModel::new(
             Arc::clone(&self.presenter),
             Arc::clone(&self.snapshot.entries),
         )

@@ -107,10 +107,10 @@ pub(super) fn VirtualArticles(
                 style: "height: {height}px; min-height: {height}px; pointer-events: none;" }
         }),
         Part::Row(index) => model.article_cards(&anchor).get(*index)
-            .and_then(|card| model.1.get(card.index).filter(|entry| entry.id == card.id).map(|entry| (card, entry)))
-            .map(|(card, entry)| rsx! { super::view::DirectoryArticle {
-                key: "{entry.id}", entry: entry.clone(), active: active.as_deref() == Some(&super::super::groups::entry_anchor_id(entry.id)),
-                page: (card.index / model.page_size.max(1)) as u32 + 1,
+            .and_then(|card| model.resolve_article(card))
+            .map(|article| rsx! { super::view::DirectoryArticle {
+                key: "{article.entry.id}", entry: article.entry.clone(), active: active.as_deref() == Some(&super::super::groups::entry_anchor_id(article.entry.id)),
+                page: article.page,
                 window_index: Some(*index), window_count: count,
             }}),
     });
