@@ -380,6 +380,107 @@ async function preferenceOrdering(page) {
   }
 }
 
+async function concurrentEntryWrites(page) {
+  await seed(page, new URL(page.url()).origin);
+  const first = page.locator(`${rows}[data-position-entry="72"]`);
+  const second = page.locator(`${rows}[data-position-entry="71"]`);
+  await holdWrites(page, async () => {
+    await first.locator(action('mark-read')).click();
+    await second.locator(action('toggle-starred')).click();
+    for (const row of [first, second]) {
+      assert.equal(await row.locator(action('mark-read')).isDisabled(), true);
+      assert.equal(await row.locator(action('toggle-starred')).isDisabled(), true);
+    }
+    assert.equal(await page.locator(`${rows}[data-position-entry="70"] ${action('mark-read')}`).isDisabled(), false);
+  });
+  await page.waitForFunction(() => {
+    const first = document.querySelector('[data-position-entry="72"]');
+    const second = document.querySelector('[data-position-entry="71"]');
+    return first.dataset.read === 'true' && second.querySelector('[data-action="toggle-starred"]').getAttribute('aria-pressed') === 'true'
+      && !first.querySelector('[data-action="mark-read"]').disabled
+      && !second.querySelector('[data-action="toggle-starred"]').disabled;
+  });
+  await page.reload(); await ready(page);
+  assert.equal(await first.getAttribute('data-read'), 'true');
+  assert.equal(await second.locator(action('toggle-starred')).getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator(`${rows}[data-position-entry="70"]`).getAttribute('data-read'), 'false');
+}
+
+async function bulkFailureRetry(page) {
+  for (const command of ['mark-selected-read', 'archive-selected']) {
+    await seed(page, new URL(page.url()).origin);
+    for (const id of [72, 71]) await page.locator(`${rows}[data-position-entry="${id}"] ${action('select-entry')}`).check();
+    await page.evaluate(() => {
+      window.__workspaceOriginalSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key.startsWith('rssr-web-entry-flags-v1')) throw new DOMException('batch write failure', 'QuotaExceededError');
+        return window.__workspaceOriginalSetItem.call(this, key, value);
+      };
+    });
+    try {
+      await page.locator(action(command)).click();
+      await page.locator('[data-layout="status-banner"][data-state="error"]').waitFor();
+      assert.equal(await page.locator(action(command)).isDisabled(), false, 'failed batch unlocks retry');
+      assert.equal(await page.locator(selected).count(), 2, 'failed batch retains the selection');
+      assert.equal(await page.locator(`${rows}[data-read="true"]`).count(), 0);
+    } finally {
+      await page.evaluate(() => { Storage.prototype.setItem = window.__workspaceOriginalSetItem; });
+    }
+    await page.locator(action(command)).click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-layout="entry-card"][data-selected="true"]').length === 0);
+    if (command === 'mark-selected-read') {
+      assert.equal(await page.locator(`${rows}[data-read="true"]`).count(), 2, 'retry only changes selected rows');
+    } else {
+      await page.waitForFunction(() => !document.querySelector('[data-position-entry="72"]') && !document.querySelector('[data-position-entry="71"]'));
+      assert.equal(await page.locator(rows).count(), 8, 'archive refills the page');
+    }
+  }
+}
+
+async function filterDuringWrites(page) {
+  for (const batch of [false, true]) {
+    await seed(page, new URL(page.url()).origin);
+    if (batch) {
+      for (const id of [72, 71]) await page.locator(`${rows}[data-position-entry="${id}"] ${action('select-entry')}`).check();
+    }
+    await holdWrites(page, async () => {
+      await page.locator(batch ? action('mark-selected-read') : `${rows}[data-position-entry="72"] ${action('mark-read')}`).click();
+      await page.waitForFunction(async () => (await navigator.locks.query()).pending.length > 0);
+      await page.getByRole('button', { name: '仅未读', exact: true }).click();
+      assert.equal(await page.locator(selected).count(), 0, 'filter changes clear visible selection');
+    });
+    await page.waitForFunction(batch => {
+      return document.querySelector('.entries-count').textContent === `${batch ? 70 : 71} 篇`
+        && !document.querySelector('[data-position-entry="72"]')
+        && (!batch || !document.querySelector('[data-position-entry="71"]'));
+    }, batch);
+    assert.equal(await page.locator(`${rows} [data-layout="entry-card-actions"] button`).evaluateAll(items => items.every(item => !item.disabled)), true);
+  }
+}
+
+async function preferenceFailureRetry(page) {
+  await seed(page, new URL(page.url()).origin);
+  await page.evaluate(() => {
+    window.__workspaceOriginalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith('rssr-web-app-state-v2')) throw new DOMException('preference write failure', 'QuotaExceededError');
+      return window.__workspaceOriginalSetItem.call(this, key, value);
+    };
+  });
+  try {
+    await page.getByRole('button', { name: '仅未读', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[data-layout="status-banner"]')?.textContent.includes('保存文章页偏好失败'));
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-app-state-v2'))).entries_workspace.read_filter), 'all');
+  } finally {
+    await page.evaluate(() => { Storage.prototype.setItem = window.__workspaceOriginalSetItem; });
+  }
+  await page.getByRole('button', { name: '仅未读', exact: true }).click();
+  await page.getByRole('button', { name: '仅未读', exact: true }).click();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-app-state-v2'))).entries_workspace.read_filter === 'unread_only');
+  await page.reload(); await ready(page);
+  assert.equal(await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed'), 'true', 'a successful save after failure persists');
+}
+
 async function shortSourceDialog(page) {
   for (const [width, height] of [[760, 400], [360, 480]]) {
     await page.setViewportSize({ width, height });
@@ -460,7 +561,7 @@ async function dialogComposition(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition };
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, concurrentEntryWrites, bulkFailureRetry, filterDuringWrites, preferenceFailureRetry, shortSourceDialog, dialogComposition };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -469,7 +570,7 @@ if (require.main === module) (async () => {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.setDefaultTimeout(15000);
     await seed(page, process.env.STATIC_BASE || 'http://127.0.0.1:8097');
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, concurrentEntryWrites, bulkFailureRetry, filterDuringWrites, preferenceFailureRetry, shortSourceDialog, dialogComposition })) {
       await run(page); console.log(`PASS ${name}`);
     }
     assert.deepEqual(errors, []);

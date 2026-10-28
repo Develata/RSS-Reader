@@ -3,8 +3,12 @@ use std::future::Future;
 use dioxus::prelude::*;
 
 use super::{
-    intent::EntriesPageIntent, reducer::dispatch_entries_page_intent,
-    request_lifecycle::EntriesRequestLifecycle, state::EntriesPageState,
+    intent::EntriesPageIntent,
+    preferences_policy,
+    reducer::dispatch_entries_page_intent,
+    request_lifecycle::EntriesRequestLifecycle,
+    state::EntriesPageState,
+    write_lifecycle::{BulkWrite, EntryWrite, WriteEffect},
 };
 use crate::ui::{EntriesCommand, UiCommand, UiIntent, execute_ui_command};
 use rssr_domain::{EntriesWorkspaceState, EntryQuery};
@@ -18,34 +22,27 @@ pub(crate) struct EntriesPageSession {
 
 impl EntriesPageSession {
     pub(crate) fn apply_selection(self, action: rssr_domain::EntryBatchAction) {
-        let entry_ids = self.state.peek().selected_entry_ids.iter().copied().collect::<Vec<_>>();
-        if !entry_ids.is_empty() {
-            self.spawn_bulk(
-                EntriesCommand::ApplySelection {
-                    request: rssr_domain::EntryBatchRequest { entry_ids, action },
-                },
-                true,
-            );
+        let request = self.state.with_peek(|state| BulkWrite::selection(state, action));
+        if let Some(request) = request {
+            self.spawn_bulk(true, move || {
+                execute_ui_command(UiCommand::Entries(EntriesCommand::ApplySelection { request }))
+            });
         }
     }
-    fn spawn_bulk(self, command: EntriesCommand, writing: bool) {
-        if self.state.with_peek(|state| state.bulk_busy || !state.pending_entry_writes.is_empty()) {
+    fn spawn_bulk<F: Future<Output = Vec<UiIntent>> + 'static>(
+        self,
+        writing: bool,
+        write: impl FnOnce() -> F + 'static,
+    ) {
+        if !self.state.with_peek(BulkWrite::can_start) {
             return;
         }
         self.dispatch(EntriesPageIntent::BeginBulk { writing });
-        let generation = self.state.peek().bulk_generation;
+        let request = self.state.with_peek(BulkWrite::capture_started);
         spawn(async move {
-            let intents = execute_ui_command(UiCommand::Entries(command)).await;
-            if self.state.peek().bulk_generation != generation {
-                return;
-            }
-            for intent in intents.into_iter().filter_map(UiIntent::into_entries_page_intent) {
-                let applied = matches!(&intent, EntriesPageIntent::SelectionApplied { .. });
-                self.dispatch(intent);
-                if applied {
-                    self.bootstrap();
-                }
-            }
+            let intents = write().await.into_iter().filter_map(UiIntent::into_entries_page_intent);
+            let effects = self.state.with_peek(|state| request.complete(state, intents));
+            self.apply_write_effects(effects);
         });
     }
 
@@ -178,7 +175,8 @@ impl EntriesPageSession {
     fn can_save_browsing_preferences(self, preferences_loaded: bool) -> bool {
         // The captured flag also matters: an effect queued before bootstrap
         // finished still contains default values, even if the live state is ready.
-        preferences_loaded && self.state.peek().preferences_load.is_loaded()
+        self.state
+            .with_peek(|state| preferences_policy::can_schedule_save(state, preferences_loaded))
     }
 
     pub(crate) fn toggle_read(self, entry_id: i64, entry_title: String, currently_read: bool) {
@@ -213,25 +211,24 @@ impl EntriesPageSession {
     ) {
         // Check live Rust state as well as disabling buttons: a second event
         // can already be queued before the DOM has rendered the pending state.
-        if self
-            .state
-            .with_peek(|state| state.bulk_busy || state.pending_entry_writes.contains(&entry_id))
-        {
+        let Some(request) = self.state.with_peek(|state| EntryWrite::prepare(state, entry_id))
+        else {
             return;
-        }
-        self.dispatch(EntriesPageIntent::EntryWriteStarted(entry_id));
+        };
+        self.dispatch(request.started());
         spawn(async move {
-            let mut read_changed = false;
-            for intent in write().await.into_iter().filter_map(UiIntent::into_entries_page_intent) {
-                read_changed |=
-                    matches!(&intent, EntriesPageIntent::PatchEntryFlags { is_read: Some(_), .. });
-                self.dispatch(intent);
-            }
-            self.dispatch(EntriesPageIntent::EntryWriteFinished(entry_id));
-            if read_changed {
-                self.bootstrap();
-            }
+            let intents = write().await.into_iter().filter_map(UiIntent::into_entries_page_intent);
+            self.apply_write_effects(request.complete(intents));
         });
+    }
+
+    fn apply_write_effects(self, effects: impl Iterator<Item = WriteEffect>) {
+        for effect in effects {
+            match effect {
+                WriteEffect::Publish(intent) => self.dispatch(intent),
+                WriteEffect::RefreshSources => self.bootstrap(),
+            }
+        }
     }
 
     pub(crate) fn dispatch(self, intent: EntriesPageIntent) {
@@ -246,15 +243,8 @@ impl EntriesPageSession {
         spawn(async move {
             // An effect's captured choice can be obsolete by the time its task
             // starts. Do not enqueue that older choice behind the current save.
-            let current = self.state.with_peek(|state| {
-                state.preferences_load.is_loaded()
-                    && super::state::grouping_mode_preference(state.grouping_mode)
-                        == next.grouping_mode
-                    && state.show_archived == next.show_archived
-                    && state.read_filter == next.read_filter
-                    && state.starred_filter == next.starred_filter
-                    && state.selected_feed_urls == next.selected_feed_urls
-            });
+            let current =
+                self.state.with_peek(|state| preferences_policy::is_current_save(state, &next));
             if !current {
                 return;
             }
@@ -794,5 +784,159 @@ mod tests {
         drop(dom);
         assert!(bootstrap_sender.send(bootstrap_loaded(7, 50)).is_err());
         assert!(query_sender.send(loaded(1)).is_err());
+    }
+
+    #[test]
+    fn bulk_failure_releases_the_synchronous_guard_and_preserves_retry_selection() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (sender, receiver) = oneshot::channel();
+        let calls = Rc::new(Cell::new(0));
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            for intent in loaded(1).into_iter().filter_map(UiIntent::into_entries_page_intent) {
+                session.dispatch(intent);
+            }
+            session.dispatch(EntriesPageIntent::ToggleSelected(1));
+            let first = Rc::clone(&calls);
+            session.spawn_bulk(true, move || {
+                first.set(first.get() + 1);
+                async { receiver.await.unwrap() }
+            });
+            let duplicate = Rc::clone(&calls);
+            session.spawn_bulk(true, move || {
+                duplicate.set(duplicate.get() + 1);
+                async { Vec::new() }
+            });
+            let overlap = Rc::clone(&calls);
+            session.spawn_entry_write(1, move || {
+                overlap.set(overlap.get() + 1);
+                async { Vec::new() }
+            });
+            assert!(session.snapshot().bulk_busy);
+            session
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(calls.get(), 1);
+        sender
+            .send(vec![UiIntent::EntriesPage(EntriesPageIntent::BulkFailed("failed".into()))])
+            .unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(!session.snapshot().bulk_busy);
+            assert!(session.snapshot().selected_entry_ids.contains(&1));
+            let retry = Rc::clone(&calls);
+            session.spawn_bulk(true, move || {
+                retry.set(retry.get() + 1);
+                async {
+                    vec![UiIntent::EntriesPage(EntriesPageIntent::BulkFailed(
+                        "retry failed".into(),
+                    ))]
+                }
+            });
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(calls.get(), 2);
+        dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot().status, "retry failed"));
+    }
+
+    #[test]
+    fn retired_bulk_completion_does_not_publish_into_the_current_batch() {
+        for failed in [false, true] {
+            let mut dom = VirtualDom::new(|| rsx! {});
+            dom.rebuild_in_place();
+            let (old_sender, old_receiver) = oneshot::channel();
+            let (new_sender, new_receiver) = oneshot::channel();
+            let session = dom.in_scope(ScopeId::APP, || {
+                let session = EntriesPageSession::new(
+                    None,
+                    Signal::new(EntriesPageState::new()),
+                    Signal::new(EntriesRequestLifecycle::default()),
+                );
+                session.spawn_bulk(false, || async { old_receiver.await.unwrap() });
+                session.dispatch(EntriesPageIntent::CancelBulk);
+                session.spawn_bulk(true, || async { new_receiver.await.unwrap() });
+                session
+            });
+            dom.render_immediate_to_vec();
+            let before = dom.in_scope(ScopeId::APP, || session.snapshot());
+            let result = if failed {
+                EntriesPageIntent::BulkFailed("stale".into())
+            } else {
+                EntriesPageIntent::SelectionApplied {
+                    ids: vec![1],
+                    action: rssr_domain::EntryBatchAction::Archive,
+                    count: 1,
+                }
+            };
+            old_sender.send(vec![UiIntent::EntriesPage(result)]).unwrap();
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot(), before));
+            new_sender
+                .send(vec![UiIntent::EntriesPage(EntriesPageIntent::BulkFailed("current".into()))])
+                .unwrap();
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert!(!session.snapshot().bulk_busy);
+                assert_eq!(session.snapshot().status, "current");
+            });
+        }
+    }
+
+    #[test]
+    fn queued_preference_save_rechecks_readiness_before_executing() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let calls = Rc::new(Cell::new(0));
+        dom.in_scope(ScopeId::APP, || {
+            let session = EntriesPageSession::new(
+                None,
+                Signal::new(EntriesPageState::new()),
+                Signal::new(EntriesRequestLifecycle::default()),
+            );
+            session.dispatch(EntriesPageIntent::PreferencesLoaded);
+            let started = Rc::clone(&calls);
+            session.spawn_preferences_write(EntriesWorkspaceState::default(), move |_| {
+                started.set(started.get() + 1);
+                async { Vec::new() }
+            });
+            session.dispatch(EntriesPageIntent::PreferencesUnavailable("failed".into()));
+        });
+        dom.render_immediate_to_vec();
+        assert_eq!(calls.get(), 0);
+    }
+
+    #[test]
+    fn page_disposal_cancels_pending_row_batch_and_preference_tasks() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (row_sender, row_receiver) = oneshot::channel();
+        let (batch_sender, batch_receiver) = oneshot::channel();
+        let (preferences_sender, preferences_receiver) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            let session = || {
+                EntriesPageSession::new(
+                    None,
+                    Signal::new(EntriesPageState::new()),
+                    Signal::new(EntriesRequestLifecycle::default()),
+                )
+            };
+            session().spawn_entry_write(1, || async { row_receiver.await.unwrap() });
+            session().spawn_bulk(true, || async { batch_receiver.await.unwrap() });
+            let preferences = session();
+            preferences.dispatch(EntriesPageIntent::PreferencesLoaded);
+            preferences.spawn_preferences_write(EntriesWorkspaceState::default(), |_| async {
+                preferences_receiver.await.unwrap()
+            });
+        });
+        dom.render_immediate_to_vec();
+        drop(dom);
+        assert!(row_sender.send(Vec::new()).is_err());
+        assert!(batch_sender.send(Vec::new()).is_err());
+        assert!(preferences_sender.send(Vec::new()).is_err());
     }
 }

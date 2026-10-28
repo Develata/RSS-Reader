@@ -1,6 +1,6 @@
 # 原生界面前置模块边界
 
-核对日期：2026-10-27。本文件记录当前阅读分支已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
+核对日期：2026-10-28。本文件记录当前阅读分支已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
 
 ## 已有可独立测试的 Rust 规则
 
@@ -13,6 +13,8 @@
 | `pages/entries_page/directory/window.rs` | 可变行高缓存、可见范围、占位高度、测量变化时的锚点补偿、未挂载目标与焦点保留 | 当前挂载行与视口测量、同步键盘默认动作、提交确认后的滚动/聚焦 |
 | `hooks/reader_shortcut_policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，执行导航和 session 命令 |
 | `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |
+| `pages/entries_page/write_lifecycle.rs` | 单条/批量写入准入、选择快照、批量结果身份、发布/解锁/来源刷新顺序 | 同步派发开始状态、页面任务执行、intent 发布、来源刷新 |
+| `pages/entries_page/preferences_policy.rs` | 捕获与当前偏好就绪检查、任务开始前的选择一致性检查 | effect 触发、保存任务执行、错误发布；应用服务负责串行比较与持久化 |
 
 这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → application/host。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
 
@@ -20,11 +22,21 @@
 
 - `EntriesRequestLifecycle` 只持有初始化与查询两种代次，二者互不失效。页面状态、写入 revision 和完整文章投影继续由既有 `EntriesPageState` 持有；每次请求只捕获少量标量，不克隆列表。
 - 初始化开始时根据当前偏好状态决定是否加载偏好：Pending / Unavailable 加载，Loaded 保留。旧初始化的成功和失败都被拒绝；所有来源摘要仍按原命令加载。
-- Pending 不准入文章查询，不轮询 Future；Unavailable 允许读取文章，保留既有错误提示和禁止保存回退偏好的规则。偏好写入策略本轮仍在 session。
+- Pending 不准入文章查询，不轮询 Future；Unavailable 允许读取文章，保留既有错误提示和禁止保存回退偏好的规则；偏好保存准入见下节。
 - 查询完成先校验查询身份，再比较 `flags_revision`。旧身份直接丢弃；当前身份若遇到已完成写入，则在尚无新 `reload_revision` 时请求重查，否则仅丢弃。单独增加 reload revision 不等于使查询身份失效。
 - 接纳后按原顺序输出 intent，仅在 `SetEntries` 后插入捕获的返回页码，由现有 reducer 对新结果集约束页码。失败结果、被拒绝结果都不能恢复页码；被拒绝的结果载荷不遍历、不复制。
 - Dioxus 适配器以非订阅读取获取当前事实，先同步取得请求身份，再启动原页面作用域的任务。查询完成时的借用在发布前释放；页面销毁继续取消未完成任务。初始化和查询状态不进入 presenter 输入，也不新增自动查询循环。
-- 本轮不迁移单条/批量写入准入、偏好写入编排、归档时钟或页面查询 effect。保留 facade/session 和 `UiCommand` 边界，不建立通用页面运行时。
+- 单条/批量写入和偏好保存使用下面的独立规则。归档时钟、页面查询与偏好保存 effect 继续留在当前装配层，保留 facade/session 和 `UiCommand` 边界。
+
+## 文章写入与偏好保存规则的使用约束
+
+- `write_lifecycle.rs` 不保存另一份 busy 集合或 revision；唯一状态仍在 `EntriesPageState`，由既有 reducer 转移。session 必须同步完成准入检查和开始状态发布，再启动异步任务；按钮禁用不能替代该检查。
+- 单条写入只阻止同一 ID 的重复操作以及与批量操作重叠，其他 ID 可并行。结果按原顺序发布，随后释放本行 busy；仅收到已读变更时，才在解锁后刷新来源摘要。失败、空结果和仅收藏变更均解锁；没有已读变更就不刷新来源。
+- 批量命令在用户操作时取得明确所选 ID 的独立快照，空选择不发命令。存在任何单条写入时拒绝启动，不排队；`BeginBulk` 仍由 reducer 分配代次，随后捕获该代次校验结果。旧成功和旧失败都不能覆盖后来的批次，拒绝时不遍历结果载荷。
+- `CancelBulk` 沿用 reducer 的原语义：正在写入的批次不会因筛选/查询上下文切换而取消。成功结果先发布 `SelectionApplied`，再刷新来源摘要；失败释放 busy、保留当时的当前选择并允许重试，不把请求快照重新写回选择集合。revision、成功提示和重查仍由 reducer 与现有查询 effect 协作。
+- `preferences_policy.rs` 只检查资格：调度时要求捕获的偏好已就绪且当前仍 Loaded；任务开始时再核对当前就绪状态和分组、归档、已读、收藏、来源 URL 列表。过期任务不调用保存；URL 比较保留现有顺序，不另行规范化或复制列表。
+- 偏好比较与写入继续由共享 `EntriesWorkspaceService` 串行完成；页面不增加保存队列、缓存或去重状态。保存失败继续发布原错误，后续选择仍能保存；初始化失败的回退默认值不能覆盖存储。
+- 页面销毁继续取消其未完成 UI 任务；不把此行为描述成回滚已提交的存储。`WriteEffect` 仅表达本页面的状态发布与来源刷新，不是通用命令框架，也不进入 domain/application。
 
 ## 目录控制器的使用约束
 
@@ -66,7 +78,8 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 ## 验证入口
 
 - 纯状态与策略：`cargo test -p rssr-app --locked`。
-- 初始化/查询适配：`scripts/browser/rssr_entries_lifecycle_acceptance.cjs`，通过离线 fixture 覆盖选择、筛选、写入失败/重试、偏好重开、查询稳定性，以及桌面/小视口搜索、刷新和阅读返回。基线和候选分别指定 `ARTIFACT_DIR`，构建目录可由 `PUBLIC_DIR` 指定。
+- 初始化/查询/写入适配：`scripts/browser/rssr_entries_lifecycle_acceptance.cjs`，通过离线 fixture 覆盖选择、筛选、单条并发、批量失败重试、写入期间切换筛选、偏好失败重试/重开、查询稳定性，以及桌面/小视口搜索、刷新和阅读返回。基线和候选分别指定 `ARTIFACT_DIR`，构建目录可由 `PUBLIC_DIR` 指定。偏好重开前需确认最终值已提交，不能仅等待锁暂时空闲。
+- Windows 写入与重开：`scripts/browser/rssr_entries_writes_native.cjs --mode write|reopen --cdp <endpoint> --database <isolated-db> --artifact-dir <path>`。仅用于独立进程、独立 WebView profile 与 5000 篇阅读 fixture；只读 SQLite 核对真实提交，运行者负责安全启动/关闭自己的进程，write 后结束进程再启动执行 reopen。
 - 目录实际行为：`scripts/browser/rssr_small_viewport_assertions.mjs --directory-only true`，包含日期/来源/文章层级、跨页、手动/跟随、显隐和选择保持。
 - 不启动预览服务的回归：先构建 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。Playwright 在隔离无头 Chrome 内提供构建文件与测试数据；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样可离线回归旧目录通道。
 - `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。

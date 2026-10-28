@@ -1,4 +1,4 @@
-// Same-path baseline/candidate acceptance for Entries request lifecycle extraction.
+// Same-path baseline/candidate acceptance for Entries request/write lifecycle extraction.
 // Uses the real Web build with isolated storage and local feed fixtures, no server.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
@@ -81,7 +81,8 @@ async function searchRefreshReturn(page, width) {
       await page.screenshot({ path: path.join(output, name + '.png'), animations: 'disabled', caret: 'hide' });
     }
     await page.setViewportSize({ width: 1536, height: 864 });
-    for (const name of ['selection', 'sources', 'queryStability', 'pendingWrites', 'preferenceOrdering', 'sourceIdentity']) {
+    for (const name of ['selection', 'sources', 'queryStability', 'pendingWrites', 'preferenceOrdering', 'sourceIdentity',
+      'concurrentEntryWrites', 'bulkFailureRetry', 'filterDuringWrites', 'preferenceFailureRetry']) {
       await scenario(name, () => workspace[name](page));
     }
     for (const width of [1536, 390]) {
