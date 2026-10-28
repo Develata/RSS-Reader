@@ -1,0 +1,130 @@
+{
+  "checkedAt": "2026-10-28T11:17:38.444841+00:00",
+  "source": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+  "pullRequests": [
+    {
+      "headRefOid": "416f8c07673ddd8bbf1daef8af080552e928b9bf",
+      "mergeCommit": {
+        "oid": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc"
+      },
+      "mergedAt": "2026-10-28T10:58:30Z",
+      "number": 34,
+      "state": "MERGED",
+      "url": "https://github.com/Develata/RSS-Reader/pull/34",
+      "checksAtHead": {
+        "SUCCESS": 37,
+        "SKIPPED": 1
+      }
+    },
+    {
+      "headRefOid": "5e44fed68f319b7aa43dc5e53315b0e64f8cd6cd",
+      "mergeCommit": {
+        "oid": "781a7360278af3b285f79c8997cb039cf6c560ba"
+      },
+      "mergedAt": "2026-10-28T10:56:58Z",
+      "number": 35,
+      "state": "MERGED",
+      "url": "https://github.com/Develata/RSS-Reader/pull/35",
+      "checksAtHead": {
+        "SUCCESS": 37,
+        "SKIPPED": 1
+      }
+    }
+  ],
+  "workflows": [
+    {
+      "conclusion": "success",
+      "event": "push",
+      "headSha": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40676313625",
+      "workflowName": "CI",
+      "runId": 40676313625,
+      "jobConclusions": {
+        "success": 36,
+        "skipped": 0
+      }
+    },
+    {
+      "conclusion": "success",
+      "event": "push",
+      "headSha": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40676313551",
+      "workflowName": "Pages demo",
+      "runId": 40676313551,
+      "jobConclusions": {
+        "success": 2,
+        "skipped": 0
+      }
+    },
+    {
+      "conclusion": "success",
+      "event": "push",
+      "headSha": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40676313862",
+      "workflowName": "Docker",
+      "runId": 40676313862,
+      "jobConclusions": {
+        "success": 4,
+        "skipped": 1
+      }
+    },
+    {
+      "conclusion": "success",
+      "event": "workflow_dispatch",
+      "headSha": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40677169921",
+      "workflowName": "Docker",
+      "runId": 40677169921,
+      "jobConclusions": {
+        "success": 7,
+        "skipped": 0
+      },
+      "setupPythonSteps": [
+        {
+          "job": "build-package / native (macos-15, aarch64-apple-darwin, macos-aarch64, tar.gz)",
+          "steps": [
+            {
+              "name": "Run actions/setup-python@v7",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-python@v7",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "job": "build-package / native (windows-latest, x86_64-pc-windows-msvc, windows-x86_64, .exe, zip)",
+          "steps": [
+            {
+              "name": "Run actions/setup-python@v7",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-python@v7",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "job": "build-package / native (macos-15-intel, x86_64-apple-darwin, macos-x86_64, tar.gz)",
+          "steps": [
+            {
+              "name": "Run actions/setup-python@v7",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-python@v7",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "boundary": "Remote exact-source workflow results; no tag, GitHub Release or GHCR publication triggered by the all_platforms check."
+}
