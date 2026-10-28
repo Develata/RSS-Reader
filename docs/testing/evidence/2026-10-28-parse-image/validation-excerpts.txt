@@ -1,0 +1,258 @@
+Selected original output; this is not a fresh execution.
+Full local log identities, commands and source-capture boundary: verification.json
+
+=== workspace-tests.log ===
+   Compiling html5ever v0.39.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\vendor\html5ever)
+   Compiling rssr-domain v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-domain)
+   Compiling rssr-application v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-application)
+   Compiling rssr-app v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-app)
+   Compiling rssr-api v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-api)
+   Compiling rssr-web v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-web)
+   Compiling rssr-infra v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-infra)
+   Compiling rssr-cli v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6m 09s
+     Running unittests src\lib.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_api-4b07a697cf03bce9.exe)
+running 8 tests
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+     Running tests\dependency_graph.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\dependency_graph-c5db42e0a6da93f3.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.41s
+     Running unittests src\main.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_app-3bcc7fdd17bfb0e0.exe)
+running 286 tests
+test pages::entries_page::presenter::tests::measure_entries_projection ... ignored, manual performance measurement
+test pages::entries_page::pull_refresh::gesture::tests::wire_facts_decode_points_and_contactless_cancellation ... ok
+test result: ok. 285 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.57s
+     Running tests\test_builtin_theme_contracts.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_builtin_theme_contracts-790f4e509280d15b.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_default_style_token_contract.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_default_style_token_contract-1d996745fb67a43c.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src\lib.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_application-f883ae7cef6d4c9a.exe)
+running 70 tests
+test content_identity::tests::persisted_v2_identity_keeps_its_byte_format ... ok
+test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+     Running tests\protocol_shapes.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\protocol_shapes-d0f09492774c6621.exe)
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src\main.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_cli-58886bb8c13790ec.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_backup_process.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_backup_process-69031311bc2d975c.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.14s
+     Running tests\test_stdout_contract.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_stdout_contract-9f9f3c6ca5cf8de8.exe)
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+     Running unittests src\lib.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_domain-09e95a2138612270.exe)
+running 26 tests
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+     Running unittests src\lib.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_infra-d2991444fd07ab7e.exe)
+running 206 tests
+test local_backend::image_localization::tests::queued_work_reads_current_body_and_checks_url_only_changes ... ok
+test local_backend::image_localization::tests::reactivated_subscription_rejects_old_generation_even_with_identical_source ... ok
+test result: ok. 206 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.50s
+     Running tests\test_audit_20261009_refresh_invariants.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_audit_20261009_refresh_invariants-0262ff180f1303dd.exe)
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_browser_state_seed_contracts.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_browser_state_seed_contracts-ce1375b4690d71c4.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_config_package_codec.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_config_package_codec-dfceac8699f1aaf5.exe)
+running 7 tests
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_config_package_fixture.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_config_package_fixture-1bfbd9e50978bcc9.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_config_package_schema_consistency.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_config_package_schema_consistency-2e4b5e8c6138a6a6.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_feed_parse_dedup.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_feed_parse_dedup-241b41a37a15e419.exe)
+running 6 tests
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_feed_prescan_integration.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_feed_prescan_integration-9208e1fbc53e32da.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_feed_response_limits.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_feed_response_limits-36595f0e7c4c60df.exe)
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.02s
+     Running tests\test_feed_structure_guard.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_feed_structure_guard-964b2590cee8df5b.exe)
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+     Running tests\test_library_app_state_persistence.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_app_state_persistence-69b9aba13ae85df3.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+     Running tests\test_library_application_refresh_store_adapter.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_application_refresh_store_adapter-59f12159cc33216e.exe)
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_library_archive_filter_parity.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_archive_filter_parity-71b3007ef1cb1f42.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_library_audit_20261009_refresh_invariants.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_audit_20261009_refresh_invariants-fe15591525c69f81.exe)
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.03s
+     Running tests\test_library_backup.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_backup-ad8ad5432a8c9060.exe)
+running 18 tests
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.46s
+     Running tests\test_library_baseline_schema.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_baseline_schema-9f9179d3bcdb59c5.exe)
+running 4 tests
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\test_library_concurrent_refresh_writes.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_concurrent_refresh_writes-4959555abe2dec2e.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+     Running tests\test_library_config_exchange_contract_harness.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_config_exchange_contract_harness-e51fa7d4775da52a.exe)
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests\test_library_config_package_io.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_config_package_io-cc441df41eac6f80.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_library_contracts.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_contracts-476d0d2006d408be.exe)
+running 14 tests
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+     Running tests\test_library_entry_large_dataset_performance.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_entry_large_dataset_performance-b65c6766191cb23d.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+     Running tests\test_library_entry_state_and_search.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_entry_state_and_search-f07e373eff4859f4.exe)
+running 8 tests
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+     Running tests\test_library_feed_refresh_flow.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_feed_refresh_flow-252e4da935ff11cb.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+     Running tests\test_library_feed_response_limits.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_feed_response_limits-f6aacbd19be0d287.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_library_guid_identity_transition.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_guid_identity_transition-bb8b74387e6b7fa7.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_library_import.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_import-ab0ff45c81ce43ae.exe)
+running 22 tests
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.67s
+     Running tests\test_library_large_feed_write.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_large_feed_write-288b4dc57f75ce4d.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.47s
+     Running tests\test_library_persistence_atomicity.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_persistence_atomicity-d1ee8520846dbc25.exe)
+running 14 tests
+test reactivation_after_purge_starts_without_old_entries_or_bodies ... ok
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+     Running tests\test_library_queries.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_queries-382247e55833f7fe.exe)
+running 7 tests
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+     Running tests\test_library_refresh_contract_harness.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_refresh_contract_harness-b7824e01ec884b0c.exe)
+running 6 tests
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests\test_library_refresh_tickets.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_refresh_tickets-895f0e31e4450cdf.exe)
+running 20 tests
+test measure_ticket_issuing ... ignored, measurement
+test result: ok. 19 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.57s
+     Running tests\test_library_settings_repository.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_settings_repository-dbbe2951f2e68a97.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+     Running tests\test_library_store.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_store-1a80c03573351db8.exe)
+running 29 tests
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+     Running tests\test_library_subscription_contract_harness.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_subscription_contract_harness-03d1bf8a1f6258ca.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests\test_library_subscription_discovery.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_subscription_discovery-f033c79b0eacf2fc.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+     Running tests\test_library_unicode_title_search.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_unicode_title_search-b598ca0af547dfd5.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+     Running tests\test_library_webdav_local_roundtrip.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_library_webdav_local_roundtrip-fd8677a0d0cbadf4.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+     Running tests\test_native_outbound_requests.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_native_outbound_requests-d5287372753bc04f.exe)
+running 14 tests
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+     Running tests\test_opml_interop.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_opml_interop-6d6062521457e724.exe)
+running 7 tests
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_outbound_policy.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_outbound_policy-e7373893f43730a8.exe)
+running 7 tests
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+     Running tests\test_reader_html_corpus.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_reader_html_corpus-2fbbe2f432a847ef.exe)
+running 1 test
+test reader_html_corpus_report ... ignored, calibration tool; needs RSSR_READER_CORPUS pointing at a feed file
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\test_reader_html_stress.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_reader_html_stress-916efc5439dbdb18.exe)
+running 25 tests
+test reader_html_stress_timings ... ignored, timing benchmark; run explicitly with --ignored --nocapture
+test result: ok. 24 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.07s
+     Running tests\test_reader_tokenizer.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_reader_tokenizer-c61180591eda0a10.exe)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+     Running tests\test_regression_smoke.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_regression_smoke-3f8879cbd5ddea7d.exe)
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests\test_subscription_discovery.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\test_subscription_discovery-f2fa93a6fe5bb957.exe)
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+     Running tests\wasm_memory_store.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\wasm_memory_store-78302f703872b32c.exe)
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests\wasm_reader_html_contract_harness.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\wasm_reader_html_contract_harness-2b5ad2deafce313a.exe)
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src\main.rs (E:/gitclone/RSS-Reader/target/parse-image-20261028\debug\deps\rssr_web-63dcd74b22417a9f.exe)
+running 99 tests
+test auth::store::tests::a_session_whose_deletion_failed_stays_rejected ... ok
+test auth::store::tests::renewal_and_deletion_by_another_process_are_seen ... ok
+test result: ok. 99 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.16s
+   Doc-tests rssr_api
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests rssr_application
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests rssr_domain
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Doc-tests rssr_infra
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== clippy-final.log ===
+    Checking html5ever v0.39.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\vendor\html5ever)
+    Checking rssr-application v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-application)
+   Compiling rssr-web v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-web)
+    Checking ammonia v4.1.3
+    Checking rssr-api v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-api)
+    Checking rssr-infra v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-infra)
+    Checking rssr-cli v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-cli)
+    Checking rssr-app v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-app)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 45.78s
+
+=== formal-wasm-check.log ===
+   Compiling rssr-app v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-app)
+    Checking html5ever v0.39.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\vendor\html5ever)
+    Checking rssr-domain v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-domain)
+    Checking rssr-application v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-application)
+    Checking rssr-api v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-api)
+    Checking rssr-infra v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-infra)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 50s
+
+=== wasm-reader-final.log ===
+   Compiling html5ever v0.39.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\vendor\html5ever)
+   Compiling ammonia v4.1.3
+   Compiling rssr-infra v0.1.0 (C:\Users\QQ\.codex\worktrees\integrate-reading-workspace\RSS-Reader\crates\rssr-infra)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.78s
+     Running tests\wasm_reader_html_contract_harness.rs (E:/gitclone/RSS-Reader/target/parse-image-wasm-20261028\wasm32-unknown-unknown\debug\deps\wasm_reader_html_contract_harness-2d15a0bf4adf6878.wasm)
+Set timeout to 120 seconds...
+Running headless tests in Chrome on `http://127.0.0.1:52705/`
+Try find `webdriver.json` for configure browser's capabilities:
+Ok
+Loading Wasm module...
+
+running 9 tests
+test unquoted_url_slashes_are_preserved_on_the_shared_wasm_path ... ok
+test over_budget_formulas_degrade_to_literal_text ... ok
+test numbered_formulas_layout_like_native_table_rows ... ok
+test nested_katex_containers_show_one_copy_each ... ok
+test namespace_confusion_payloads_stay_inert_after_browser_reparse ... ok
+test marker_residue_and_wide_attributes_remain_inert_after_browser_reparse ... ok
+test long_formulas_do_not_widen_a_narrow_reader ... ok
+test katex_output_shows_one_copy ... ok
+test formulas_keep_namespace_and_operand_structure_after_browser_reparse ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 filtered out; finished in 1.48s

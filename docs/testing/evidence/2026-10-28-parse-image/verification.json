@@ -1,0 +1,359 @@
+{
+  "captured_utc": "2026-10-28T17:48:45.8526613Z",
+  "base_commit": "6b2596d205b475c776a76cafb678233a9537b9f2",
+  "implementation_commit": "pending",
+  "branch": "codex/parse-image-performance",
+  "source_worktree": "C:\\Users\\QQ\\.codex\\worktrees\\integrate-reading-workspace\\RSS-Reader",
+  "capture_boundary": "Compiled and tested before local commit. Commands recorded by the executing agent; source hashes captured at finalization, not signed at test start. Existing logs are preserved by hash and selected excerpts.",
+  "platform": "Microsoft Windows 10.0.26200",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "checks": [
+    {
+      "name": "workspace tests",
+      "command": "cargo test --workspace --locked --target-dir E:/gitclone/RSS-Reader/target/parse-image-20261028",
+      "exit_code": 0,
+      "passed": 998,
+      "failed": 0,
+      "ignored": 4,
+      "result_groups": 63,
+      "log": "workspace-tests.log"
+    },
+    {
+      "name": "clippy",
+      "command": "cargo clippy --workspace --all-targets --locked --target-dir E:/gitclone/RSS-Reader/target/parse-image-20261028 -- -D warnings",
+      "exit_code": 0,
+      "log": "clippy-final.log"
+    },
+    {
+      "name": "formal wasm",
+      "command": "cargo check -p rssr-app --target wasm32-unknown-unknown --locked --target-dir E:/gitclone/RSS-Reader/target/parse-image-wasm-20261028",
+      "exit_code": 0,
+      "log": "formal-wasm-check.log"
+    },
+    {
+      "name": "browser reader contracts",
+      "command": "cargo test -p rssr-infra --target wasm32-unknown-unknown --test wasm_reader_html_contract_harness --locked --target-dir E:/gitclone/RSS-Reader/target/parse-image-wasm-20261028",
+      "cargo_runner_override": [
+        "target/parse-image-evidence/wasm-contract-runner.exe",
+        "--artifact"
+      ],
+      "runner_source": "scripts/wasm_contract_runner.rs",
+      "exit_code": 0,
+      "passed": 9,
+      "failed": 0,
+      "log": "wasm-reader-final.log"
+    },
+    {
+      "name": "upstream html5ever",
+      "command": "cargo test --manifest-path vendor/html5ever/Cargo.toml --locked --lib --test driver --target-dir E:/gitclone/RSS-Reader/target/html5ever-upstream-20261028",
+      "exit_code": 0,
+      "passed": 17,
+      "note": "Executed before the final wasm-only helper cfg annotation. Native behavior unchanged; final wasm browser run includes annotation. Output retained in task transcript, not a local log."
+    },
+    {
+      "name": "format",
+      "command": "cargo fmt --all --check",
+      "exit_code": 0
+    },
+    {
+      "name": "diff whitespace",
+      "command": "git diff --cached --check -- . ':(exclude)vendor/html5ever/README.md' ':(exclude)vendor/html5ever/data/bench'",
+      "exit_code": 0,
+      "boundary": "Unfiltered staged diff flags whitespace already present in the unchanged upstream README and benchmark HTML files. Those are retained byte-for-byte for provenance; only those paths are excluded. Source patches and all RSS-Reader changes pass."
+    },
+    {
+      "name": "relative documentation links",
+      "checked": 227,
+      "missing": 0,
+      "exit_code": 0
+    }
+  ],
+  "browser": {
+    "chrome": "155.0.8059.40",
+    "chromedriver": "155.0.8059.84",
+    "wasm_bindgen_test_runner": "0.2.128",
+    "driver_path": "target/parse-image-evidence/tools/chromedriver-155/chromedriver-win64/chromedriver.exe",
+    "driver_source": "https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.84/win64/chromedriver-win64.zip",
+    "driver_scope": "Process-local PATH only; installed browser/driver configuration unchanged"
+  },
+  "independent_review": {
+    "reviewer": "Claude",
+    "tools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "original_session": "ced3a501-ce51-49ce-b78c-aa83e0c8c3b9",
+    "followup_session": "e4d4b4bc-eee2-464e-9cc3-3e579b09fe29",
+    "result": "Original stale-field test P1 closed; no further confirmed P0/P1/P2 in reviewed scope",
+    "boundary": "Read source and existing logs; did not execute tests. Logs alone cannot attest the exact invocation or pre-run source identity."
+  },
+  "original_logs": [
+    {
+      "path": "target/parse-image-evidence/workspace-tests.log",
+      "sha256": "2b5b0715c47901c814e66f4367c28f475978314ff514710efe4391b11e266f85",
+      "bytes": 111599,
+      "last_write_utc": "2026-10-28T17:33:15.4795086Z"
+    },
+    {
+      "path": "target/parse-image-evidence/clippy-final.log",
+      "sha256": "37916aebac0f407652baae14e5c5186eeebea7026ce1ac397be9514c0075a223",
+      "bytes": 938,
+      "last_write_utc": "2026-10-28T17:38:45.4278779Z"
+    },
+    {
+      "path": "target/parse-image-evidence/formal-wasm-check.log",
+      "sha256": "3d80f9b7a34a6f0ddf6984f7d0687fd4b53052d7173fd81596483a703a70ce30",
+      "bytes": 7955,
+      "last_write_utc": "2026-10-28T17:39:34.4531649Z"
+    },
+    {
+      "path": "target/parse-image-evidence/wasm-reader-final.log",
+      "sha256": "1f5fb95b585d040960113b37719bfe54e24a78c995f04dc9ad5a9c655a2c1a9e",
+      "bytes": 1423,
+      "last_write_utc": "2026-10-28T17:33:43.7976031Z"
+    }
+  ],
+  "vendor_changed_source_files": [
+    "src/tokenizer/mod.rs",
+    "src/tree_builder/mod.rs"
+  ],
+  "final_working_tree_source_hashes": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "5352e214a2d554efff1a9a3628059e482cb77c9f80075afebd49c189dda5a3da"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "3349bfdbf424a85f45ad8f8895863a0d38966f7baa8fa67960e939ce701f5ff8"
+    },
+    {
+      "path": "crates/rssr-application/Cargo.toml",
+      "sha256": "e46200db0aa695d2909f3a629a28f6874dbb1b69b4e03a7beab9e83abd72a2fe"
+    },
+    {
+      "path": "crates/rssr-application/src/content_identity.rs",
+      "sha256": "0f0c33ef7f7f6b1f448d6989d2704586bb80698baeb920302ce9f6427756bb6f"
+    },
+    {
+      "path": "crates/rssr-application/src/lib.rs",
+      "sha256": "8067fdd3ae471ed22bb4f9ed5760ca54ca75f373261bf05a6c8e193583684c28"
+    },
+    {
+      "path": "crates/rssr-application/src/refresh_service.rs",
+      "sha256": "bff06c64f024ed626d0a1f0cde66ec5db34963578618ec64e8b88e03779da3d5"
+    },
+    {
+      "path": "crates/rssr-infra/examples/reader_html_probe.rs",
+      "sha256": "5ee226a283940fb8fcc735b2dcfccd415c6fb08c72cb98184281cd88c98730fb"
+    },
+    {
+      "path": "crates/rssr-infra/src/feed_normalization.rs",
+      "sha256": "d951997719f23204c8d90ba73f9a555a615390aaaef7d551ad3f9ecdfb6b5a94"
+    },
+    {
+      "path": "crates/rssr-infra/src/fetch/client/body_asset_localizer.rs",
+      "sha256": "b42c638b80680b806bc68092b8c4fa5bea06a96c3210935931af2dcd1e85f522"
+    },
+    {
+      "path": "crates/rssr-infra/src/html/live_display.rs",
+      "sha256": "44882088612cf8e69c2f3644a1593da78004a0a3073cb65b01a8fb9ab80c12de"
+    },
+    {
+      "path": "crates/rssr-infra/src/html/parse_budget.rs",
+      "sha256": "ea2bce82817c7dbf76d051e8097fd877212dcf3c5718ae364d467b077ee44d16"
+    },
+    {
+      "path": "crates/rssr-infra/src/html/plain_text.rs",
+      "sha256": "8a36383b3895a4753464a5b860df2d12df450bb5760ea46b9bc717e567cc884c"
+    },
+    {
+      "path": "crates/rssr-infra/src/local_backend.rs",
+      "sha256": "f26ea011ba27e7d298c3213ebd98c04a9f9e087c90ed25a9f494a8942c60fa45"
+    },
+    {
+      "path": "crates/rssr-infra/src/local_backend/image_localization.rs",
+      "sha256": "a795ea4ebfc1d813252e9e188c9db38d3936b05974c2089bed336963af170645"
+    },
+    {
+      "path": "crates/rssr-infra/src/local_backend/image_localization/background.rs",
+      "sha256": "a8abd1a12b0a2eff5f24f861aa46d6920b1dd78d147d6b0ff272bd31398a96c6"
+    },
+    {
+      "path": "crates/rssr-infra/src/local_backend/image_localization/tests.rs",
+      "sha256": "e5ad85f0330b004211c4e1e96b23b63101a0b86ce364392c6e4f087b2c84144a"
+    },
+    {
+      "path": "crates/rssr-infra/src/local_backend/native_host.rs",
+      "sha256": "3078417a520e185af7b8bdd9d19e29e208f54991ff63ca9dcfb82e67fed4617f"
+    },
+    {
+      "path": "crates/rssr-infra/src/store/entries.rs",
+      "sha256": "e45b70a4816f0faee2b513882b25197fc08c8f7dfc3df7710297be8f398b93de"
+    },
+    {
+      "path": "crates/rssr-infra/tests/test_reader_tokenizer.rs",
+      "sha256": "51ea1b914b70a543c34ee9d4caccc2a30a53f8035b99201347c7196174841319"
+    },
+    {
+      "path": "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs",
+      "sha256": "979189899d152294170edfc52d9c027c28ffa3b424e51777450fe850e93f6418"
+    },
+    {
+      "path": "scripts/measure_reader_html.ps1",
+      "sha256": "9f0da4880a8ad7762bf5d28bd6e71494bca5554b09e61b9433886812619edb64"
+    },
+    {
+      "path": "vendor/html5ever/.cargo_vcs_info.json",
+      "sha256": "a03b7c5471f16270b26a7701138fa249adc598c862eaf34b6504387f03d9ff64"
+    },
+    {
+      "path": "vendor/html5ever/benches/html5ever.rs",
+      "sha256": "848ca1aac420dd2dd9a7ca19e3fc9ec7737b47e5ea328e5021688eba5270066a"
+    },
+    {
+      "path": "vendor/html5ever/Cargo.lock",
+      "sha256": "c0b9dee2994086dd4bf75d5e52fc828c1fe2fcfb85c589776c650525be4d6220"
+    },
+    {
+      "path": "vendor/html5ever/Cargo.toml",
+      "sha256": "fdd4c475861e3761a4a73e7ef08f310950032579628fd0b488000a47b9d8b834"
+    },
+    {
+      "path": "vendor/html5ever/Cargo.toml.orig",
+      "sha256": "512759192eb48ad87acc334ec5284db60cc9e5d461e551a1aa7c7fbe53b140f1"
+    },
+    {
+      "path": "vendor/html5ever/data/bench/lipsum-zh.html",
+      "sha256": "fafe3ed44b07f9cdb0a3ca5c010a3a73cc2534b64605593e71cc70a8cf8e27e4"
+    },
+    {
+      "path": "vendor/html5ever/data/bench/lipsum.html",
+      "sha256": "f37900ddb4ee463b9aa3191297bc1a4320b94bc72ee630de01882b50eb241740"
+    },
+    {
+      "path": "vendor/html5ever/data/bench/medium-fragment.html",
+      "sha256": "d21ab12c5e538ae48af6df7ee7d7939c6fe3b2d1e36b5874a3bbb957847ddba0"
+    },
+    {
+      "path": "vendor/html5ever/data/bench/small-fragment.html",
+      "sha256": "3825226a96ac919b0a69ae98e8547a5430214b16e56497570d382720af2bfca3"
+    },
+    {
+      "path": "vendor/html5ever/data/bench/strong.html",
+      "sha256": "5adb31981cca062df929353c60dfa1c7fb91170b5a389a13c8be6555a4cf107d"
+    },
+    {
+      "path": "vendor/html5ever/data/bench/tiny-fragment.html",
+      "sha256": "9cc2d58507945020d4d206738c8f166a618dc15161609935ab1975b913967edf"
+    },
+    {
+      "path": "vendor/html5ever/examples/arena.rs",
+      "sha256": "485dae462d5edfdf786f14018c525d214567877c61f5b4417a3ff6926b0a8e31"
+    },
+    {
+      "path": "vendor/html5ever/examples/noop-tokenize.rs",
+      "sha256": "79c1d34c8c941e3e6b6a1953455d0502fdc56195a7d932cdd7665a0011a9da9a"
+    },
+    {
+      "path": "vendor/html5ever/examples/noop-tree-builder.rs",
+      "sha256": "c87386e9f4b83cd52d7ffa8ff22cc0dd54f5f0b54398e7d41fb7a6352d9bfa72"
+    },
+    {
+      "path": "vendor/html5ever/examples/print-tree-actions.rs",
+      "sha256": "d04287c1a129fe7c18ff621cfe1a69c5411fa905733f895af420d948e80ec65d"
+    },
+    {
+      "path": "vendor/html5ever/examples/tokenize.rs",
+      "sha256": "fbf13646df42d4536691c62422b073e80b3f5cacfbc47294130c265134e21337"
+    },
+    {
+      "path": "vendor/html5ever/LICENSE-APACHE",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+    },
+    {
+      "path": "vendor/html5ever/LICENSE-MIT",
+      "sha256": "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3"
+    },
+    {
+      "path": "vendor/html5ever/README.md",
+      "sha256": "0f0989d8abaf2539dc05d6b0dc5851dc432c6badae34d9bd23b76c56991ea254"
+    },
+    {
+      "path": "vendor/html5ever/RSSR-PATCH.md",
+      "sha256": "964ed31133e47fc6ad003186d40b8102af74ed8fb8b00c55d194ae234d75c69e"
+    },
+    {
+      "path": "vendor/html5ever/src/driver.rs",
+      "sha256": "760eca0d36fcb90c07858102928aa41efea9adb1eac2df74b972352c2b8c21b3"
+    },
+    {
+      "path": "vendor/html5ever/src/encoding.rs",
+      "sha256": "5b569fcd7f419fb521f86f970f53e943f5c23cc5afce32cd4364b66057c7bc42"
+    },
+    {
+      "path": "vendor/html5ever/src/lib.rs",
+      "sha256": "4b9193c2483083e52713aaa71689c18eeada669cbca3c1e08097a02141e2582b"
+    },
+    {
+      "path": "vendor/html5ever/src/macros.rs",
+      "sha256": "9d964d34792195764fc7d53c7bfdec3ba468ee7708ab4dd0891a37c211f96977"
+    },
+    {
+      "path": "vendor/html5ever/src/serialize/mod.rs",
+      "sha256": "b1c12517e34d4b109bdcecdb34895b6838f94b863c7f533e83f77c63aad2f1e2"
+    },
+    {
+      "path": "vendor/html5ever/src/tokenizer/char_ref/mod.rs",
+      "sha256": "e753058cb7ab64c63bb13e2156c583bdc60a8468efe6b9c64b8768c6effadf8f"
+    },
+    {
+      "path": "vendor/html5ever/src/tokenizer/interface.rs",
+      "sha256": "cdab80709a6e27663b9a349a607cf85da93fcc9ee3b3a54cf97ee635a9ae7cf4"
+    },
+    {
+      "path": "vendor/html5ever/src/tokenizer/mod.rs",
+      "sha256": "0c1062ff1da08aa280946a54ad8d0de7ce9fbc783bc43a440640065f9f295e0d"
+    },
+    {
+      "path": "vendor/html5ever/src/tokenizer/states.rs",
+      "sha256": "35ea888082a92b77a428af263224169b05ff5740bd519efdace90e44858a0b7d"
+    },
+    {
+      "path": "vendor/html5ever/src/tree_builder/data.rs",
+      "sha256": "256c72e7d368b0be3d1f473c7b36907b6f6b602aff7d1441b9be109fea3375b1"
+    },
+    {
+      "path": "vendor/html5ever/src/tree_builder/mod.rs",
+      "sha256": "2532037041fea1a789a91b6d5bdbe9a5fd4c4f1e98202da640756dc8dc8680b0"
+    },
+    {
+      "path": "vendor/html5ever/src/tree_builder/rules.rs",
+      "sha256": "877f811266d9d1098f07892473e583b8218d01c0895c8c2d08e40acaec98aa6d"
+    },
+    {
+      "path": "vendor/html5ever/src/tree_builder/tag_sets.rs",
+      "sha256": "5f1e1adffe46f4af0fe063d5847cf1e0fcc03312ca2e3b0062945a341b836716"
+    },
+    {
+      "path": "vendor/html5ever/src/tree_builder/types.rs",
+      "sha256": "85d2b3f8221faa9cbb561ad1dba8443ad4ed988b8a544511d3e01c28cdc8992f"
+    },
+    {
+      "path": "vendor/html5ever/src/util/str.rs",
+      "sha256": "48ca91feaa5e352cafb1743f996f57e6209c34851da6400488fb2fede2593161"
+    },
+    {
+      "path": "vendor/html5ever/tests/driver.rs",
+      "sha256": "ed917e950d7d43ade5e6eb63961bf40c77729d1df074d9f8cee5575daa9d2826"
+    }
+  ],
+  "not_covered": [
+    "Android/macOS/Linux native manual acceptance",
+    "Published release binaries or new remote CI",
+    "Historical 418-document corpus",
+    "Arbitrary HTML whole-pipeline complexity proof",
+    "Persistent image retry across restarts or autonomous retry after HTTP 304"
+  ]
+}

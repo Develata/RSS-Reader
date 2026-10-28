@@ -531,6 +531,13 @@ pub struct LocalizedBody {
     pub localized_html: String,
 }
 
+/// One stored body, loaded only after a background worker obtains its slot.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) struct LocalizationSource {
+    pub html: String,
+    pub content_hash: Option<String>,
+}
+
 fn entry_id_for(conn: &Connection, feed_id: i64, dedup_key: &str) -> StoreResult<Option<i64>> {
     Ok(conn
         .prepare_cached("SELECT id FROM entries WHERE feed_id = ?1 AND dedup_key = ?2")?
@@ -572,6 +579,41 @@ fn update_localized_body(
 
 /// Body localization, reached from the GUI's image localization worker.
 impl LibraryEntries {
+    /// Read one active-generation body within the caller's byte budget. A
+    /// candidate digest is checked by the host before doing network work; this
+    /// read does not claim that the stored HTML is still the source version.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) async fn body_for_localization(
+        &self,
+        feed_id: i64,
+        generation: i64,
+        dedup_key: String,
+        max_html_bytes: usize,
+    ) -> DomainResult<Option<LocalizationSource>> {
+        Ok(self
+            .store
+            .read(move |conn| {
+                Ok(conn
+                    .prepare_cached(
+                        "SELECT c.content_html, c.content_hash
+                 FROM entries e
+                 JOIN feeds f ON f.id = e.feed_id
+                 JOIN entry_contents c ON c.entry_id = e.id
+                 WHERE e.feed_id = ?1 AND e.dedup_key = ?2
+                   AND f.generation = ?3 AND f.is_deleted = 0
+                   AND length(CAST(c.content_html AS BLOB)) <= ?4",
+                    )?
+                    .query_row(
+                        params![feed_id, dedup_key, generation, max_html_bytes as i64],
+                        |row| {
+                            Ok(LocalizationSource { html: row.get(0)?, content_hash: row.get(1)? })
+                        },
+                    )
+                    .optional()?)
+            })
+            .await?)
+    }
+
     /// The subscription and generation of an entry whose subscription is active.
     pub async fn active_entry_generation(&self, entry_id: i64) -> DomainResult<Option<(i64, i64)>> {
         Ok(self

@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use rssr_domain::{DomainError, FetchErrorKind};
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 
 use crate::error::{ErrorKind, classify};
@@ -150,7 +151,7 @@ pub enum RefreshFeedResult {
     Updated {
         entry_count: usize,
         inserted_count: u64,
-        localization_entries: Vec<RefreshLocalizedEntry>,
+        localization_entries: Vec<RefreshLocalizationCandidate>,
     },
     /// `message` is for the user: a storage or internal cause is a fixed text (logged in full
     /// where it was classified).
@@ -185,14 +186,42 @@ impl RefreshFeedResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RefreshLocalizedEntry {
+pub struct RefreshLocalizationCandidate {
     /// Feed generation captured by the refresh that produced this localization work.
     pub generation: i64,
     pub dedup_key: String,
     pub url: Option<Url>,
-    pub title: String,
-    pub content_html: String,
-    pub content_text: Option<String>,
+    /// The persisted v2 source identity, including title, text and base URL.
+    pub source_content_hash: String,
+    // A hint to read the committed body later, never another retained body copy.
+    // Distinct from the store's full content hash, which also covers metadata.
+    source_html_digest: [u8; 32],
+}
+
+impl RefreshLocalizationCandidate {
+    pub fn from_entry(entry: &ParsedEntryData, generation: i64) -> Option<Self> {
+        let html = entry.content_html.as_ref()?;
+        Some(Self {
+            generation,
+            dedup_key: entry.dedup_key.clone(),
+            url: entry.url.clone(),
+            source_content_hash: crate::entry_content_hash(
+                Some(html),
+                entry.content_text.as_deref(),
+                Some(&entry.title),
+                entry.url.as_ref().map(Url::as_str),
+            )?,
+            source_html_digest: Sha256::digest(html.as_bytes()).into(),
+        })
+    }
+
+    /// A source changed or already localized by another worker must be skipped.
+    /// The host still compares the stored content hash and exact read body when
+    /// writing back, and checks the subscription generation on read and write.
+    pub fn matches_stored_body(&self, html: &str, content_hash: Option<&str>) -> bool {
+        content_hash == Some(self.source_content_hash.as_str())
+            && self.source_html_digest == <[u8; 32]>::from(Sha256::digest(html.as_bytes()))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -768,19 +797,10 @@ impl RefreshService {
 fn build_localization_entries(
     entries: &[ParsedEntryData],
     generation: i64,
-) -> Vec<RefreshLocalizedEntry> {
+) -> Vec<RefreshLocalizationCandidate> {
     entries
         .iter()
-        .filter_map(|entry| {
-            entry.content_html.as_ref().map(|content_html| RefreshLocalizedEntry {
-                generation,
-                dedup_key: entry.dedup_key.clone(),
-                url: entry.url.clone(),
-                title: entry.title.clone(),
-                content_html: content_html.clone(),
-                content_text: entry.content_text.clone(),
-            })
-        })
+        .filter_map(|entry| RefreshLocalizationCandidate::from_entry(entry, generation))
         .collect()
 }
 
@@ -858,6 +878,25 @@ mod tests {
             published_at: None,
             updated_at_source: None,
         }
+    }
+
+    #[test]
+    fn localization_candidates_require_both_source_identity_and_exact_html() {
+        let source = sample_entry();
+        let candidate = super::RefreshLocalizationCandidate::from_entry(&source, 7).unwrap();
+        let html = source.content_html.as_deref().unwrap();
+        assert!(candidate.matches_stored_body(html, Some(&candidate.source_content_hash)));
+        assert!(
+            !candidate.matches_stored_body("<p>derived</p>", Some(&candidate.source_content_hash))
+        );
+        assert!(!candidate.matches_stored_body(html, None));
+        let mut changed = source.clone();
+        changed.url = Some(Url::parse("https://other.example/article").unwrap());
+        let changed = super::RefreshLocalizationCandidate::from_entry(&changed, 7).unwrap();
+        assert!(!candidate.matches_stored_body(html, Some(&changed.source_content_hash)));
+        let mut no_html = source;
+        no_html.content_html = None;
+        assert!(super::RefreshLocalizationCandidate::from_entry(&no_html, 7).is_none());
     }
 
     fn sample_entry_without_html() -> ParsedEntryData {
@@ -1031,8 +1070,10 @@ mod tests {
                 assert_eq!(entry_count, 2);
                 assert_eq!(localization_entries.len(), 1);
                 assert_eq!(localization_entries[0].dedup_key, "entry-1");
-                assert_eq!(localization_entries[0].title, "Entry");
-                assert_eq!(localization_entries[0].content_html, "<p>summary</p>");
+                assert!(localization_entries[0].matches_stored_body(
+                    "<p>summary</p>",
+                    Some(&localization_entries[0].source_content_hash),
+                ));
             }
             _ => panic!("expected updated outcome"),
         }

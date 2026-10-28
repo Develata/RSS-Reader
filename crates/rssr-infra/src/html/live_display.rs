@@ -443,7 +443,7 @@ fn parse_tag(raw_tag: &str, start: usize, end: usize) -> Option<HtmlTag> {
         return None;
     }
 
-    let inner = raw_tag[1..raw_tag.len() - 1].trim();
+    let inner = raw_tag[1..raw_tag.len() - 1].trim_start();
     if inner.is_empty() || inner.starts_with('!') || inner.starts_with('?') {
         return None;
     }
@@ -454,16 +454,15 @@ fn parse_tag(raw_tag: &str, start: usize, end: usize) -> Option<HtmlTag> {
         return None;
     }
 
-    let self_closing = !is_end_tag && inner.ends_with('/');
-    let inner = if self_closing { inner.trim_end_matches('/').trim_end() } else { inner };
-
-    let name_end = inner.find(|ch: char| ch.is_ascii_whitespace()).unwrap_or(inner.len());
+    let name_end =
+        inner.find(|ch: char| ch.is_ascii_whitespace() || ch == '/').unwrap_or(inner.len());
     let original_name = inner[..name_end].to_string();
     if original_name.is_empty() {
         return None;
     }
 
-    let attributes = if is_end_tag { Vec::new() } else { parse_attributes(&inner[name_end..]) };
+    let (attributes, self_closing) =
+        if is_end_tag { (Vec::new(), false) } else { parse_attributes(&inner[name_end..]) };
 
     Some(HtmlTag {
         start,
@@ -477,7 +476,7 @@ fn parse_tag(raw_tag: &str, start: usize, end: usize) -> Option<HtmlTag> {
     })
 }
 
-fn parse_attributes(raw: &str) -> Vec<HtmlAttribute> {
+fn parse_attributes(raw: &str) -> (Vec<HtmlAttribute>, bool) {
     let bytes = raw.as_bytes();
     let mut attributes = Vec::new();
     let mut index = 0_usize;
@@ -491,7 +490,13 @@ fn parse_attributes(raw: &str) -> Vec<HtmlAttribute> {
         }
 
         if bytes[index] == b'/' {
-            break;
+            index += 1;
+            if index == bytes.len() {
+                return (attributes, true);
+            }
+            // A slash is a self-closing delimiter only between attributes and
+            // immediately before `>`. Inside an unquoted value it is URL data.
+            continue;
         }
 
         let name_start = index;
@@ -537,10 +542,7 @@ fn parse_attributes(raw: &str) -> Vec<HtmlAttribute> {
                 Some(decode_html_attribute_entities(&raw_value))
             } else {
                 let value_start = index;
-                while index < bytes.len()
-                    && !bytes[index].is_ascii_whitespace()
-                    && bytes[index] != b'/'
-                {
+                while index < bytes.len() && !bytes[index].is_ascii_whitespace() {
                     index += 1;
                 }
                 let raw_value = raw[value_start..index].to_string();
@@ -553,7 +555,7 @@ fn parse_attributes(raw: &str) -> Vec<HtmlAttribute> {
         attributes.push(HtmlAttribute { name, original_name, value });
     }
 
-    attributes
+    (attributes, false)
 }
 
 fn resolve_document_base_url(tags: &[HtmlTag], base_url: Option<&Url>) -> Option<Url> {
@@ -1126,6 +1128,32 @@ mod tests {
         normalize_image_content_type, resolve_asset_url, srcset_candidates,
     };
     use url::Url;
+
+    #[test]
+    fn unquoted_image_urls_keep_slashes_and_distinguish_self_closing_delimiters() {
+        let base = Url::parse("https://example.com/article").unwrap();
+        for (input, expected, self_closing) in [
+            ("<img src=/hero.png>", "https://example.com/hero.png", false),
+            (
+                "<img src=https://images.example.com/hero.png>",
+                "https://images.example.com/hero.png",
+                false,
+            ),
+            ("<img src=/directory/>", "https://example.com/directory/", false),
+            ("<img src=/directory/ >", "https://example.com/directory/", false),
+            ("<img src=/hero.png />", "https://example.com/hero.png", true),
+            ("<img src='/directory/'/>", "https://example.com/directory/", true),
+        ] {
+            let tags = super::parse_html_tags(input);
+            assert_eq!(tags[0].self_closing, self_closing, "{input}");
+            let normalized = normalize_html_for_live_display(input, Some(&base));
+            let document = LocalizableImageDocument::parse(&normalized, Some(&base), 8);
+            assert_eq!(document.slots().len(), 1, "{normalized}");
+            assert_eq!(document.slots()[0].resolved_url().as_str(), expected, "{input}");
+        }
+        assert!(super::parse_html_tags("<img/>")[0].self_closing);
+        assert!(!super::parse_html_tags("<img / >")[0].self_closing);
+    }
 
     #[test]
     fn attribute_entities_decode_within_a_bounded_window() {

@@ -23,8 +23,8 @@
 //!     缓存到下一个标签才逐项重建格式化元素）都是“每个 token 至多扫一遍表或栈”。每块按
 //!     token 个数的上界（`<`、`&`、LF、CR、NUL 个数）乘格式化元素表的上界预先计费；表非空时再乘开放
 //!     元素栈的上界。预付保证了缓存的 token 在后面某一块里集中处理时早已计过费。
-//!   - 表与栈的大小用 [`TreeBuilder::trace_handles`] 在块之间精确清点，两次清点之间按新建
-//!     元素数放宽，所以不依赖任何树形状的推算。
+//!   - 表与栈的句柄用 [`TreeBuilder::trace_handles`] 在块之间精确清点；本地 html5ever 补丁
+//!     另外报告包含 Marker 的完整表长，两次清点之间按新建元素数放宽。
 //!   - `selectedcontent`：ammonia 清洗时对每个这样的元素逐级向上找 `<select>`，按已建元素数计。
 //! - 物化量：新建元素的名字与属性字节数之和，每个元素至少按 3 字节（最短的源码标签 `<b>`）计。
 //!   重建会反复克隆同一元素及其属性，这一项把元素个数和属性拷贝限制在输入的常数倍。
@@ -35,13 +35,9 @@
 //! 公式由公式预算单独降级，不该连累整篇正文；所以这里不按深度本身计费。
 //!
 //! 这是纵深防御，不是证明。sink 只能看到 html5ever 经由它做的工作，从外部计量给不出可证明的
-//! 上界。已知仍可绕过或在拒绝前耗时较长的输入：
-//!
-//! - 活动格式化元素表里的 Marker 既不经过 sink 也不出现在 `trace_handles` 里；
-//!   `<template><object></template>` 之类的重复可留下任意多个 Marker，之后每个格式化结束标签都
-//!   要跨过它们（实测 1.8 MB 约 6 s 计量 + 5 s ammonia，按平方增长）。
-//! - 包络与 Noah's Ark 按块事后结算，一个块内或一个很长的标签内的超量要等它处理完才发现。
-//! - 树构建以外的阶段：分词器对同一标签内属性的去重是平方级的（servo/html5ever#796）。
+//! 上界。包络仍按块结算；单个 token 内部的树构建不能中断。格式化开始标签在转交树构建器前
+//! 先检查 Noah's Ark 的预计费用，避免很长的属性表已经反复克隆后才发现超限。分词器的属性
+//! 去重由 `vendor/html5ever` 中的小范围补丁修复，纯文本降级和 ammonia 共用这个版本。
 //!
 //! 根本解决在上游：给树构建器加工作量预算，或让这些查找不再线性。
 //!
@@ -53,9 +49,11 @@ use std::mem;
 use std::rc::{Rc, Weak};
 
 use html5ever::interface::{ElementFlags, NodeOrText, QuirksMode, Tracer, TreeSink};
-use html5ever::tendril::{StrTendril, TendrilSink};
+use html5ever::tendril::StrTendril;
+use html5ever::tokenizer::{BufferQueue, StartTag, Token, TokenSink, TokenSinkResult, Tokenizer};
+use html5ever::tree_builder::TreeBuilder;
 use html5ever::{
-    Attribute, LocalName, ParseOpts, Parser, QualName, local_name, ns, parse_fragment,
+    Attribute, LocalName, ParseOpts, QualName, TokenizerResult, local_name, ns, parse_fragment,
 };
 
 /// 每次喂给解析器的最大字节数与最多标签起点（`<`）数。超限最多在一个块之后被发现；
@@ -115,27 +113,89 @@ impl Budget {
 fn measure(html: &str, budget: Budget) -> Option<Rc<Meter>> {
     let meter = Rc::new(Meter::new(budget));
     // 与 ammonia 的 `make_parser` 一致：把正文当作 `<div>` 里的片段解析。
-    let mut parser = parse_fragment(
+    let parser = parse_fragment(
         MeteringSink::new(Rc::clone(&meter)),
         ParseOpts::default(),
         QualName::new(None, ns!(html), local_name!("div")),
         Vec::new(),
         false,
     );
+    // Keep html5ever's fragment setup and tokenizer state. The wrapper only
+    // refuses tokens after exhaustion or before an over-budget attribute clone.
+    let tree = parser.tokenizer.sink;
+    let options = html5ever::tokenizer::TokenizerOpts {
+        initial_state: Some(tree.tokenizer_state_for_context_elem(false)),
+        ..Default::default()
+    };
+    let tokenizer = Tokenizer::new(BudgetedTree { tree, meter: Rc::clone(&meter) }, options);
+    let input = BufferQueue::default();
 
     let mut rest = html;
     while !rest.is_empty() {
         let (chunk, tail) = rest.split_at(chunk_end(rest));
-        parser.process(StrTendril::from_slice(chunk));
-        meter.charge_envelope(chunk);
-        meter.census_if_due(&parser);
+        let entries_before = tokenizer.sink.tree.active_formatting_len() as u64;
+        let created_before = meter.created.get();
+        input.push_back(StrTendril::from_slice(chunk));
+        // Match html5ever's Parser: scripts/encoding indicators do not suspend
+        // this inert preparse. Raw-text and foreign-content states are delegated.
+        while !matches!(tokenizer.feed(&input), TokenizerResult::Done) {}
+        let formatting_entries =
+            entries_before.saturating_add(meter.created.get().saturating_sub(created_before));
+        meter.charge_envelope(chunk, formatting_entries);
+        if meter.exhausted() {
+            return None;
+        }
+        meter.census_if_due(&tokenizer.sink.tree);
         if meter.exhausted() {
             return None;
         }
         rest = tail;
     }
-    parser.finish();
+    tokenizer.end();
     (!meter.exhausted()).then_some(meter)
+}
+
+/// Policy stays outside the parser: accepted tokens keep html5ever's exact state
+/// transitions. In particular, never replace tokenization with a tag regex.
+struct BudgetedTree {
+    tree: TreeBuilder<Handle, MeteringSink>,
+    meter: Rc<Meter>,
+}
+
+impl TokenSink for BudgetedTree {
+    type Handle = Handle;
+
+    fn process_token(&self, token: Token, line: u64) -> TokenSinkResult<Handle> {
+        if let Token::TagToken(tag) = &token
+            && tag.kind == StartTag
+            && let Some(index) =
+                FORMATTING_ELEMENTS.iter().position(|name| *name == tag.name.as_ref())
+        {
+            let cost = self.meter.formatting.borrow().insertion_cost(
+                index,
+                tag.attrs.len() as u64,
+                attribute_compare_cost(&tag.attrs),
+            );
+            if self.meter.work.get().saturating_add(cost) > self.meter.budget.work {
+                self.meter.work.set(u64::MAX);
+            }
+        }
+        if self.meter.exhausted() {
+            TokenSinkResult::Continue
+        } else {
+            self.tree.process_token(token, line)
+        }
+    }
+
+    fn end(&self) {
+        if !self.meter.exhausted() {
+            self.tree.end();
+        }
+    }
+
+    fn adjusted_current_node_present_but_not_in_html_namespace(&self) -> bool {
+        self.tree.adjusted_current_node_present_but_not_in_html_namespace()
+    }
 }
 
 /// 下一块的长度：不超过 [`CHUNK_BYTES`]，并在第 [`CHUNK_TAGS`] + 1 个 `<` 之前结束；
@@ -172,6 +232,15 @@ struct FormattingBound {
 }
 
 impl FormattingBound {
+    fn insertion_cost(&self, index: usize, attributes: u64, compare_cost: u64) -> u64 {
+        let clones = self.count[index]
+            .saturating_mul(attributes.saturating_add(1))
+            .saturating_add(self.attributes[index]);
+        let compared =
+            self.count[index].saturating_mul(compare_cost).saturating_add(self.compare_cost[index]);
+        self.total.saturating_add(NOAHS_ARK_WEIGHT.saturating_mul(clones)).saturating_add(compared)
+    }
+
     fn add(&mut self, index: usize, attributes: u64, compare_cost: u64) {
         self.total = self.total.saturating_add(1);
         self.count[index] = self.count[index].saturating_add(1);
@@ -211,14 +280,16 @@ impl Meter {
     /// 换行（分词器在 LF/CR 处切分文字）、NUL 之一开头或紧跟其后的一段文字（树构建器至多再把开头的空白拆成一段），所以 token 数
     /// 不超过它们个数的两倍加一。表与栈的上界在两次清点之间单调不减，处理完这一块后的值不小于
     /// 块内任何时刻的值。
-    fn charge_envelope(&self, chunk: &str) {
+    fn charge_envelope(&self, chunk: &str, formatting_entries: u64) {
         let markers =
             chunk.bytes().filter(|byte| matches!(byte, b'<' | b'&' | b'\n' | b'\r' | 0)).count();
         let tokens = (markers as u64).saturating_add(1).saturating_mul(2);
-        let formatting = self.formatting.borrow().total;
+        let formatting_handles = self.formatting.borrow().total;
+        let formatting = formatting_handles.max(formatting_entries);
         let mut per_token = ADOPTION_ROUNDS.saturating_mul(formatting.saturating_add(1));
-        if formatting > 0 {
+        if formatting_handles > 0 {
             // 表非空时，每个文字 token 重建前都要在栈里找表尾那一项。
+            // Marker 本身没有句柄，不触发这种栈查询；不能让普通深层 span/MathML 被误拒绝。
             per_token = per_token.saturating_add(self.open_handles.get());
         }
         add(&self.work, tokens.saturating_mul(per_token));
@@ -232,9 +303,10 @@ impl Meter {
 
     /// 清点树构建器当前持有的句柄，把上界收紧到精确值。清点本身按访问的句柄数计费，
     /// 并且只在上次清点后的工作量不少于上次清点规模时进行，摊还下不超过总工作量。
-    fn census_if_due(&self, parser: &Parser<MeteringSink>) {
+    fn census_if_due(&self, tree: &TreeBuilder<Handle, MeteringSink>) {
+        let formatting_entries = tree.active_formatting_len() as u64;
         let since = self.work.get().saturating_sub(self.work_at_census.get());
-        if since < self.open_handles.get() {
+        if since < self.open_handles.get().saturating_add(formatting_entries) {
             return;
         }
         let generation = self.generation.get().wrapping_add(1);
@@ -245,8 +317,11 @@ impl Meter {
             distinct: Cell::new(0),
             formatting: RefCell::new(FormattingBound::default()),
         };
-        parser.tokenizer.sink.trace_handles(&census);
-        add(&self.work, census.visited.get());
+        tree.trace_handles(&census);
+        // trace_handles visits the entire formatting list, even entries without
+        // a handle. Bill those iterations too; counting element entries twice is
+        // a conservative constant factor, unlike omitting all markers.
+        add(&self.work, census.visited.get().saturating_add(formatting_entries));
         self.open_handles.set(census.distinct.get());
         *self.formatting.borrow_mut() = census.formatting.into_inner();
         self.work_at_census.set(self.work.get());
@@ -298,11 +373,9 @@ type Handle = Rc<Node>;
 impl Node {
     fn new(name: QualName, attrs: &[Attribute], flags: &ElementFlags) -> Handle {
         let mut node = Node::build(name, attrs.len(), flags, false);
-        let bytes: usize = attrs.iter().map(|attr| attr.name.local.len() + attr.value.len()).sum();
-        let rounds = u64::from(attrs.len().saturating_add(1).ilog2()).saturating_add(1);
         // 刚建出来只有这一个引用。
         if let Some(node) = Rc::get_mut(&mut node) {
-            node.compare_cost = (bytes as u64).saturating_mul(rounds);
+            node.compare_cost = attribute_compare_cost(attrs);
         }
         node
     }
@@ -341,6 +414,12 @@ impl Node {
     fn index_in(parent: &Node, child: &Handle) -> Option<usize> {
         parent.children.borrow().iter().position(|candidate| Rc::ptr_eq(candidate, child))
     }
+}
+
+fn attribute_compare_cost(attrs: &[Attribute]) -> u64 {
+    let bytes: usize = attrs.iter().map(|attr| attr.name.local.len() + attr.value.len()).sum();
+    let rounds = u64::from(attrs.len().saturating_add(1).ilog2()).saturating_add(1);
+    (bytes as u64).saturating_mul(rounds)
 }
 
 fn empty_name() -> QualName {
@@ -436,18 +515,7 @@ impl TreeSink for MeteringSink {
         if let Some(index) = node.formatting {
             let attributes = attrs.len() as u64;
             let mut bound = meter.formatting.borrow_mut();
-            let clones = bound.count[index]
-                .saturating_mul(attributes.saturating_add(1))
-                .saturating_add(bound.attributes[index]);
-            let compared = bound.count[index]
-                .saturating_mul(node.compare_cost)
-                .saturating_add(bound.compare_cost[index]);
-            self.charge(
-                bound
-                    .total
-                    .saturating_add(NOAHS_ARK_WEIGHT.saturating_mul(clones))
-                    .saturating_add(compared),
-            );
+            self.charge(bound.insertion_cost(index, attributes, node.compare_cost));
             bound.add(index, attributes, node.compare_cost);
         }
         if node.name.ns == ns!(html) && node.name.local.as_ref() == "selectedcontent" {
@@ -684,6 +752,49 @@ mod tests {
         let prefix = "a".repeat(100_000);
         let long_names = format!("<b {prefix}0 {prefix}1>{}</b>", "<b>x</b>".repeat(2_000));
         assert!(!fits_tree_building_budget(&long_names));
+    }
+
+    #[test]
+    fn formatting_markers_without_handles_are_metered() {
+        // Each template closes only the innermost marker. The remaining markers
+        // used to be invisible to both TreeSink and trace_handles (#801).
+        let markers = "<template><object></template>".repeat(5_000);
+        assert!(!fits_tree_building_budget(&format!("{markers}{}", "<b>x</b>".repeat(20_000))));
+        assert!(!fits_tree_building_budget(&markers));
+        // Legitimate tables and separate templates release their markers.
+        assert!(fits_tree_building_budget(&"<template><p>text</p></template>".repeat(2_000)));
+    }
+
+    #[test]
+    fn over_budget_formatting_attributes_are_rejected_before_tree_construction() {
+        use super::*;
+        let meter = Rc::new(Meter::new(Budget { work: 1_000, materialized: u64::MAX }));
+        let parser = parse_fragment(
+            MeteringSink::new(Rc::clone(&meter)),
+            ParseOpts::default(),
+            QualName::new(None, ns!(html), local_name!("div")),
+            Vec::new(),
+            false,
+        );
+        let sink = BudgetedTree { tree: parser.tokenizer.sink, meter: Rc::clone(&meter) };
+        let bold = |value: &str| {
+            Token::TagToken(html5ever::tokenizer::Tag {
+                kind: StartTag,
+                name: local_name!("b"),
+                self_closing: false,
+                attrs: vec![Attribute {
+                    name: QualName::new(None, ns!(), local_name!("title")),
+                    value: value.into(),
+                }],
+                had_duplicate_attributes: false,
+            })
+        };
+        let _ = sink.process_token(bold("first"), 1);
+        assert!(!meter.exhausted());
+        let created = meter.created.get();
+        let _ = sink.process_token(bold(&"x".repeat(10_000)), 1);
+        assert!(meter.exhausted());
+        assert_eq!(meter.created.get(), created, "large token never reached tree construction");
     }
 
     #[test]

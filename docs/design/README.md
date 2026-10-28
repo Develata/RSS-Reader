@@ -13,6 +13,7 @@
 | 主题与稳定选择器 | [主题作者参考](./theme-author-selector-reference.md)、[CSS 分离检查](./css-separation-baseline-checklist.md) |
 | Penpot 与实际代码的对应关系 | [当前代码设计基准](./penpot-code-baseline.md) |
 | 应用服务职责 | [Use Case 收敛](./application-use-case-consolidation-plan.md)、[边界检查](./application-use-case-boundary-checklist.md) |
+| 正文解析、图片身份与后台调度 | [处理预算与职责](./reader-processing-budgets.md)（发布后工作分支实现） |
 | 资料库兼容与交付形态 | [SQLite 迁移兼容](./sqlite-migration-compatibility.md)、[GUI / CLI 分发](./cli-gui-distribution.md) |
 
 目录交互与文章级入口已在主线实现；平台未验收项仍见各契约。GUI / CLI 的独立分发已实施，Scoop 包仍是该文档列出的后续工作。

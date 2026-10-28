@@ -131,6 +131,11 @@ impl BodyAssetLocalizer {
         self.budget.image_request_timeout
     }
 
+    /// Avoid loading a body the background localizer would immediately refuse.
+    pub(crate) fn max_html_bytes(&self) -> usize {
+        self.budget.max_html_bytes
+    }
+
     pub async fn localize_html_images(
         &self,
         html: &str,

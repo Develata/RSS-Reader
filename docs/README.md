@@ -12,6 +12,7 @@
 | 部署服务器 / Docker | [Web 部署](./deployment/web.md) | [服务包与容器验收](./testing/web-distribution.md) |
 | 修改业务或界面 | [功能边界](./design/functional-design-philosophy.md) | [设计索引](./design/README.md)、[前端命令契约](./design/frontend-command-reference.md) |
 | 修改主题或同步 Penpot | [主题选择器](./design/theme-author-selector-reference.md) | [Penpot 代码基准](./design/penpot-code-baseline.md) |
+| 排查正文解析与图片缓存 | [处理预算与职责](./design/reader-processing-budgets.md) | [解析与队列实测](./testing/evidence/2026-10-28-parse-image/README.md) |
 | 检查主线 / 准备发布 | [测试索引](./testing/README.md) | [主线矩阵](./testing/mainline-validation-matrix.md)、[发布 UI 清单](./testing/release-ui-regression-checklist.md)、[v0.2.1 说明](./releases/v0.2.1.md) |
 | 构建或验收 Android | [Android 状态](./roadmaps/android-release-roadmap.md) | [原生阅读验收](./testing/native-reading-baseline.md) |
 | 接手当前工作 | [维护状态](./current-status.md) | [当前待办](./maintenance-backlog.md)、[近期交接](./handoffs/README.md) |
