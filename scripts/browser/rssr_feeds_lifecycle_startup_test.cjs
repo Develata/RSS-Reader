@@ -16,6 +16,9 @@ const hash = async file => crypto.createHash('sha256').update(await fs.readFile(
   await fs.writeFile(path.join(output, 'results.json'), JSON.stringify(receipt, null, 2));
   let context, server;
   try {
+    const runner = process.argv[3] || 'feeds';
+    assert.ok(['feeds', 'settings-sync'].includes(runner), 'known acceptance runner');
+    const script = runner === 'settings-sync' ? 'rssr_settings_sync_acceptance.cjs' : 'rssr_feeds_lifecycle_acceptance.cjs';
     const run = await fs.mkdtemp(path.join(output, 'run-'));
     const database = path.join(run, 'fixture.db');
     const fixture = new DatabaseSync(database);
@@ -40,7 +43,7 @@ const hash = async file => crypto.createHash('sha256').update(await fs.readFile(
       const reportPath = path.join(artifacts, 'acceptance.json');
       // A failed rerun must not retain an earlier successful receipt.
       await fs.writeFile(reportPath, JSON.stringify({ status: 'passed', oldRun: true }));
-      const child = spawn(process.execPath, [path.join(__dirname, 'rssr_feeds_lifecycle_acceptance.cjs'),
+      const child = spawn(process.execPath, [path.join(__dirname, script),
         '--cdp', test.cdp, '--database', test.database, '--feed-origin', 'http://127.0.0.1:9277',
         '--artifact-dir', artifacts], { windowsHide: true });
       let log = '', timedOut = false;

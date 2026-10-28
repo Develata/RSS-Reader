@@ -1,7 +1,7 @@
 use dioxus::prelude::*;
 
 use super::state::SettingsPageSyncState;
-use crate::ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command};
+use crate::ui::{UiCommand, UiIntent, spawn_projected_ui_command};
 use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -27,41 +27,25 @@ impl SettingsPageSyncSession {
         self.state.with_mut(|state| state.set_remote_path(remote_path));
     }
 
-    pub(crate) fn push(self) {
-        let snapshot = self.snapshot();
-        self.apply_ui_command(UiCommand::Settings(SettingsCommand::PushConfig {
-            endpoint: snapshot.endpoint,
-            remote_path: snapshot.remote_path,
-        }));
+    pub(crate) fn push(mut self) {
+        let command = self.state.with_mut(SettingsPageSyncState::prepare_push);
+        self.apply_ui_command(UiCommand::Settings(command));
     }
 
     pub(crate) fn pull(mut self) {
-        let confirmation_required = {
-            let mut confirmation_required = false;
-            self.state.with_mut(|state| {
-                confirmation_required = state.request_remote_pull_confirmation();
-            });
-            confirmation_required
-        };
-
-        if confirmation_required {
+        let command = self.state.with_mut(SettingsPageSyncState::prepare_pull);
+        let Some(command) = command else {
             set_status_info(
                 self.page.status_signal(),
                 self.page.status_tone_signal(),
                 "从 WebDAV 下载配置会覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。",
             );
             return;
-        }
-
-        let snapshot = self.snapshot();
-        self.apply_ui_command(UiCommand::Settings(SettingsCommand::PullConfig {
-            endpoint: snapshot.endpoint,
-            remote_path: snapshot.remote_path,
-        }));
+        };
+        self.apply_ui_command(UiCommand::Settings(command));
     }
 
-    fn apply_ui_command(mut self, command: UiCommand) {
-        self.state.with_mut(|state| state.clear_pending_remote_pull());
+    fn apply_ui_command(self, command: UiCommand) {
         spawn_projected_ui_command(command, UiIntent::into_settings_page_intent, move |intent| {
             self.page.dispatch(intent);
         });
