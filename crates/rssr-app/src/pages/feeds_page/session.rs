@@ -1,11 +1,14 @@
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
 use dioxus::prelude::*;
 
-use super::{intent::FeedsPageIntent, reducer::dispatch_feeds_page_intent, state::FeedsPageState};
-use crate::ui::{
-    AppShellState, FeedsCommand, ShellCommand, UiCommand, UiIntent, execute_ui_command,
+use super::{
+    intent::FeedsPageIntent,
+    reducer::dispatch_feeds_page_intent,
+    request_policy::{FeedsRequestPlan, RefreshFeedback},
+    state::FeedsPageState,
 };
+use crate::ui::{AppShellState, UiCommand, UiIntent, execute_ui_command};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct FeedsPageSession {
@@ -76,43 +79,48 @@ impl FeedsPageSession {
     ) {
         let commands = dispatch_feeds_page_intent(self.state, intent);
         for command in commands {
-            if matches!(command, UiCommand::Shell(ShellCommand::ManualRefresh)) {
+            let plan = FeedsRequestPlan::for_command(&command, *self.query_generation.peek());
+            if plan == FeedsRequestPlan::ManualRefresh {
                 self.shell.manual_refresh();
                 continue;
             }
-            // Refresh completion and feed mutations can start overlapping snapshots.
-            // Only reads use this token; writes must still publish their completion.
-            let generation =
-                matches!(command, UiCommand::Feeds(FeedsCommand::LoadSnapshot)).then(|| {
-                    self.query_generation.with_mut(|generation| {
-                        *generation = generation.wrapping_add(1);
-                        *generation
-                    })
-                });
-            let single_refresh =
-                matches!(command, UiCommand::Feeds(FeedsCommand::RefreshFeed { .. }));
+            if let Some(generation) = plan.query_generation() {
+                self.query_generation.set(generation);
+            }
             let task = execute(command);
-            spawn(async move {
-                let intents = task.await;
-                if generation.is_some_and(|generation| *self.query_generation.peek() != generation)
-                {
-                    return;
-                }
-                for intent in intents.into_iter().filter_map(UiIntent::into_feeds_page_intent) {
-                    self.dispatch_intent(intent);
-                }
-                if single_refresh {
-                    let (revision, message, failed) = self.state.with(|state| {
-                        (state.status_revision, state.status.clone(), state.status_tone == "error")
-                    });
-                    crate::ui::wait_for_refresh_feedback(std::time::Duration::from_secs(
-                        if failed { 6 } else { 3 },
-                    ))
-                    .await;
-                    self.dispatch_intent(FeedsPageIntent::ClearRefreshStatus { revision, message });
-                }
-            });
+            self.spawn_result_with(plan, task, crate::ui::wait_for_refresh_feedback);
         }
+    }
+
+    fn spawn_result_with<F, W>(
+        self,
+        plan: FeedsRequestPlan,
+        task: F,
+        wait: impl FnOnce(Duration) -> W + 'static,
+    ) where
+        F: Future<Output = Vec<UiIntent>> + 'static,
+        W: Future<Output = ()> + 'static,
+    {
+        spawn(async move {
+            let intents = task.await;
+            if !plan.accepts(*self.query_generation.peek()) {
+                return;
+            }
+            for intent in intents.into_iter().filter_map(UiIntent::into_feeds_page_intent) {
+                self.dispatch_intent(intent);
+            }
+            if plan == FeedsRequestPlan::SingleRefresh {
+                let feedback = self.state.with(|state| {
+                    RefreshFeedback::capture(
+                        state.status_revision,
+                        &state.status,
+                        &state.status_tone,
+                    )
+                });
+                wait(feedback.delay).await;
+                self.dispatch_intent(feedback.clear);
+            }
+        });
     }
 
     pub(crate) fn is_delete_pending_for(self, feed_id: i64) -> bool {
@@ -155,7 +163,10 @@ impl FeedsPageSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{pages::feeds_page::intent::FeedsPageSnapshot, ui::use_app_shell_state};
+    use crate::{
+        pages::feeds_page::intent::FeedsPageSnapshot,
+        ui::{FeedsCommand, use_app_shell_state},
+    };
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
@@ -319,5 +330,182 @@ mod tests {
         assert_eq!(state.feed_count, 2);
         assert!(state.status.is_empty());
         assert_eq!(state.status_tone, "info");
+    }
+
+    #[test]
+    fn snapshot_identity_is_published_before_synchronous_executor_construction() {
+        use std::{cell::Cell, rc::Rc};
+        let (mut dom, session) = setup();
+        let constructed = Cell::new(false);
+        let polled = Rc::new(Cell::new(false));
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch_intent_with(FeedsPageIntent::LoadRequested, |_| {
+                constructed.set(true);
+                assert_eq!(*session.query_generation.peek(), 1);
+                let polled = Rc::clone(&polled);
+                async move {
+                    polled.set(true);
+                    snapshot(4)
+                }
+            });
+            assert!(constructed.get());
+            assert!(!polled.get());
+        });
+        dom.render_immediate_to_vec();
+        assert!(polled.get());
+        dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot().feed_count, 4));
+    }
+
+    #[test]
+    fn newer_snapshot_does_not_discard_an_older_write_completion() {
+        let (mut dom, session) = setup();
+        let sender = dom.in_scope(ScopeId::APP, || {
+            session.set_feed_url("https://fixture.example/feed".into());
+            let sender = start_add(session, "https://fixture.example/feed");
+            assert_eq!(*session.query_generation.peek(), 0, "writes do not invalidate reads");
+            session.dispatch_intent_with(FeedsPageIntent::LoadRequested, |_| {
+                std::future::ready(snapshot(3))
+            });
+            session.dispatch_intent_with(FeedsPageIntent::LoadRequested, |_| {
+                std::future::ready(snapshot(4))
+            });
+            sender
+        });
+        dom.render_immediate_to_vec();
+        sender.send(true).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().feed_count, 4);
+            assert_eq!(*session.query_generation.peek(), 2);
+            assert!(session.snapshot().adding_feed_url.is_none());
+            assert!(session.snapshot().feed_url.is_empty());
+        });
+    }
+
+    #[test]
+    fn stale_snapshot_discards_its_entire_batch_including_global_status_and_reload() {
+        let state = older_snapshot_after_latest(vec![
+            UiIntent::SetStatus { message: "stale global error".into(), tone: "error".into() },
+            UiIntent::FeedsPage(FeedsPageIntent::BumpReload),
+        ]);
+        assert_eq!(state.feed_count, 2);
+        assert_eq!(state.reload_tick, 0);
+        assert_eq!(state.status_revision, 0);
+        assert!(state.status.is_empty());
+    }
+
+    #[test]
+    fn refresh_all_uses_the_shell_gate_without_the_page_executor() {
+        let (dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch_intent_with(
+                FeedsPageIntent::RefreshAllRequested,
+                |_| -> std::future::Ready<Vec<UiIntent>> {
+                    panic!("manual refresh belongs to the shared shell")
+                },
+            );
+            assert!(session.is_refreshing());
+            assert_eq!(*session.query_generation.peek(), 0);
+        });
+        // Drop before polling the shell's real command; this test only checks routing.
+        drop(dom);
+    }
+
+    #[test]
+    fn feedback_captures_after_all_results_and_cannot_clear_a_newer_status() {
+        for replacement in ["none", "same-message", "same-revision"] {
+            let (mut dom, session) = setup();
+            let (sender, receiver) = oneshot::channel();
+            dom.in_scope(ScopeId::APP, || {
+                session.spawn_result_with(
+                    FeedsRequestPlan::SingleRefresh,
+                    std::future::ready(vec![
+                        UiIntent::FeedsPage(FeedsPageIntent::SetStatus {
+                            message: "first".into(),
+                            tone: "info".into(),
+                        }),
+                        UiIntent::FeedsPage(FeedsPageIntent::BumpReload),
+                        UiIntent::SetStatus { message: "last".into(), tone: "error".into() },
+                    ]),
+                    move |delay| {
+                        assert_eq!(delay, Duration::from_secs(6));
+                        let state = session.snapshot();
+                        assert_eq!(state.status, "last");
+                        assert_eq!(state.status_revision, 2);
+                        assert_eq!(state.reload_tick, 1);
+                        async move { receiver.await.unwrap() }
+                    },
+                );
+            });
+            dom.render_immediate_to_vec();
+            let expected = dom.in_scope(ScopeId::APP, || {
+                match replacement {
+                    "same-message" => session.dispatch_intent(FeedsPageIntent::SetStatus {
+                        message: "last".into(),
+                        tone: "error".into(),
+                    }),
+                    "same-revision" => {
+                        session.dispatch_intent(FeedsPageIntent::RemoveFeedRequested {
+                            feed_id: 1,
+                            feed_title: "feed".into(),
+                        });
+                        assert_eq!(session.snapshot().status_revision, 2);
+                    }
+                    _ => {}
+                }
+                session.snapshot()
+            });
+            sender.send(()).unwrap();
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                let mut wanted = expected;
+                if replacement == "none" {
+                    wanted.status.clear();
+                }
+                assert_eq!(session.snapshot(), wanted);
+            });
+        }
+    }
+
+    #[test]
+    fn ordinary_commands_do_not_start_feedback_timers() {
+        let (mut dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            session.spawn_result_with(
+                FeedsRequestPlan::Other,
+                std::future::ready(vec![UiIntent::SetStatus {
+                    message: "exported".into(),
+                    tone: "info".into(),
+                }]),
+                |_| -> std::future::Ready<()> { panic!("only a single refresh schedules expiry") },
+            );
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot().status, "exported"));
+    }
+
+    #[test]
+    fn disposing_page_cancels_pending_results_and_feedback_waits() {
+        let (mut dom, session) = setup();
+        let (result_sender, result_receiver) = oneshot::channel();
+        let (timer_sender, timer_receiver) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            session.spawn_result_with(
+                FeedsRequestPlan::Other,
+                async { result_receiver.await.unwrap() },
+                |_| std::future::ready(()),
+            );
+            session.spawn_result_with(
+                FeedsRequestPlan::SingleRefresh,
+                std::future::ready(Vec::new()),
+                move |_| async { timer_receiver.await.unwrap() },
+            );
+        });
+        dom.render_immediate_to_vec();
+        assert!(!result_sender.is_closed());
+        assert!(!timer_sender.is_closed());
+        drop(dom);
+        assert!(result_sender.is_closed());
+        assert!(timer_sender.is_closed());
     }
 }

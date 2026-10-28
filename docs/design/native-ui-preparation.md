@@ -17,6 +17,7 @@
 | `pages/entries_page/preferences_policy.rs` | 捕获与当前偏好就绪检查、任务开始前的选择一致性检查 | effect 触发、保存任务执行、错误发布；应用服务负责串行比较与持久化 |
 | `pages/reader_page/result_lifecycle.rs` | 文章 ID 与加载代次共同确定结果归属、整批迟到结果过滤、接纳结果保序移动 | 同步派发 BeginLoading、页面任务作用域、命令执行和 intent 发布；既有 reducer 持有加载代次 |
 | `pages/settings_page/save_policy.rs` | 保存快照的 CSS 校验/零页大小回退、最后结果归并、整份草稿与主题选择回填判定、完成提示 | 同步 pending gate、提交快照捕获、页面任务作用域、命令执行、草稿/主题/提示 signal 发布 |
+| `pages/feeds_page/request_policy.rs` | 快照查询代次分配与结果准入、刷新命令归属、单来源刷新提示时长与清除身份 | 原查询 signal、同步命令构造、页面任务作用域、按序发布结果、实际等待；Shell 持有全局刷新 |
 
 这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → application/host。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
 
@@ -56,6 +57,15 @@
 - 当前整份草稿仍等于提交快照时，才用保存结果替换；不逐字段合并。改动后又改回原值仍视为相等，不引入编辑代次。当前草稿已等于保存结果时不提示未保存。
 - 预设选择与草稿分开判断：只有选择仍等于提交时的选择才回填，检测依据是替换后的有效草稿 CSS。仅选择新预设而未应用，不单独计入未保存编辑；用户的新选择必须保留。
 - 发布顺序继续为草稿、预设、已保存的全局主题、完成提示。页面销毁仍由 Dioxus 取消自己的任务，不承诺回滚已提交持久化。加载设置、WebDAV 同步、主题文件 I/O 与宿主能力不属于本次提取。
+
+## Feeds 查询与刷新提示规则的使用约束
+
+- `request_policy.rs` 只根据当前值产生计划，不持有 signal、任务或第二份页面状态。只有 `LoadSnapshot` 分配下一查询代次，保留 `wrapping_add`；编辑加载和所有写入继续使用原有规则，不受快照代次影响。
+- session 同步发布代次后才构造 executor Future，再在原页面作用域启动任务。返回时先检查身份，过期快照的整批结果（包括无身份字段的全局状态、reload）直接丢弃；接纳时保序投影并移动结果，不克隆列表。
+- `ManualRefresh` 直接交给 Shell 的既有同步去重入口，使用 App 作用域；单来源刷新仍是页面任务。页面销毁取消未完成结果等待与提示计时，不承诺回滚已提交的写入。
+- 只有单来源刷新在整批结果发布后捕获当前提示：精确 tone `error` 等待 6 秒，其余等待 3 秒。等待由适配器执行；纯规则只提供时长和捕获的清除 intent。
+- 清除必须同时匹配 `status_revision` 与消息正文。删除确认等现有转移可能只改消息而不增 revision，不能删去消息比较；匹配时只清空提示文本，不改 tone、revision 或确认状态。页面 reducer 仍是页面状态的唯一写者。
+- 新增/删除后的快照重取、编辑草稿、导入导出及 Shell 刷新 revision 的既有 effect 不变；不新增自动重试、去重门或通用页面控制框架。
 
 ## 目录控制器的使用约束
 
@@ -103,6 +113,7 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - Reader 本批的源码、产物身份及实际平台边界见 [结果归属提取交接](../handoffs/2026-10-28-reader-result-lifecycle.md)；隐藏原生窗口的截图不作为视觉通过证据。
 - Settings 保存：`scripts/browser/rssr_settings_save_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 指定构建包和既有离线 fixture，在 1536/390 视口验证校验失败、零值回退、CSS/主题保存与重载；另以真实 Web Locks 延迟写入、以 Storage 写失败验证后续草稿和显式重试。`--mode write|reopen --cdp <endpoint> --database <isolated-db> --artifact-dir <path> --expect <write/acceptance.json>` 用于独立 Windows 进程的正常保存与重开，只读 SQLite 对照完整设置和 5000 篇文章标记。原生进程由调用方管理，重开前须真正结束旧进程。旧 fixture 的归档阈值 0 在隔离数据中准备为合法的 120；不改用户数据库。详见 [Settings 保存提取交接](../handoffs/2026-10-28-settings-save-policy.md)。
 - Windows Settings 验收从新启动的 Entries 页开始；任何导航、编辑或 fixture 设置准备前，先只读核对数据库的 5000 个连续 ID/固定标题，再对照当前页面已挂载文章的 ID/标题。错误目标直接记为 `status: failed`，不得先修正归档阈值后才检查目标。这个检查不能替代调用方的独立进程、复制数据库和独立 profile 要求；负向复现见 [Settings review 交接](../handoffs/2026-10-28-settings-save-review.md)。
+- Feeds 查询与提示：`scripts/browser/rssr_feeds_lifecycle_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 构建包和离线 fixture，在 1536/390 视口验证成功/错误提示消退、旧计时器保留删除确认、全局刷新 busy、添加/删除后的统计重取以及全体文章标记保持。Windows 模式传 `--cdp <endpoint> --database <isolated-db> --feed-origin http://127.0.0.1:<port>`，调用方须提供独立进程、profile 和 5000 篇复制 fixture，并预先将复制库中的来源 URL 指向该空闲端口；脚本先只读核对数据库、当前 Entries 页及 URL，再启动自己管理的回环 RSS 服务。乱序快照和离页取消由 Dioxus 可控 Future 测试覆盖；源码/产物身份与平台边界见 [Feeds 查询与提示交接](../handoffs/2026-10-28-feeds-request-lifecycle.md)。
 - 目录实际行为：`scripts/browser/rssr_small_viewport_assertions.mjs --directory-only true`，包含日期/来源/文章层级、跨页、手动/跟随、显隐和选择保持。
 - 不启动预览服务的回归：先构建 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。Playwright 在隔离无头 Chrome 内提供构建文件与测试数据；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样可离线回归旧目录通道。
 - `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。

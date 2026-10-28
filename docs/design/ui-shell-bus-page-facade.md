@@ -105,6 +105,8 @@ Reader 的 `result_lifecycle.rs` 以命令所属文章 ID 和原状态的 `load_
 
 Settings 的 `save_policy.rs` 准备提交副本、归并最后保存结果，并以提交快照和当前草稿决定回填及未保存提示。session 保留同步 pending gate、页面任务作用域、命令构造和 signal 发布；按整份草稿值比较，主题选择单独判断，不新增编辑代次或业务状态镜像。
 
+Feeds 的 `request_policy.rs` 区分 Shell 刷新、快照查询、单来源刷新与其他命令，只为快照分配和校验代次；过期查询整批丢弃，写入完成不受后来查询影响。单来源刷新在整批结果发布后捕获提示时长与清除身份，reducer 同时比较 revision 和消息后才清空。session 继续持有原查询 signal、页面任务和计时适配，“刷新全部”的任务与去重仍归 Shell。
+
 不再负责：
 
 - 直接拉 `AppServices::shared()`

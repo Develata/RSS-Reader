@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 
-use super::{intent::FeedsPageIntent, state::FeedsPageState};
+use super::{
+    intent::FeedsPageIntent, request_policy::refresh_status_matches, state::FeedsPageState,
+};
 use crate::ui::{FeedsCommand, ShellCommand, UiCommand};
 
 pub(crate) fn dispatch_feeds_page_intent(
@@ -146,7 +148,7 @@ pub(crate) fn reduce_feeds_page_intent(
         }
 
         FeedsPageIntent::ClearRefreshStatus { revision, message } => {
-            if state.status_revision == revision && state.status == message {
+            if refresh_status_matches(revision, &message, state.status_revision, &state.status) {
                 state.status.clear();
             }
             Vec::new()

@@ -2,6 +2,7 @@ mod edit;
 mod facade;
 pub(crate) mod intent;
 mod reducer;
+mod request_policy;
 mod sections;
 mod session;
 mod state;
