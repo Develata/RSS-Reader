@@ -2,6 +2,8 @@
 
 2026-10-22 按 v0.2 C4c 的当前入口核对。此表描述覆盖能力，不是本次执行结果；实际命令、commit/tree、计数和失败保存在对应 handoff。执行步骤见 [发布清单](./release-ui-regression-checklist.md)。
 
+2026-10-28 补充当前 main 的 Windows / Android 原生专项，范围及实际结果见[原生验收记录](../handoffs/2026-10-28-release-readiness.md)；其余入口仍按各自记录判断，不视为本轮全部重跑。
+
 “自动化”表示已有可重复断言；“截图复核”需要人工查看本次产物；“实机待验”不能用浏览器模拟代替。
 
 | 能力 | 入口 | 状态 / 边界 |
@@ -26,7 +28,8 @@
 | 服务器认证 smoke | 聚合入口 `--with-rssr-web` | 自动化，含真实登录/退出与 `/api/v1/session` |
 | Pages 演示启动、路由、状态保留与网络禁用 | `bash scripts/test_pages.sh`（先构建演示包） | 独立构建与验收 |
 | WebDAV 上传/下载的实际部署 UI、真实远端 feed | 手工页面 + 当前部署 | 需单独留证，不用 fake 或本地 feed 替代 |
-| Android 长按选择、系统返回、图片手势；macOS 交互 | 对应实机与 handoff | 实机待验，浏览器模拟不构成证据 |
+| Android 目录 / 来源弹窗与连续阅读的系统返回 | 2026-10-28 Xiaomi 12 实机专项 | 当前测试包通过；不扩展到所有弹层、设备或正式签名包 |
+| Android 长按选择、图片手势；macOS 交互 | 对应实机与 handoff | 实机待验，浏览器模拟不构成证据 |
 | 发布构建标识、旧页面对新服务器 | C6 | 本轮范围外，尚不作为完成项 |
 
 推荐先跑 `bash scripts/run_release_ui_regression.sh --full`，再单独跑 `bash scripts/run_server_web_regression.sh --suite acceptance --long`，最后复看本次截图并补实际部署/实机项。`--full` 的固定组只有 theme-matrix、regression、feed-smoke；CI 的四个非默认主题还需分别用 `--preset` 跑 regression。

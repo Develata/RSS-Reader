@@ -7,6 +7,7 @@
 | 主题 | 优先阅读 |
 | --- | --- |
 | 文档维护与归档 | [2026-10-28 整理](./2026-10-28-docs-maintenance.md)、[历史索引](./archive/README.md) |
+| 最新验收与发布准备 | [原生、设计与升级检查](./2026-10-28-release-readiness.md)、[v0.2.1 草稿](../releases/v0.2.1-draft.md) |
 | 主线合并与交叉复核 | [PR #33 合并](./2026-10-27-workspace-merge.md)、[工作区复测](./2026-10-27-workspace-recheck.md) |
 | 会话职责与生命周期 | [职责拆分](./2026-10-27-workspace-cohesion.md)、[生命周期修复](./2026-10-27-workspace-review-fixes.md) |
 | 目录交互与视觉 | [右侧箭头与缩进](./2026-10-27-directory-right-disclosure.md)、[窗口边界](./2026-10-27-directory-window-boundaries.md) |
@@ -20,6 +21,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-28 | [原生交互、Penpot 抽查与补丁发布准备](./2026-10-28-release-readiness.md) |
 | 2026-10-28 | [文档维护入口、状态校正与历史交接归档](./2026-10-28-docs-maintenance.md) |
 | 2026-10-27 | [阅读工作区复查：切页期间的偏好基线与文章写入](./2026-10-27-workspace-review-fixes.md) |
 | 2026-10-27 | [工作区复测：恢复读取、离页写入与目录截图修复](./2026-10-27-workspace-recheck.md) |
