@@ -27,52 +27,55 @@ async function eventually(read, expected, label) {
 }
 (async () => {
   const output = path.resolve(options['artifact-dir'] || process.env.ARTIFACT_DIR || 'target/feeds-lifecycle-acceptance');
-  await fs.mkdir(output, { recursive: true });
   const native = !!options.cdp;
-  const database = native ? new (require('node:sqlite').DatabaseSync)(path.resolve(options.database), { readOnly: true }) : null;
-  const browser = native ? await chromium.connectOverCDP(options.cdp) : await chromium.launch({ channel: 'chrome', headless: true });
-  const context = native ? browser.contexts()[0] : await browser.newContext();
-  const origin = native ? options['feed-origin'] : fixture.origin;
+  const report = { native, status: 'running', results: [], pageErrors: [], consoleErrors: [] };
+  let database, browser, page, server;
   let responseMode = 'success', held = false, release, requestCount = 0;
-  let gate = Promise.resolve(), server;
+  let gate = Promise.resolve();
   const respond = async url => {
     requestCount++;
     if (held) await gate;
     if (url.pathname.endsWith('/new-feed.xml')) return { status: 200, body: '<rss version="2.0"><channel><title>Lifecycle New Feed</title><link>http://127.0.0.1/</link><description>Fixture</description></channel></rss>' };
     return responseMode === 'failure' ? { status: 200, body: 'invalid feed fixture' } : { status: 304, body: '' };
   };
-  if (!native) {
-    await fixture.install(context, path.resolve(__dirname, '../..')); await installStorageHelpers(context);
-    await context.route(url => url.origin === origin && (url.pathname.startsWith('/__codex/feed/') || url.pathname === '/new-feed.xml'), async route => {
-      const response = await respond(new URL(route.request().url()));
-      await route.fulfill({ ...response, contentType: 'application/rss+xml; charset=utf-8' });
-    });
-  }
-  const page = native ? context.pages().find(page => /dioxus/.test(page.url())) : await context.newPage();
-  assert.ok(page, 'explicit target page'); page.setDefaultTimeout(15000);
-  const report = { native, status: 'running', results: [], pageErrors: [], consoleErrors: [] };
-  page.on('pageerror', error => report.pageErrors.push(String(error)));
-  page.on('console', message => { if (message.type() === 'error') report.consoleErrors.push(message.text()); });
-  const flags = async () => native
-    ? database.prepare('SELECT id, is_read, is_starred, is_archived FROM entries ORDER BY id').all().map(row => ({ ...row }))
-    : page.evaluate(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-entry-flags-v1'))).entries);
-  const feedRows = async () => native
-    ? database.prepare('SELECT id, url FROM feeds WHERE is_deleted = 0 ORDER BY id').all().map(row => ({ ...row }))
-    : page.evaluate(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-state-v1'))).feeds.filter(feed => !feed.is_deleted).map(({ id, url }) => ({ id, url })).sort((a, b) => a.id - b.id));
-  const feedback = () => page.locator(banner).textContent();
-  const waitFeedback = async (text, tone) => {
-    await page.waitForFunction(({ text, tone }) => {
-      const node = document.querySelector('[data-page="feeds"] > [data-layout="status-banner"]');
-      return node?.textContent.includes(text) && (!tone || node.dataset.state === tone);
-    }, { text, tone });
-    return feedback();
-  };
-  const count = name => page.locator(`[data-stat="${name}"] [data-slot="stat-card-value"]`).textContent();
-  const scenario = async (name, run) => {
-    try { const evidence = await run(); report.results.push({ name, pass: true, evidence }); console.log('PASS ' + name); }
-    catch (error) { report.results.push({ name, pass: false, error: String(error.stack) }); throw error; }
-  };
   try {
+    await fs.mkdir(output, { recursive: true });
+    // Replace any previous receipt before acquiring resources or validating the target.
+    await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
+    database = native ? new (require('node:sqlite').DatabaseSync)(path.resolve(options.database), { readOnly: true }) : null;
+    browser = native ? await chromium.connectOverCDP(options.cdp) : await chromium.launch({ channel: 'chrome', headless: true });
+    const context = native ? browser.contexts()[0] : await browser.newContext();
+    const origin = native ? options['feed-origin'] : fixture.origin;
+    if (!native) {
+      await fixture.install(context, path.resolve(__dirname, '../..')); await installStorageHelpers(context);
+      await context.route(url => url.origin === origin && (url.pathname.startsWith('/__codex/feed/') || url.pathname === '/new-feed.xml'), async route => {
+        const response = await respond(new URL(route.request().url()));
+        await route.fulfill({ ...response, contentType: 'application/rss+xml; charset=utf-8' });
+      });
+    }
+    page = native ? context.pages().find(page => /dioxus/.test(page.url())) : await context.newPage();
+    assert.ok(page, 'explicit target page'); page.setDefaultTimeout(15000);
+    page.on('pageerror', error => report.pageErrors.push(String(error)));
+    page.on('console', message => { if (message.type() === 'error') report.consoleErrors.push(message.text()); });
+    const flags = async () => native
+      ? database.prepare('SELECT id, is_read, is_starred, is_archived FROM entries ORDER BY id').all().map(row => ({ ...row }))
+      : page.evaluate(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-entry-flags-v1'))).entries);
+    const feedRows = async () => native
+      ? database.prepare('SELECT id, url FROM feeds WHERE is_deleted = 0 ORDER BY id').all().map(row => ({ ...row }))
+      : page.evaluate(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-state-v1'))).feeds.filter(feed => !feed.is_deleted).map(({ id, url }) => ({ id, url })).sort((a, b) => a.id - b.id));
+    const feedback = () => page.locator(banner).textContent();
+    const waitFeedback = async (text, tone) => {
+      await page.waitForFunction(({ text, tone }) => {
+        const node = document.querySelector('[data-page="feeds"] > [data-layout="status-banner"]');
+        return node?.textContent.includes(text) && (!tone || node.dataset.state === tone);
+      }, { text, tone });
+      return feedback();
+    };
+    const count = name => page.locator(`[data-stat="${name}"] [data-slot="stat-card-value"]`).textContent();
+    const scenario = async (name, run) => {
+      try { const evidence = await run(); report.results.push({ name, pass: true, evidence }); console.log('PASS ' + name); }
+      catch (error) { report.results.push({ name, pass: false, error: String(error.stack) }); throw error; }
+    };
     if (native) {
       const catalog = database.prepare('SELECT id, title FROM entries ORDER BY id').all();
       assert.equal(catalog.length, 5000);
@@ -145,12 +148,19 @@ async function eventually(read, expected, label) {
     report.status = 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = String(error.stack);
-    if (!native) await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {});
+    if (!native && page) await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {});
     throw error;
   } finally {
     held = false; release?.();
+    // Attempt every cleanup even if another fails; report writes must not prevent release.
+    const cleanup = await Promise.allSettled([
+      (async () => { if (server?.listening) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); })(),
+      (async () => database?.close())(),
+      (async () => browser?.close())(),
+    ]);
+    const errors = cleanup.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (errors.length) { report.status = 'failed'; report.cleanupErrors = errors.map(String); }
     await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
-    if (server) await new Promise(resolve => server.close(resolve));
-    database?.close(); await browser.close();
+    if (errors.length) throw new AggregateError(errors, 'acceptance cleanup failed');
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

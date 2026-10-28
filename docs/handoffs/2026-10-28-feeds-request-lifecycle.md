@@ -8,6 +8,8 @@
 - 相关 tag / release：N/A；未 push、打 tag 或发布。
 - 状态：`validated`
 
+后续复查：`2b551537` 的 Rust 规则未发现行为回归；验收脚本在启动失败时遗漏失败报告与资源回收的问题已在 [Feeds review 交接](./2026-10-28-feeds-lifecycle-review.md) 中复现并修复。后续运行以修正后的脚本为准。
+
 ## 工作摘要
 
 继续原生界面前置拆分，将 `FeedsPageSession` 的命令归属、快照查询身份、单来源刷新提示时长和清除条件移入页面内纯 Rust 模块。保留当前行为、Dioxus 页面任务与 Shell 全局刷新边界，不引入新状态源或原生渲染器。
