@@ -2,6 +2,7 @@ mod facade;
 mod image_viewer;
 pub(crate) mod intent;
 mod reducer;
+mod result_lifecycle;
 mod session;
 pub(crate) mod state;
 pub(crate) mod support;

@@ -101,6 +101,8 @@
 
 Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；`write_lifecycle.rs` 决定单条/批量写入准入、结果归属和后续动作顺序，`preferences_policy.rs` 检查偏好保存资格与当前选择。session 保留 Dioxus 任务作用域、命令执行及状态发布，状态转移仍由既有 reducer 负责，应用服务保留持久化串行语义。具体边界见[原生界面前置模块](./native-ui-preparation.md)。
 
+Reader 的 `result_lifecycle.rs` 以命令所属文章 ID 和原状态的 `load_generation` 判断整批结果归属，加载、标记和图片本地化共用该规则。session 先同步发布加载开始状态，再捕获归属，保留原任务作用域和发布顺序；reducer 继续分配代次并执行状态转移，拒绝迟到 UI 结果不等于回滚已提交写入。
+
 不再负责：
 
 - 直接拉 `AppServices::shared()`

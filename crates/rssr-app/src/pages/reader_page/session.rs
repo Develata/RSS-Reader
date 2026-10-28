@@ -5,7 +5,10 @@ use dioxus::prelude::*;
 use crate::bootstrap::ReaderNavigation;
 use crate::ui::{ReaderCommand, UiCommand, UiIntent, execute_ui_command};
 
-use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
+use super::{
+    reducer::dispatch_reader_page_intent, result_lifecycle::ReaderResultScope,
+    state::ReaderPageState,
+};
 
 #[derive(Clone, Copy)]
 pub(crate) struct ReaderPageSession {
@@ -73,15 +76,11 @@ impl ReaderPageSession {
     }
 
     fn spawn_result(self, result: impl Future<Output = Vec<UiIntent>> + 'static) {
-        let generation = self.state.peek().load_generation;
+        let scope = self.state.with_peek(|state| ReaderResultScope::capture(self.entry_id, state));
         spawn(async move {
-            let intents = result.await;
-            let current = self.state.peek();
-            if current.current_entry_id != self.entry_id || current.load_generation != generation {
-                return;
-            }
-            drop(current);
-            for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent) {
+            let intents = result.await.into_iter().filter_map(UiIntent::into_reader_page_intent);
+            let accepted = self.state.with_peek(|state| scope.complete(state, intents));
+            for intent in accepted {
                 dispatch_reader_page_intent(self.state, intent);
             }
         });
@@ -217,5 +216,76 @@ mod tests {
             assert_eq!(state.title, "Current");
             assert_eq!(state.body_text.as_ref(), "Current body");
         });
+    }
+
+    #[test]
+    fn loading_identity_and_generation_are_published_before_the_task_runs() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (sender, receiver) = oneshot::channel();
+        let polled = std::rc::Rc::new(std::cell::Cell::new(false));
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = ReaderPageSession::new(2, Signal::new(ReaderPageState::new()));
+            let started = std::rc::Rc::clone(&polled);
+            session.spawn_load(async move {
+                started.set(true);
+                receiver.await.unwrap()
+            });
+            let state = session.snapshot();
+            assert_eq!(state.current_entry_id, 2);
+            assert_eq!(state.load_generation, 1);
+            assert_eq!(state.load_state(2), "pending");
+            assert!(!polled.get());
+            session
+        });
+        dom.render_immediate_to_vec();
+        assert!(polled.get());
+        sender.send(loaded(2, "Current")).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.snapshot().load_state(2), "loaded");
+            assert_eq!(session.snapshot().title, "Current");
+        });
+    }
+
+    #[test]
+    fn same_entry_reload_discards_a_delayed_load_failure() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (sender, receiver) = oneshot::channel();
+        let session = dom.in_scope(ScopeId::APP, || {
+            let session = ReaderPageSession::new(1, Signal::new(ReaderPageState::new()));
+            session.spawn_load(async { receiver.await.unwrap() });
+            session
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || session.spawn_load(async { loaded(1, "Retry") }));
+        dom.render_immediate_to_vec();
+        let before = dom.in_scope(ScopeId::APP, || session.snapshot());
+        sender
+            .send(vec![UiIntent::ReaderPage(ReaderPageIntent::SetError {
+                entry_id: 1,
+                error: Some("original request failed".into()),
+            })])
+            .unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || assert_eq!(session.snapshot(), before));
+    }
+
+    #[test]
+    fn page_disposal_cancels_pending_load_and_command_tasks() {
+        let mut dom = VirtualDom::new(|| rsx! {});
+        dom.rebuild_in_place();
+        let (load_sender, load_receiver) = oneshot::channel();
+        let (command_sender, command_receiver) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            let session = ReaderPageSession::new(1, Signal::new(ReaderPageState::new()));
+            session.spawn_load(async { load_receiver.await.unwrap() });
+            session.spawn_result(async { command_receiver.await.unwrap() });
+        });
+        dom.render_immediate_to_vec();
+        drop(dom);
+        assert!(load_sender.send(loaded(1, "Retired")).is_err());
+        assert!(command_sender.send(Vec::new()).is_err());
     }
 }

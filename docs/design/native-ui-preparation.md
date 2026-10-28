@@ -15,6 +15,7 @@
 | `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |
 | `pages/entries_page/write_lifecycle.rs` | 单条/批量写入准入、选择快照、批量结果身份、发布/解锁/来源刷新顺序 | 同步派发开始状态、页面任务执行、intent 发布、来源刷新 |
 | `pages/entries_page/preferences_policy.rs` | 捕获与当前偏好就绪检查、任务开始前的选择一致性检查 | effect 触发、保存任务执行、错误发布；应用服务负责串行比较与持久化 |
+| `pages/reader_page/result_lifecycle.rs` | 文章 ID 与加载代次共同确定结果归属、整批迟到结果过滤、接纳结果保序移动 | 同步派发 BeginLoading、页面任务作用域、命令执行和 intent 发布；既有 reducer 持有加载代次 |
 
 这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → application/host。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
 
@@ -37,6 +38,14 @@
 - `preferences_policy.rs` 只检查资格：调度时要求捕获的偏好已就绪且当前仍 Loaded；任务开始时再核对当前就绪状态和分组、归档、已读、收藏、来源 URL 列表。过期任务不调用保存；URL 比较保留现有顺序，不另行规范化或复制列表。
 - 偏好比较与写入继续由共享 `EntriesWorkspaceService` 串行完成；页面不增加保存队列、缓存或去重状态。保存失败继续发布原错误，后续选择仍能保存；初始化失败的回退默认值不能覆盖存储。
 - 页面销毁继续取消其未完成 UI 任务；不把此行为描述成回滚已提交的存储。`WriteEffect` 仅表达本页面的状态发布与来源刷新，不是通用命令框架，也不进入 domain/application。
+
+## Reader 异步结果归属的使用约束
+
+- `ReaderResultScope` 每次仅捕获命令所属文章 ID 和现有 `load_generation`。唯一页面状态仍为 `ReaderPageState`，代次仍由原 `BeginLoading` reducer 增加，不新增 signal、计数器或正文副本。
+- 加载先同步发布 `BeginLoading`，再捕获结果归属并启动原页面作用域任务；已读、收藏和图片本地化命令捕获当前访问的同一代次，不互相作废。同篇重载、A→B 和 A→B→A 都使原访问的结果失效。
+- 完成时同时比较文章 ID 和代次，对整个结果批次作一次准入判断，包括自身不带 ID 的状态提示。拒绝时不遍历载荷；接纳时保持原顺序并移动正文数据，不另行收集或克隆结果。状态借用在 session 发布前结束。
+- 这是结果发布规则，不是命令取消或持久化回滚机制。旧访问发起的写入可以已在存储中成功，但其迟到提示不能进入新访问；页面销毁仍由 Dioxus 取消未完成 UI 任务。
+- reducer 中按文章 ID 检查正文、错误和标记的防线保持原样。同篇重载的提示保留、切文清空提示、正文节点复用、导航和快捷键作用域均不改变。图片本地化继续仅写缓存，完成后不替换正在阅读的 HTML。
 
 ## 目录控制器的使用约束
 
@@ -80,6 +89,8 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - 纯状态与策略：`cargo test -p rssr-app --locked`。
 - 初始化/查询/写入适配：`scripts/browser/rssr_entries_lifecycle_acceptance.cjs`，通过离线 fixture 覆盖选择、筛选、单条并发、批量失败重试、写入期间切换筛选、偏好失败重试/重开、查询稳定性，以及桌面/小视口搜索、刷新和阅读返回。基线和候选分别指定 `ARTIFACT_DIR`，构建目录可由 `PUBLIC_DIR` 指定。偏好重开前需确认最终值已提交，不能仅等待锁暂时空闲。
 - Windows 写入与重开：`scripts/browser/rssr_entries_writes_native.cjs --mode write|reopen --cdp <endpoint> --database <isolated-db> --artifact-dir <path>`。仅用于独立进程、独立 WebView profile 与 5000 篇阅读 fixture；只读 SQLite 核对真实提交，运行者负责安全启动/关闭自己的进程，write 后结束进程再启动执行 reopen。
+- Reader 结果归属：`scripts/browser/rssr_reader_lifecycle_acceptance.cjs` 使用既有离线 fixture 与 `PUBLIC_DIR` / `ARTIFACT_DIR`，覆盖桌面/窄屏正文、按钮与 M/F、文章身份、往返、迟到成功/失败和不存在文章后的恢复；每次标记操作比对全体文章标记。传 `--cdp <endpoint> --database <isolated-db> --artifact-dir <path>` 可复测独立 Windows WebView2 的正常阅读流程，只读 SQLite 核对 5000 篇 fixture；迟到回复注入仅在 Web 模式运行。原生进程和测试库由调用方管理。
+- Reader 本批的源码、产物身份及实际平台边界见 [结果归属提取交接](../handoffs/2026-10-28-reader-result-lifecycle.md)；隐藏原生窗口的截图不作为视觉通过证据。
 - 目录实际行为：`scripts/browser/rssr_small_viewport_assertions.mjs --directory-only true`，包含日期/来源/文章层级、跨页、手动/跟随、显隐和选择保持。
 - 不启动预览服务的回归：先构建 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。Playwright 在隔离无头 Chrome 内提供构建文件与测试数据；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样可离线回归旧目录通道。
 - `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。
