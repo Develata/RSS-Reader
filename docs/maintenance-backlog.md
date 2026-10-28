@@ -24,7 +24,7 @@
 | --- | --- |
 | 大量 `feed_ids` 超过 SQLite 参数上限；[10-01 修补](./handoffs/archive/2026-10/2026-10-01-post-audit-repair.md) | [entries.rs](../crates/rssr-infra/src/store/entries.rs) 用一个 JSON 参数及 `json_each`；[契约测试](../crates/rssr-infra/tests/test_library_contracts.rs)覆盖 40000 个来源 id。旧的逐项 bind 风险已移除。 |
 | 刷新乱序、删除后同 URL 重加的 ABA、清理失败遗留正文；同上 | [refresh.rs](../crates/rssr-infra/src/store/refresh.rs) 使用持久票据与 generation；[票据测试](../crates/rssr-infra/tests/test_library_refresh_tickets.rs)、[原子性测试](../crates/rssr-infra/tests/test_library_persistence_atomicity.rs)覆盖多连接、重新激活和陈旧提交。单库删除事务消除了旧双库的孤儿清理窗口。 |
-| `FeedRepository` 批量写入有非原子的默认后备；同上 | [repository.rs](../crates/rssr-domain/src/repository.rs) 将批量端口作为必需实现；[配置交换契约](../crates/rssr-infra/tests/test_library_config_exchange_contract_harness.rs)验证原子替换。 |
+| `FeedRepository` 批量写入有非原子的默认后备；同上 | [repository.rs](../crates/rssr-domain/src/repository.rs) 将批量端口作为必需实现；[配置交换契约](../crates/rssr-infra/tests/test_library_config_exchange_contract_harness.rs)验证批量写入失败整体回滚。 |
 | BrowserStore 正文配额、全片写放大、Web Locks、浏览器 WebDAV 副本；[10-09 审计](./engineering-audit-2026-10.md) | 正式 Web 经服务器 `HttpBackend`；Pages 为共享 SQL 的内存 SQLite、每次加载重建。旧 BrowserStore 已删除，不为旧架构继续设计 IndexedDB 迁移；浏览器设备偏好与设置草稿仍有各自职责。见[架构](./design/v0.2-architecture.md)。 |
 | `/feed-proxy` 的真实 304 路径；[10-07 整合](./handoffs/archive/2026-10/2026-10-07-feed-proxy-main-integration.md) | 旧代理入口已退役；现行服务端抓取与 API 契约见[阶段 C 实施计划](./design/v0.2-phase-c-plan.md)。不把旧代理的未验收项转成修复已不存在端点的任务。 |
 | SQL 校验和依赖 CRLF/LF；[10-09 修复](./handoffs/archive/2026-10/2026-10-09-audit-fixes.md) | [migrate.rs](../crates/rssr-infra/src/store/migrate.rs) 对当前迁移规范化换行；[import.rs](../crates/rssr-infra/src/store/import.rs)核对已发布旧前缀的换行形式。设备和真实旧库覆盖仍列 M04，不混为一个“全部升级通过”。 |
