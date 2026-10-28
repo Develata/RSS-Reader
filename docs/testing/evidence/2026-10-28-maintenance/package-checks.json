@@ -1,0 +1,103 @@
+{
+  "runId": 40677169921,
+  "source": "da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+  "servicePackages": {
+    "web-package-check-linux-x86_64": {
+      "status": "pass",
+      "build_id": "git-da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    "web-package-check-macos-aarch64": {
+      "status": "pass",
+      "build_id": "git-da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    "web-package-check-macos-x86_64": {
+      "status": "pass",
+      "build_id": "git-da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    "web-package-check-windows-x86_64": {
+      "status": "pass",
+      "build_id": "git-da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+      "checks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    }
+  },
+  "container": {
+    "status": "pass",
+    "build_id": "git-da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+    "image": "rss-reader-smoke:da8521e23b16079294dd43f4cfe9a1f7d5024cdc",
+    "checks": [
+      "new data volume, login and matching build write",
+      "old build rejected without mutation",
+      "image server is the exact packaged binary",
+      "owner CLI shares the running server library",
+      "CLI rejects root and unrelated uid for owner data",
+      "owner CLI backup while server runs",
+      "graceful restart retains session and data",
+      "read-only legacy credential volume migrates unchanged; old session rejected",
+      "migrated credentials survive removal of the legacy mount"
+    ]
+  },
+  "checkArtifacts": [
+    {
+      "id": 12812000424,
+      "name": "web-package-check-macos-x86_64",
+      "size_in_bytes": 1064,
+      "digest": "sha256:c1f2779eb05a244d2a56fb2c622cc067885ca988ee656639e4975f228334399e"
+    },
+    {
+      "id": 12811856037,
+      "name": "c6-container-check",
+      "size_in_bytes": 3542,
+      "digest": "sha256:31d44ee1a5bfdcff1550a1d2b3779c9baf737afab300461bb5e00a58b790d16c"
+    },
+    {
+      "id": 12811785326,
+      "name": "web-package-check-macos-aarch64",
+      "size_in_bytes": 1058,
+      "digest": "sha256:822dbf4bf081165aee51be5dd188605c4e59a329818be6868ea69392797eb00a"
+    },
+    {
+      "id": 12811631072,
+      "name": "web-package-check-windows-x86_64",
+      "size_in_bytes": 1019,
+      "digest": "sha256:5c783fe6b70dc2e2992b63b5881f8680baa93e1190dc443b0d58f158e23c92bf"
+    },
+    {
+      "id": 12811441339,
+      "name": "web-package-check-linux-x86_64",
+      "size_in_bytes": 1019,
+      "digest": "sha256:afa4d20d2829367f4d0ede598fd16dc0f44f5fc232b236ad072b8d7fb24ed029"
+    }
+  ],
+  "boundary": "Results downloaded from the completed workflow. Artifact digests are GitHub metadata; gh extracted the files, so local ZIP byte hashes were not separately verified. Service/package acceptance does not cover native GUI or formally signed Android packages."
+}
