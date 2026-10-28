@@ -37,6 +37,26 @@ async function holdWrites(page, interaction) {
   try { await interaction(); }
   finally { await page.evaluate(() => window.__settingsReleaseWrite()); }
 }
+async function checkNativeFixture(page, database) {
+  // Check both the supplied DB and the attached UI before seed() can change settings.
+  const catalog = database.prepare('SELECT id, title FROM entries ORDER BY id').all();
+  assert.equal(catalog.length, 5000, 'native fixture must contain exactly 5000 articles before editing');
+  for (const [index, entry] of catalog.entries()) {
+    assert.equal(entry.id, index + 1, 'native fixture article identity');
+    assert.equal(entry.title, `阅读基线文章 ${String(entry.id).padStart(5, '0')} — Reading baseline`, 'native fixture title identity');
+  }
+  await page.locator('[data-page="entries"][data-position-ready="true"]').waitFor();
+  const visible = await page.locator('[data-layout="entry-card"][data-position-entry]').evaluateAll(cards => cards.map(card => ({
+    id: Number(card.dataset.positionEntry),
+    title: card.querySelector('[data-slot="entry-card-title"]')?.textContent.trim(),
+  })));
+  assert.ok(visible.length > 0, 'native fixture must start on the populated Entries page');
+  for (const entry of visible) {
+    assert.ok(Number.isInteger(entry.id) && entry.id >= 1 && entry.id <= catalog.length, 'attached UI fixture article identity');
+    assert.equal(entry.title, catalog[entry.id - 1].title, 'attached UI must match the supplied native fixture before editing');
+  }
+  return { articleCount: catalog.length, visibleRowsChecked: visible.length };
+}
 
 (async () => {
   const output = path.resolve(options['artifact-dir'] || process.env.ARTIFACT_DIR || 'target/settings-save-acceptance');
@@ -49,7 +69,7 @@ async function holdWrites(page, interaction) {
   const page = native ? context.pages().find(page => /dioxus/.test(page.url())) : await context.newPage();
   assert.ok(page, 'explicit native target exists');
   page.setDefaultTimeout(15000);
-  const report = { native, results: [], pageErrors: [], consoleErrors: [] };
+  const report = { native, status: 'running', results: [], pageErrors: [], consoleErrors: [] };
   page.on('pageerror', error => report.pageErrors.push(String(error)));
   page.on('console', message => { if (message.type() === 'error') report.consoleErrors.push(message.text()); });
   const settings = () => native
@@ -102,6 +122,7 @@ async function holdWrites(page, interaction) {
     }
   };
   try {
+    if (native) report.fixture = await checkNativeFixture(page, database);
     if (options.mode === 'reopen') {
       assert.ok(native && options.expect, 'reopen needs native fixture and prior receipt');
       const receipt = JSON.parse(await fs.readFile(options.expect, 'utf8'));
@@ -215,6 +236,10 @@ async function holdWrites(page, interaction) {
     report.finalSettings = await settings(); report.finalFlags = await flags();
     assert.deepEqual(report.pageErrors, [], 'no uncaught page errors');
     assert.deepEqual(report.consoleErrors, [], 'no console errors');
+    report.status = 'passed';
+  } catch (error) {
+    report.status = 'failed'; report.error = String(error.stack);
+    throw error;
   } finally {
     await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
     database?.close(); await browser.close();

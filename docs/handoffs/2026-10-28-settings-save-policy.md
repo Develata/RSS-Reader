@@ -8,6 +8,8 @@
 - 相关 tag / release：N/A；未 push、打 tag 或发布。
 - 状态：`validated`
 
+后续复查：`dda9aefa` 的 Rust 保存规则未发现行为回归；Windows 验收的目标校验时机已在 [Settings review 交接](./2026-10-28-settings-save-review.md) 中修正并补负向测试，后续运行以修正后的验收脚本为准。
+
 ## 工作摘要
 
 继续 Entries 请求/写入与 Reader 结果归属之后的原生界面前置拆分，把 Settings 保存副本准备、完成结果归并、草稿与预设回填判定移入页面内普通 Rust 模块。保留既有行为、命令链、页面任务归属和应用服务的持久化语义；仍使用当前 Dioxus / WebView 界面。
