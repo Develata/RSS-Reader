@@ -1,0 +1,278 @@
+[
+  {
+    "id": 12814730398,
+    "name": "web-package-check-macos-x86_64",
+    "zipSha256": "3ba8db3de1dd29b3bb9abe98bc0351f4fa4774776a77e006929c822cabd53deb",
+    "githubDigest": "sha256:3ba8db3de1dd29b3bb9abe98bc0351f4fa4774776a77e006929c822cabd53deb",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "result.json",
+        "size": 261,
+        "sha256": "9a13a579ca0cde9d3a7937e9d707b6c044eb32dcf32e1233a5eaa5fba3b2f869"
+      },
+      {
+        "name": "server.log",
+        "size": 1323,
+        "sha256": "375395eb5abc32b311d3275a7abf05b3f6abc0f9b61a83233bf7cbcacabe1baa"
+      }
+    ]
+  },
+  {
+    "id": 12814707441,
+    "name": "release-macos-aarch64",
+    "zipSha256": "3f5f61d7dced210fa1d55281eac3c52e7b7f328af83c3604ea488ddd8fa99888",
+    "githubDigest": "sha256:3f5f61d7dced210fa1d55281eac3c52e7b7f328af83c3604ea488ddd8fa99888",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "RSS-Reader-macos-aarch64.tar.gz",
+        "size": 8295055,
+        "sha256": "857822a9a9d07544f96d6d969ce99f61675757af9c17e6668ff4dbdbcec99e30"
+      },
+      {
+        "name": "rssr-cli-macos-aarch64.tar.gz",
+        "size": 5431338,
+        "sha256": "3b0e9e9b5ca8505fff6a05da2baa045c4d3226f98d74538e29684091bcd2a571"
+      }
+    ]
+  },
+  {
+    "id": 12814505803,
+    "name": "web-package-check-macos-aarch64",
+    "zipSha256": "dd6a739695355a82e3cba203aa2be45dd7da04a767aec95469e117df17a28673",
+    "githubDigest": "sha256:dd6a739695355a82e3cba203aa2be45dd7da04a767aec95469e117df17a28673",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "result.json",
+        "size": 261,
+        "sha256": "9a13a579ca0cde9d3a7937e9d707b6c044eb32dcf32e1233a5eaa5fba3b2f869"
+      },
+      {
+        "name": "server.log",
+        "size": 1323,
+        "sha256": "0b864ffe4eb1456e2e701be9a42b10a13206f94df12c20710ccaab515b29f96e"
+      }
+    ]
+  },
+  {
+    "id": 12814396439,
+    "name": "web-package-linux-x86_64",
+    "zipSha256": "f2c0d0e80b46568dd48d3814f50e328ad3c19d436c2878bcb775c47842489946",
+    "githubDigest": "sha256:f2c0d0e80b46568dd48d3814f50e328ad3c19d436c2878bcb775c47842489946",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "image/cli.sha256",
+        "size": 75,
+        "sha256": "59d01cbb0d03b8717de0713c970314146e6614b115e3c1010c18225e59a55277"
+      },
+      {
+        "name": "image/rssr-cli",
+        "size": 16836784,
+        "sha256": "63610317351897b403f19bcc0aaf3a19945054aeb168f8a015917291892a8ecc"
+      },
+      {
+        "name": "rssr-web-linux-x86_64.tar.gz",
+        "size": 8272134,
+        "sha256": "2ac09fc559c8e65c125dae951cd2261acc9dd242bee376ac3f1bde2bdd30b34d"
+      }
+    ]
+  },
+  {
+    "id": 12814381296,
+    "name": "web-package-check-linux-x86_64",
+    "zipSha256": "7010e6e0226ed2f9aaacb17c8a6425af2a8c00489eb75a1dd6f384a69c067ec0",
+    "githubDigest": "sha256:7010e6e0226ed2f9aaacb17c8a6425af2a8c00489eb75a1dd6f384a69c067ec0",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "result.json",
+        "size": 261,
+        "sha256": "9a13a579ca0cde9d3a7937e9d707b6c044eb32dcf32e1233a5eaa5fba3b2f869"
+      },
+      {
+        "name": "server.log",
+        "size": 1271,
+        "sha256": "8278ce8bde0ff8391167f85e7bc176e38668f8b39929d0d34c379a09c843279d"
+      }
+    ]
+  },
+  {
+    "id": 12814157202,
+    "name": "web-package-check-windows-x86_64",
+    "zipSha256": "ebe77b20437a0846156a28bc02029a47e55a34d99302b922cc3b7dea1caf4d63",
+    "githubDigest": "sha256:ebe77b20437a0846156a28bc02029a47e55a34d99302b922cc3b7dea1caf4d63",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "result.json",
+        "size": 273,
+        "sha256": "5b947ce7d17758ae2385e75071b57d2cb26b97c399fe03e32040333477fed32d"
+      },
+      {
+        "name": "server.log",
+        "size": 1114,
+        "sha256": "3c6a309c8e7f6c5a2b3b3e177c40838cdb51d964d10d692ed8e721506fd7e291"
+      }
+    ]
+  },
+  {
+    "id": 12814063307,
+    "name": "release-windows",
+    "zipSha256": "0b8d96eed1d148650ab8692cbc9d24c9b3f562edd90c4a5f6e36ddf7a09105f3",
+    "githubDigest": "sha256:0b8d96eed1d148650ab8692cbc9d24c9b3f562edd90c4a5f6e36ddf7a09105f3",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "RSS-Reader-windows-x86_64.zip",
+        "size": 8194740,
+        "sha256": "7664fe1386dc73f440dfacd2c8c61d70ef7535f1e031059bfcc277cb75e8ec4c"
+      },
+      {
+        "name": "rssr-cli-windows-x86_64.zip",
+        "size": 5384754,
+        "sha256": "23528f918fbbfc17c238ce83ff31ca77e8207aef9f6e1d10a4326374a6b1f473"
+      }
+    ]
+  },
+  {
+    "id": 12813883108,
+    "name": "c6-container-check",
+    "zipSha256": "6d18d0003f03374a73afd6a9a595230627bf284fd0b6cb250539445fc125789d",
+    "githubDigest": "sha256:6d18d0003f03374a73afd6a9a595230627bf284fd0b6cb250539445fc125789d",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "non-owner-0.log",
+        "size": 281,
+        "sha256": "2f03c76856254880c3ce19cfd91023e3a76ddb7c3c562280dcbd42a974b393d9"
+      },
+      {
+        "name": "non-owner-65534.log",
+        "size": 273,
+        "sha256": "0bf4058fbaa967e2285e084ea0fa7ac1e264d14137b5c818aa5f09f2af674c04"
+      },
+      {
+        "name": "result.json",
+        "size": 668,
+        "sha256": "5a332ce6a1ede2c4ae6c07b94cb5daad44888e9ae3f94ba3c11bbdd095a0a43e"
+      },
+      {
+        "name": "rssr-c6-d6ead9a26003-detached.log",
+        "size": 1082,
+        "sha256": "2c36cae21e05f6490f683785389c72b9f128310c1bb07eb1c235bfa48c261b7c"
+      },
+      {
+        "name": "rssr-c6-d6ead9a26003-fresh.log",
+        "size": 2140,
+        "sha256": "2ce71c808b6c185fe8bfde7c351e10762a2312aef8dcb0fc779ba99561c396d1"
+      },
+      {
+        "name": "rssr-c6-d6ead9a26003-upgrade.log",
+        "size": 1441,
+        "sha256": "b725048c1ad531d1bf7184c64695dd65ba9f378fdbe0d429a96014e3b7455a7f"
+      }
+    ]
+  },
+  {
+    "id": 12813743137,
+    "name": "web-package-windows-x86_64",
+    "zipSha256": "f863c3c6d73a78054431ea206da6f9a01f5531ce19bf563da3fd8b65fa4827a0",
+    "githubDigest": "sha256:f863c3c6d73a78054431ea206da6f9a01f5531ce19bf563da3fd8b65fa4827a0",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "rssr-web-windows-x86_64.zip",
+        "size": 7381842,
+        "sha256": "b6bedda95bb185bf6c49b3dd12861fb665c2e82ca7bd76b8f8f29a035118506d"
+      }
+    ]
+  },
+  {
+    "id": 12813554025,
+    "name": "release-macos-x86_64",
+    "zipSha256": "90753945b7b1aa4022e5868755542dd0164a0d9a67089adac3f1ad5c04a03e7c",
+    "githubDigest": "sha256:90753945b7b1aa4022e5868755542dd0164a0d9a67089adac3f1ad5c04a03e7c",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "RSS-Reader-macos-x86_64.tar.gz",
+        "size": 8581030,
+        "sha256": "20f0053287e0d28b15c68131acdb7b54a143811e0357814f823475bb91a5a09e"
+      },
+      {
+        "name": "rssr-cli-macos-x86_64.tar.gz",
+        "size": 5662639,
+        "sha256": "526c714e78834a6f20e366c95b0eb164e167932775af507cedbe7d851c68db4d"
+      }
+    ]
+  },
+  {
+    "id": 12813483297,
+    "name": "release-linux",
+    "zipSha256": "ebf22047d6058f0fe78ec2bf6a6d59a96c37de4309c173c6c82e42eb6162b665",
+    "githubDigest": "sha256:ebf22047d6058f0fe78ec2bf6a6d59a96c37de4309c173c6c82e42eb6162b665",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "RSS-Reader-linux-x86_64.deb",
+        "size": 8466990,
+        "sha256": "ae9ad1407d208c1b32f80554f834d888be3409d871975c1b65ebcb4f30abeb42"
+      },
+      {
+        "name": "rssr-cli-linux-x86_64.tar.gz",
+        "size": 6157128,
+        "sha256": "228dc655cb65e2f4977d96042669a7eb511560f22401b061350ef0e5ed0d6705"
+      }
+    ]
+  },
+  {
+    "id": 12813363451,
+    "name": "web-package-macos-x86_64",
+    "zipSha256": "9e192bf4245f613b7700bf0c8d0ffc6366f753b642547398984c23be49a1f3e9",
+    "githubDigest": "sha256:9e192bf4245f613b7700bf0c8d0ffc6366f753b642547398984c23be49a1f3e9",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "rssr-web-macos-x86_64.tar.gz",
+        "size": 7897093,
+        "sha256": "9ad1e09813b5248c4d0f6e06d93c24c497fa9bb2d20fa1dfbf881cdfe3c5f887"
+      }
+    ]
+  },
+  {
+    "id": 12813313335,
+    "name": "web-package-macos-aarch64",
+    "zipSha256": "ea84c87752d7f6bebeb4dea3850267ede8e1d5d3ca4ca4a665b390fa03cbd284",
+    "githubDigest": "sha256:ea84c87752d7f6bebeb4dea3850267ede8e1d5d3ca4ca4a665b390fa03cbd284",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "rssr-web-macos-aarch64.tar.gz",
+        "size": 7650185,
+        "sha256": "ee4dce49520860d6f67b064becb8cc7a07feee333c50faa6a7b748cfd7c71768"
+      }
+    ]
+  },
+  {
+    "id": 12813084629,
+    "name": "release-android",
+    "zipSha256": "7822e0bb2d352f835a91624356d6b4805f3cbce9c3ee4168eaf06195282e9131",
+    "githubDigest": "sha256:7822e0bb2d352f835a91624356d6b4805f3cbce9c3ee4168eaf06195282e9131",
+    "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "files": [
+      {
+        "name": "RSS-Reader-android-arm64-v8a-release.aab",
+        "size": 17231941,
+        "sha256": "86280a9e76641750fdc22a0b171865be557f1565a321cfa6920e0dde0c40b098"
+      },
+      {
+        "name": "RSS-Reader-android-arm64-v8a-release.apk",
+        "size": 16859929,
+        "sha256": "6dd2855780b25f9e3425a831c4dba3d78cc0c61977643ca5a010a06f0f1d5bc5"
+      }
+    ]
+  }
+]

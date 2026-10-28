@@ -4,6 +4,8 @@
 
 2026-10-28 补充当前 main 的 Windows / Android 原生专项，范围及实际结果见[原生验收记录](../handoffs/2026-10-28-release-readiness.md)；其余入口仍按各自记录判断，不视为本轮全部重跑。
 
+同日 v0.2.1 正式发布补充了附件身份、Windows 单库升级、Android 模拟器正式包覆盖安装，以及 Web 构建匹配拒绝写入检查，见[正式发布记录](../handoffs/2026-10-28-v0.2.1-release.md)。这些结果不替代未重跑的完整 UI 交互。
+
 “自动化”表示已有可重复断言；“截图复核”需要人工查看本次产物；“实机待验”不能用浏览器模拟代替。
 
 | 能力 | 入口 | 状态 / 边界 |
@@ -30,7 +32,7 @@
 | WebDAV 上传/下载的实际部署 UI、真实远端 feed | 手工页面 + 当前部署 | 需单独留证，不用 fake 或本地 feed 替代 |
 | Android 目录 / 来源弹窗与连续阅读的系统返回 | 2026-10-28 Xiaomi 12 实机专项 | 当前测试包通过；不扩展到所有弹层、设备或正式签名包 |
 | Android 长按选择、图片手势；macOS 交互 | 对应实机与 handoff | 实机待验，浏览器模拟不构成证据 |
-| 发布构建标识、旧页面对新服务器 | C6 | 本轮范围外，尚不作为完成项 |
+| 发布构建标识、旧页面对新服务器 | 四平台正式服务包与容器检查 | v0.2.1 自动化通过：匹配构建写入成功，旧构建被拒绝且不改数据；见[正式包证据](./evidence/2026-10-28-v0.2.1-release/packages.json)。不等于所有实际代理部署完成浏览器交互验收 |
 
 推荐先跑 `bash scripts/run_release_ui_regression.sh --full`，再单独跑 `bash scripts/run_server_web_regression.sh --suite acceptance --long`，最后复看本次截图并补实际部署/实机项。`--full` 的固定组只有 theme-matrix、regression、feed-smoke；CI 的四个非默认主题还需分别用 `--preset` 跑 regression。
 

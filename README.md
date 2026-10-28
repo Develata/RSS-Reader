@@ -15,7 +15,11 @@ _Web 版实际界面；订阅与文章使用演示数据。_
 
 RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。桌面与 Android 的资料库留在设备上；自托管 Web 的资料库保存在服务器上，各浏览器登录后访问同一份数据。独立资料库之间可以通过 JSON、OPML 或可选的 WebDAV 交换配置。
 
-当前发布版本为 [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。Web 提供四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。从 v0.1.x 升级前，请先阅读下方的数据迁移说明，尤其是 macOS 的旧数据目录。
+当前发布版本为 [v0.2.1](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1)。Web 提供四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。从 v0.1.x 升级前，请先阅读下方的数据迁移说明，尤其是 macOS 的旧数据目录。
+
+从 v0.2.0 升级前请关闭程序并备份资料库。本版增加手动归档字段，升级后的库不能直接由 v0.2.0 打开；回退时必须恢复升级前备份，不能只换回旧程序。
+
+Android 暂无应用内完整资料库备份和回退流程；配置导出不包含文章、已读和收藏状态，卸载会清除本地数据，不要用卸载重装来回退。首次启动检测到可迁移的旧目录时会复制、校验并保留旧目录；正式旧 Android 数据搬迁仍需专项验收。
 
 [下载最新版本](https://github.com/Develata/RSS-Reader/releases/latest) · [发布说明](https://github.com/Develata/RSS-Reader/releases) · [English](./docs/README.en.md) · [文档](./docs/README.md) · [报告问题](https://github.com/Develata/RSS-Reader/issues)
 
@@ -34,9 +38,9 @@ RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把�
 2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址或网站首页并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
-上表按已发布的 `v0.2.0` 产物核对；另有四平台 CLI 包和 Android AAB，具体变更与验收范围见[本版 Release 说明](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。Android APK / AAB 使用与 v0.1.23 相同的正式签名证书，但系统返回、长按选择、下拉刷新和图片手势尚未完成真机验收；macOS 也尚未完成实机交互验收。Windows 程序未做 Authenticode 签名，macOS 应用未签名或公证。
+上表按已发布的 `v0.2.1` 产物核对；另有四平台 CLI 包和 Android AAB，14 个公开附件均与 CI 及 GitHub 哈希一致。Android APK / AAB 与 v0.2.0 使用相同正式证书，正式 APK 的覆盖安装在隔离模拟器验证；此前真机专项使用测试包，不能代替正式包的真机旧库升级。macOS 实机交互、系统输入法及其他设备覆盖仍有边界，见[本版发布核验](./docs/handoffs/2026-10-28-v0.2.1-release.md)。Windows 程序未做 Authenticode 签名，macOS 应用未签名或公证。
 
-**Linux 安装包：** `v0.2.0` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
+**Linux 安装包：** `v0.2.1` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
 
 ## 日常使用
 

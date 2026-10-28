@@ -15,9 +15,13 @@ _Actual Web interface with sample subscriptions and articles._
 
 RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Desktop and Android keep a library on the device. Self-hosted Web keeps one library on the server, shared by browsers and the CLI using that server data directory. JSON, OPML, and optional WebDAV exchange subscriptions and settings between separate libraries.
 
-The current release is [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
+The current release is [v0.2.1](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
 
-v0.2.0 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
+Before upgrading from v0.2.0, close the app and back up the library. This version adds manual archiving; v0.2.0 cannot open the upgraded schema. To roll back, restore the pre-upgrade backup as well as the old executable.
+
+Android has no in-app full-library backup or rollback flow. Configuration exports exclude articles and read/favorite state; uninstalling clears local data, so do not uninstall and reinstall to roll back. On first launch, a supported legacy directory is copied and verified while the original is retained. Migration of real legacy Android data still needs separate acceptance.
+
+v0.2.1 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
 
 [Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
@@ -35,15 +39,15 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 
 Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a website homepage, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table matches the published `v0.2.0` assets. Four platform CLI packages and an Android AAB are also available; see the [release notes](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0) for changes and validation scope. Android's APK/AAB uses the same release certificate as v0.1.23, but system back, long-press text selection, pull-to-refresh, and image gestures still need real-device acceptance. macOS interaction also remains unverified on a physical machine. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
+The table matches the published `v0.2.1` assets. Four platform CLI packages and an Android AAB are also available. All 14 public assets match both CI files and GitHub digests. Android's APK/AAB uses the same release certificate as v0.2.0; replacement installation of the signed APK passed in an isolated emulator. Earlier physical-device checks used a test package and do not certify a signed-package upgrade of real legacy Android data. Physical macOS interaction, system IME and other-device coverage remain limited; see the [release verification record](./handoffs/2026-10-28-v0.2.1-release.md). Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
 
-**Linux package:** the `v0.2.0` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
+**Linux package:** the `v0.2.1` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
 
 - Use the search icon to expand title search; Enter searches, Esc closes it. Filter entries by source, unread status, or favorite status. Long source names remain readable and pagination stays reachable.
 - In Reader, use the top-left back button, toggle read/favorite, move to nearby articles, or open a body image in the viewer. Native text selection and copy remain available. Refreshing does not replace the article you are reading.
-- Reader shortcuts: `M` toggles read status, `F` toggles favorite, and `←` / `→` move to the previous / next unread article. Shortcuts apply only while focus is inside the reading region. Search input, IME composition, and native editing shortcuts with Ctrl or Cmd are left alone.
+- Reader shortcuts work across the Reader page without first focusing the body: `M` toggles read status, `F` toggles favorite, `K` / `←` goes to the previous unread article, and `J` / `→` goes to the next unread article. Read/favorite actions wait until the article has loaded. Inputs, editable areas, IME composition, key repeats, an open image viewer, and modified keys such as Ctrl/Cmd do not trigger Reader shortcuts or position capture.
 - Settings provide built-in themes and custom CSS. Basic settings and edited CSS require Save; applying a preset saves immediately. Android CSS file import is not implemented; export uses the system file picker. `rssr-cli` covers feed management, refresh, settings, and configuration import/export.
 
 - The arrow at the end of the navigation bar collapses it to one expand button. Collapse state and reading positions last for the current run; reloading the Web page clears them. Returning to the list restores the page and article position where possible.

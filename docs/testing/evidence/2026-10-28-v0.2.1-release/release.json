@@ -1,0 +1,146 @@
+{
+  "release": {
+    "id": 426607319,
+    "tag_name": "v0.2.1",
+    "target_commitish": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-10-28T12:10:08Z",
+    "html_url": "https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1"
+  },
+  "tagObject": "cc7b42d90b7b3979154c700c265a8090979694f7",
+  "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+  "workflow": {
+    "id": 40683428344,
+    "head_sha": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "run_attempt": 2,
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344",
+    "event": "push"
+  },
+  "jobCounts": {
+    "success": 13,
+    "skipped": 1
+  },
+  "jobs": [
+    {
+      "id": 122804663858,
+      "name": "build-macos (aarch64-apple-darwin, macos-aarch64)",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804663858"
+    },
+    {
+      "id": 122804665558,
+      "name": "build-linux",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804665558"
+    },
+    {
+      "id": 122804666040,
+      "name": "build-android",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804666040"
+    },
+    {
+      "id": 122804666580,
+      "name": "build-web / source",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804666580"
+    },
+    {
+      "id": 122804666878,
+      "name": "build-web / native (macos-15, aarch64-apple-darwin, macos-aarch64, tar.gz)",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804666878"
+    },
+    {
+      "id": 122804666987,
+      "name": "build-web / native (windows-latest, x86_64-pc-windows-msvc, windows-x86_64, .exe, zip)",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804666987"
+    },
+    {
+      "id": 122804667277,
+      "name": "build-web / linux",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804667277"
+    },
+    {
+      "id": 122804667735,
+      "name": "build-container / build-package",
+      "conclusion": "skipped",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804667735"
+    },
+    {
+      "id": 122804667763,
+      "name": "build-web / native (macos-15-intel, x86_64-apple-darwin, macos-x86_64, tar.gz)",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804667763"
+    },
+    {
+      "id": 122804669216,
+      "name": "build-container / image",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804669216"
+    },
+    {
+      "id": 122804705374,
+      "name": "build-macos (x86_64-apple-darwin, macos-x86_64)",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804705374"
+    },
+    {
+      "id": 122804729408,
+      "name": "build-windows",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804729408"
+    },
+    {
+      "id": 122804732143,
+      "name": "build-web / page",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122804732143"
+    },
+    {
+      "id": 122806964285,
+      "name": "publish-release",
+      "conclusion": "success",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40683428344/job/122806964285"
+    }
+  ],
+  "initialFailure": {
+    "jobId": 122799666211,
+    "phase": "Install Dioxus CLI 0.7.9",
+    "httpStatus": 403,
+    "productCompilationStarted": false,
+    "retry": "Only the failed macOS ARM job and its dependent publication job were rerun; no source or tag was changed",
+    "jobName": "build-macos (aarch64-apple-darwin, macos-aarch64)"
+  },
+  "preReleaseMainRuns": [
+    {
+      "conclusion": "success",
+      "databaseId": 40681852004,
+      "headSha": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "name": "Pages demo",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40681852004"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40681852052,
+      "headSha": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "name": "Docker",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40681852052"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40681852013,
+      "headSha": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "name": "CI",
+      "status": "completed",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/40681852013"
+    }
+  ]
+}

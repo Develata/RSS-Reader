@@ -8,13 +8,13 @@
 | --- | --- |
 | 文档维护与归档 | [2026-10-28 整理](./2026-10-28-docs-maintenance.md)、[历史索引](./archive/README.md) |
 | 历史待办核实与 PR 收尾 | [本轮核实](./2026-10-28-historical-followup-audit.md)、[当前待办](../maintenance-backlog.md) |
-| 最新验收与发布准备 | [原生、设计与升级检查](./2026-10-28-release-readiness.md)、[v0.2.1 草稿](../releases/v0.2.1-draft.md) |
+| 最新发布与验收 | [v0.2.1 正式发布](./2026-10-28-v0.2.1-release.md)、[此前原生、设计与升级检查](./2026-10-28-release-readiness.md) |
 | 主线合并与交叉复核 | [PR #33 合并](./2026-10-27-workspace-merge.md)、[工作区复测](./2026-10-27-workspace-recheck.md) |
 | 会话职责与生命周期 | [职责拆分](./2026-10-27-workspace-cohesion.md)、[生命周期修复](./2026-10-27-workspace-review-fixes.md) |
 | 目录交互与视觉 | [右侧箭头与缩进](./2026-10-27-directory-right-disclosure.md)、[窗口边界](./2026-10-27-directory-window-boundaries.md) |
 | Penpot 覆盖 | [当前设计基准](../design/penpot-code-baseline.md)、[覆盖完成](./2026-10-26-penpot-coverage-completion.md) |
 | 原生设备证据 | [Windows / Android 目录](./2026-10-26-native-directory-validation.md)、[Android 返回与持久目录](./2026-10-25-android-back-and-persistent-storage.md) |
-| 已发布版本 | [v0.2.0](./2026-10-23-v0.2.0-release.md) |
+| 已发布版本 | [v0.2.1](./2026-10-28-v0.2.1-release.md)、[v0.2.0](./2026-10-23-v0.2.0-release.md) |
 
 ## 近期记录
 
@@ -22,6 +22,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-28 | [v0.2.1 正式发布与产物核验](./2026-10-28-v0.2.1-release.md) |
 | 2026-10-28 | [PR 收尾与历史待办核实](./2026-10-28-historical-followup-audit.md) |
 | 2026-10-28 | [原生交互、Penpot 抽查与补丁发布准备](./2026-10-28-release-readiness.md) |
 | 2026-10-28 | [文档维护入口、状态校正与历史交接归档](./2026-10-28-docs-maintenance.md) |

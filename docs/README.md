@@ -1,6 +1,6 @@
 # 文档索引
 
-根目录 [README](../README.md) 面向首次使用；这里提供维护、设计和验收入口。核对日期：2026-10-28，代码与流程基线为 main `da8521e2`。已发布版本为 [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)；合并后的阅读工作区改进尚未发布为新版本。
+根目录 [README](../README.md) 面向首次使用；这里提供维护、设计和验收入口。核对日期：2026-10-28，已发布版本为 [v0.2.1](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1)，源码 tag 指向 `dbfbf896`。阅读工作区、目录及状态保持改进已进入本版；发布后文档提交与该固定源码分开记录。
 
 正式 Web 使用服务器上的 SQLite 资料库；Pages 使用每次加载重建的内存 SQLite 和预抓取 RSS 快照。当前状态与验证边界见[维护状态](./current-status.md)，带日期的记录只证明其指定版本和场景。
 
@@ -12,7 +12,7 @@
 | 部署服务器 / Docker | [Web 部署](./deployment/web.md) | [服务包与容器验收](./testing/web-distribution.md) |
 | 修改业务或界面 | [功能边界](./design/functional-design-philosophy.md) | [设计索引](./design/README.md)、[前端命令契约](./design/frontend-command-reference.md) |
 | 修改主题或同步 Penpot | [主题选择器](./design/theme-author-selector-reference.md) | [Penpot 代码基准](./design/penpot-code-baseline.md) |
-| 检查主线 / 准备发布 | [测试索引](./testing/README.md) | [主线矩阵](./testing/mainline-validation-matrix.md)、[发布 UI 清单](./testing/release-ui-regression-checklist.md)、[v0.2.1 草稿](./releases/v0.2.1-draft.md) |
+| 检查主线 / 准备发布 | [测试索引](./testing/README.md) | [主线矩阵](./testing/mainline-validation-matrix.md)、[发布 UI 清单](./testing/release-ui-regression-checklist.md)、[v0.2.1 说明](./releases/v0.2.1.md) |
 | 构建或验收 Android | [Android 状态](./roadmaps/android-release-roadmap.md) | [原生阅读验收](./testing/native-reading-baseline.md) |
 | 接手当前工作 | [维护状态](./current-status.md) | [当前待办](./maintenance-backlog.md)、[近期交接](./handoffs/README.md) |
 | 追溯旧决定或旧实现 | [历史交接索引](./handoffs/archive/README.md) | [2026-04 总览](./agent-handoff.md)、[2026-10 审计](./engineering-audit-2026-10.md) |
