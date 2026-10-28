@@ -1,6 +1,6 @@
 # 测试与回归文档
 
-这个目录只保留两类长期文档：
+这个目录的入口文档分为两类：
 
 - 可重复执行的检查清单和 smoke 入口
 - 长期维护的验证矩阵、环境限制和重建计划
@@ -10,7 +10,7 @@
 - `target/**/summary.md`
 - `docs/handoffs/`
 
-不要再把一次性测试报告长期堆在这里。
+一次性报告不堆放在根目录。`evidence/` 和 `baselines/` 保留有源码身份的发布证据与测量基线，不因实现更新而删除；引用时必须注明对应版本。最新主线状态见[维护状态](../current-status.md)。
 
 ## 快速导航
 
@@ -21,6 +21,8 @@
 - [发布前 UI 覆盖矩阵](./release-ui-coverage-matrix.md)
 - [手工回归测试清单](./manual-regression.md)
 - [原生旧库升级验收](./native-upgrade-verification.md)
+- [原生宿主阅读基线](./native-reading-baseline.md)：Windows / Android 的隔离数据、来源身份和测量边界。
+- [发布 UI runner](./release-ui-runner.md)：统一入口、构建复用与阶段结果。
 
 ### Web / 浏览器 smoke
 
@@ -75,4 +77,4 @@
 
 - 新文档如果是长期入口，文件名应体现“清单 / 矩阵 / smoke / 计划”。
 - 新文档如果只是某次执行结果，不应放在 `docs/testing/` 根目录。
-- 过时报告应及时删除，避免 README 和主线矩阵继续引用旧结论。
+- 过时执行报告从当前入口移入有日期的历史索引，保留原始事实与证据；删除文件须有明确理由和授权。README 与主线矩阵应链接当前契约，不能继续把旧报告当成当前通过结论。

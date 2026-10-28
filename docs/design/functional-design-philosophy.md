@@ -379,7 +379,7 @@ RSS-Reader 不把主题看成装饰性功能，而把它视为设置能力的一
 - 桌面端 / Android 的正文图片本地化以后台补偿任务执行，不阻塞刷新主流程
 - Docker Compose 形态服务于 Web 部署，不改变产品功能边界
 - v0.1.x 的 Web 版仍把资料库保存在浏览器 `localStorage`；v0.2 改为服务器端资料库，
-  见 [v0.2 架构](./v0.2-architecture.md)（实施中）
+  见 [v0.2 架构](./v0.2-architecture.md)（已在 v0.2.0 发布）
 
 ---
 

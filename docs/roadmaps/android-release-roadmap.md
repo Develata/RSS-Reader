@@ -1,19 +1,19 @@
 # Android 构建与验收状态
 
-这份文档记录 Android 交付链已经做到哪里，以及仍需真机确认什么。历史分阶段工作见 [`2026-07-27-android-release-signing.md`](../handoffs/2026-07-27-android-release-signing.md)；当前发布证据见 [`v0.1.20` 交接记录](../handoffs/2026-09-26-v0.1.20-release.md)。
+这份文档记录 Android 交付链已经做到哪里，以及仍需真机确认什么。历史签名工作见 [2026-07-27 记录](../handoffs/archive/2026-07/2026-07-27-android-release-signing.md)；当前发布证据见 [v0.2.0 交接记录](../handoffs/2026-10-23-v0.2.0-release.md)。主线的新改动与正式发布分开记录，见[维护状态](../current-status.md)。
 
-## 当前源码状态（2026-09-30）
+## 当前源码状态（2026-10-28，main `a9608056`）
 
 | 能力 | 状态 | 证据边界 |
 | --- | --- | --- |
 | 共享 Rust 订阅 / 阅读逻辑 | 已实现 | UI、application 与其他端复用；平台差异留在 adapter / host capability |
 | Android debug 构建与自动化 smoke | 已接入 | CI 检查 ARM64 构建、APK 资源、ABI 与版本信息 |
-| 正式签名 APK / AAB | 已发布 | 仓库最近发布记录 `v0.1.20` 含 `RSS-Reader-android-arm64-v8a-release.apk` 和 `.aab`；签名和 tag 版本在发布 workflow 验证 |
-| 真机交互 | 待验收 | 构建与浏览器触摸模拟不能证明 Android 系统返回、长按选择、下拉刷新或图片缩放 |
+| 正式签名 APK / AAB | v0.2.0 已发布 | Release 含 `RSS-Reader-android-arm64-v8a-release.apk` 和 `.aab`；来源、证书与版本边界见发布交接 |
+| 真机交互 | 2026-10-28 当前产品代码的 28 项专项通过 | Xiaomi 12 / Android 15，含系统返回、写入与筛选恢复；另补冷进程偏好保留。仅适用于记录的设备、测试包与场景，见[本轮验收](../handoffs/2026-10-28-release-readiness.md) |
 
-2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/2026-10-25-android-back-and-persistent-storage.md)。这部分结果不替代下述其他设备/正式签名与功能验收。
+2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/2026-10-25-android-back-and-persistent-storage.md)。2026-10-26 又完成目录和阅读返回专项，见[原生目录记录](../handoffs/2026-10-26-native-directory-validation.md)。这些结果不替代最新候选、其他设备或正式签名包的验收。
 
-打 tag 的发布流程要求 Android signing secrets 齐全，否则 `build-android` 失败；手动 workflow dispatch 可用于不带长期签名的 debug 验证。正式签名包与临时 debug 签名包不能互相覆盖安装。卸载会清除本地订阅、文章和图片缓存；卸载前先导出配置，但配置导出本身不包含文章库和已读状态。`versionCode` / `versionName` 从发布 tag 派生，不读取 workspace `Cargo.toml` 的版本号。
+打 tag 和手动触发 Release 均要求 Android signing secrets 齐全，否则 `build-android` 失败；两种入口都会发布，不能将手动入口当作 debug 试跑。临时 debug 验证使用下面的本地构建流程或对应 CI。正式签名包与临时 debug 签名包不能互相覆盖安装。卸载会清除本地订阅、文章和图片缓存；卸载前先导出配置，但配置导出本身不包含文章库和已读状态。`versionCode` / `versionName` 从发布 tag 派生，不读取 workspace `Cargo.toml` 的版本号。
 
 ## 本地构建 debug APK
 
@@ -29,16 +29,18 @@ python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app
 
 输出位于 `target/dx/rssr-app/release/android/app/app/build/outputs/apk/debug/app-debug.apk`。`prepare_android_bundle.py` 修改生成的 Android 工程中的图标、应用名与 SDK 配置；它之后必须重新执行 Gradle 打包，才能把修改写进 APK。本地 debug 包由本地调试签名，不等于 GitHub Release 的长期签名包。
 
+2026-10-28 真机专项实际使用 `dx build` 生成工程、NDK 28.2.13676358，再执行上述准备脚本和 `assembleDebug`；这是测试包路径。上面的 `dx bundle` 与正式工作流仍需按实际发布候选验证，不能由该次成功替代。
+
 正式发布的签名 secret 名称及构建断言以 [release workflow](../../.github/workflows/release.yml) 为准；不要把 keystore、密码或签名输出写入仓库。
 
 ## 待完成的设备验收
 
-获得 Android 真机后，使用**本次待验源码构建的包**或明确版本的 Release APK，在隔离测试数据上验证：
+本轮已验证 Xiaomi 12 上的目录、系统返回、文章写入及冷进程偏好保留；完整范围见上方专项记录。后续使用**实际发布候选的包**，在隔离测试数据上补充：
 
-1. 安装 / 升级、首次启动、SQLite 数据路径与应用名 / 图标。
-2. 添加订阅、刷新、阅读、已读 / 收藏、切后台再恢复及进程重启后的数据保留。
-3. 系统返回键与 Reader 图片查看器的关闭顺序；文章首页下拉刷新只在顶部触发，且不会影响正文长按选择。
+1. 正式签名包覆盖升级、首次启动、SQLite 数据路径与应用名 / 图标；本轮 debug 包覆盖安装不替代正式包验收。
+2. 真实远端订阅的添加与刷新、后台恢复及数据保留；核对实际发布包仍符合本轮已验证的阅读与写入行为。
+3. Reader 图片查看器的系统返回关闭顺序、正文长按选择，以及文章首页下拉刷新只在顶部触发。
 4. 360px 级窄视口来源名、搜索、分页、safe area、图片点击放大与正文选择手柄。
 5. JSON / OPML、主题文件 SAF 导出、WebDAV（CSS 文件导入当前未实现），以及失败重试和权限拒绝路径。
 
-记录设备型号、Android 版本、APK 来源和签名身份，以及实际操作结果。当前 [手工回归清单](../testing/manual-regression.md) 与 [主线验证矩阵](../testing/mainline-validation-matrix.md) 提供通用路径；**没有真机结果前，不应把 Android 标为完整体验验收通过**。
+记录设备型号、Android 版本、APK 来源和签名身份，以及实际操作结果。当前 [手工回归清单](../testing/manual-regression.md) 与 [主线验证矩阵](../testing/mainline-validation-matrix.md) 提供通用路径；已有专项通过不等于上述未覆盖场景、其他设备或正式包已完成验收。

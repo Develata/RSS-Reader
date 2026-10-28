@@ -1,0 +1,153 @@
+{
+  "status": "pass",
+  "sourceRelease": "v0.2.0",
+  "candidateSource": "67e1c2c299cf942ae972f1c5cab10d7f10bb98fe",
+  "tables": {
+    "feeds": {
+      "before": 6,
+      "after": 6,
+      "allExistingColumnsEqual": false,
+      "differentKeys": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "subscriptionFieldsPreserved": true,
+      "startupRefreshChanges": {
+        "1": {
+          "last_fetched_at": {
+            "before": "2026-10-28T09:44:29.7299695Z",
+            "after": "2026-10-28T09:45:43.0072166Z"
+          },
+          "refresh_issued": {
+            "before": 1,
+            "after": 2
+          },
+          "refresh_diagnosed": {
+            "before": 1,
+            "after": 2
+          },
+          "updated_at": {
+            "before": "2026-10-28T09:44:29.7299695Z",
+            "after": "2026-10-28T09:45:43.0072166Z"
+          }
+        },
+        "2": {
+          "last_fetched_at": {
+            "before": "2026-10-28T09:44:29.7281604Z",
+            "after": "2026-10-28T09:45:43.0051825Z"
+          },
+          "refresh_issued": {
+            "before": 1,
+            "after": 2
+          },
+          "refresh_diagnosed": {
+            "before": 1,
+            "after": 2
+          },
+          "updated_at": {
+            "before": "2026-10-28T09:44:29.7281604Z",
+            "after": "2026-10-28T09:45:43.0051825Z"
+          }
+        },
+        "3": {
+          "last_fetched_at": {
+            "before": "2026-10-28T09:44:29.714591Z",
+            "after": "2026-10-28T09:45:43.0091694Z"
+          },
+          "refresh_issued": {
+            "before": 1,
+            "after": 2
+          },
+          "refresh_diagnosed": {
+            "before": 1,
+            "after": 2
+          },
+          "updated_at": {
+            "before": "2026-10-28T09:44:29.714591Z",
+            "after": "2026-10-28T09:45:43.0091694Z"
+          }
+        },
+        "4": {
+          "last_fetched_at": {
+            "before": "2026-10-28T09:44:29.7320263Z",
+            "after": "2026-10-28T09:45:42.9917433Z"
+          },
+          "refresh_issued": {
+            "before": 1,
+            "after": 2
+          },
+          "refresh_diagnosed": {
+            "before": 1,
+            "after": 2
+          },
+          "updated_at": {
+            "before": "2026-10-28T09:44:29.7320263Z",
+            "after": "2026-10-28T09:45:42.9917433Z"
+          }
+        },
+        "5": {
+          "last_fetched_at": {
+            "before": "2026-10-28T09:44:31.7933279Z",
+            "after": "2026-10-28T09:45:45.061824Z"
+          },
+          "refresh_issued": {
+            "before": 1,
+            "after": 2
+          },
+          "refresh_diagnosed": {
+            "before": 1,
+            "after": 2
+          },
+          "updated_at": {
+            "before": "2026-10-28T09:44:31.7933279Z",
+            "after": "2026-10-28T09:45:45.061824Z"
+          }
+        },
+        "6": {
+          "last_fetched_at": {
+            "before": "2026-10-28T09:44:31.7799116Z",
+            "after": "2026-10-28T09:45:45.0573852Z"
+          },
+          "refresh_issued": {
+            "before": 1,
+            "after": 2
+          },
+          "refresh_diagnosed": {
+            "before": 1,
+            "after": 2
+          },
+          "updated_at": {
+            "before": "2026-10-28T09:44:31.7799116Z",
+            "after": "2026-10-28T09:45:45.0573852Z"
+          }
+        }
+      }
+    },
+    "entries": {
+      "before": 5000,
+      "after": 5000,
+      "allExistingColumnsEqual": true
+    },
+    "entry_contents": {
+      "before": 5000,
+      "after": 5000,
+      "allExistingColumnsEqual": true
+    },
+    "app_settings": {
+      "before": 0,
+      "after": 0,
+      "allExistingColumnsEqual": true
+    }
+  },
+  "integrity": "ok",
+  "archiveColumnAdded": true,
+  "allOldEntriesUnarchived": true,
+  "notes": [
+    "Startup refresh attempted the isolated loopback fixture URLs. Only refresh tickets and timestamps changed; subscription identity and user fields stayed equal.",
+    "Old settings table was empty; customized v0.2.0 settings are not covered by this upgrade fixture."
+  ]
+}

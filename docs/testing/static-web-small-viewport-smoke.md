@@ -76,6 +76,6 @@ Android 实机长按选择手柄、系统返回、pinch zoom，以及 macOS Cmd+
 
 目录行为回归现由默认主题 CI 入口实际执行，包含独立的时间/来源分组 fixture、96px 边界、Enter/Space 潜在偏好、导航及生命周期；详见[目录契约与性能基线](./directory-regression-baseline.md)。`--directory-only` 可单独复现。历史失败与性能采样仅属于相应基线，不作为当前分支的结果；性能采样由底层驱动另行执行，不属于每次 CI 的自动内容，也不是 Shell 入口参数。
 
-断言数量以本次 `assertions.json` 为准。2026-09-22 的初版及后续扩展保留在对应 handoff；2026-09-26 五主题复验见 [集成记录](../handoffs/2026-09-26-integration-revalidation.md)。历史通过不证明新构建通过。
+断言数量以本次 `assertions.json` 为准。2026-09-22 的初版及后续扩展保留在对应 handoff；2026-09-26 五主题复验见 [集成记录](../handoffs/archive/2026-09/2026-09-26-integration-revalidation.md)。历史通过不证明新构建通过。
 
 导航收起、操作边界位置采集、来源计数、批量已读等近期能力还应按 [手工回归](./manual-regression.md) 和相关 handoff 补验；不要从脚本名称推定所有功能已自动覆盖。截图是视觉复核证据，结构断言不能替代色彩、信息层次和真实辅助技术体验检查。

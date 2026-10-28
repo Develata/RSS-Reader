@@ -1,0 +1,80 @@
+{
+  "status": "pass",
+  "file": {
+    "id": "cadc1646-c70c-8009-8008-d6f40c2d8fdc",
+    "name": "RSS Reader · 当前代码设计规范",
+    "revision": 370
+  },
+  "boards": 55,
+  "uniqueCaptureKeys": 55,
+  "boardsWithRightSideBaseline": 16,
+  "validation": [],
+  "savedVersion": {
+    "label": "Right-side directory disclosure · badf7fae · 2026-10-27",
+    "createdAt": "2026-10-27T13:05:58.998Z"
+  },
+  "representativeGeometry": {
+    "board": "63fc74ca-8324-800c-8008-d931a81f90fb",
+    "boardName": "01 · Desktop / 时间分组 / 默认",
+    "captureKey": "code-desktop-default",
+    "arrows": [
+      {
+        "name": "Disclosure / 6px / Right / Expanded",
+        "cssSize": 6,
+        "hitHeight": 44.00000000000003,
+        "distanceFromTrailingEdgeToCenter": 22.0
+      },
+      {
+        "name": "Disclosure / 5px / Expanded",
+        "cssSize": 5,
+        "hitHeight": 44,
+        "distanceFromTrailingEdgeToCenter": 22.0
+      },
+      {
+        "name": "Disclosure / 5px / Collapsed",
+        "cssSize": 5,
+        "hitHeight": 44,
+        "distanceFromTrailingEdgeToCenter": 22.0
+      },
+      {
+        "name": "Disclosure / 6px / Right / Collapsed",
+        "cssSize": 6,
+        "hitHeight": 44,
+        "distanceFromTrailingEdgeToCenter": 22.0
+      }
+    ],
+    "articleRows": [
+      {
+        "indent": 8.0,
+        "height": 44
+      },
+      {
+        "indent": 8.0,
+        "height": 44
+      },
+      {
+        "indent": 8.0,
+        "height": 46.375
+      },
+      {
+        "indent": 8.0,
+        "height": 44
+      },
+      {
+        "indent": 8.0,
+        "height": 44
+      },
+      {
+        "indent": 8.0,
+        "height": 46.375
+      }
+    ]
+  },
+  "directoryGeometryMatchesCurrentNativeMeasurements": true,
+  "sourceReview": "Since badf7fae, directory CSS literals became local custom properties and private month classes became branch classes; dimensions remained equivalent. Current native computed styles verified separately.",
+  "visualExportsReviewed": [
+    "code-desktop-default",
+    "code-mobile-directory"
+  ],
+  "boundary": "Current file and saved version read back; geometry sampled on one desktop board, two representative PNGs visually inspected. Full geometry audit of all 16 boards was not repeated; subsequent plugin calls suspended. No design edits."
+}

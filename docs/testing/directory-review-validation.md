@@ -1,6 +1,6 @@
 # PR19 目录回归修复与测量校正
 
-日期：2026-10-03。本轮复核接续 `9d1a4bf`，保持同一 Draft PR19，不合并。[设计规则](../design/entries-directory-follow.md)与[本轮交接](../handoffs/2026-10-03-directory-review-correction.md)分别记录产品语义及交付状态。
+日期：2026-10-03。本轮复核接续 `9d1a4bf`，保持同一 Draft PR19，不合并。[设计规则](../design/entries-directory-follow.md)与[本轮交接](../handoffs/archive/2026-10/2026-10-03-directory-review-correction.md)分别记录产品语义及交付状态。
 
 受测源码与测量工具绑定提交 `282592f816c87746c8354ee7981b98be3db16dea`；元数据中的 LF 指纹已逐文件匹配 Git blob。后续证据提交只修改 docs；最终受检 SHA 和 CI 链接在 PR19 收尾说明中核对。
 

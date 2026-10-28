@@ -1,6 +1,6 @@
 # Web 发布包与容器验收（C6）
 
-构建流程见 [web-packages.yml](../../.github/workflows/web-packages.yml)、[docker.yml](../../.github/workflows/docker.yml) 与 [release.yml](../../.github/workflows/release.yml)。实际运行结果另记在 [C6 交接](../handoffs/2026-10-22-c6-web-distribution.md)，本页描述检查能力，不代表本次已通过。
+构建流程见 [web-packages.yml](../../.github/workflows/web-packages.yml)、[docker.yml](../../.github/workflows/docker.yml) 与 [release.yml](../../.github/workflows/release.yml)。实际运行结果另记在 [C6 交接](../handoffs/archive/2026-10/2026-10-22-c6-web-distribution.md)，本页描述检查能力，不代表本次已通过。
 
 ## 包与构建标识
 

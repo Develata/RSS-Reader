@@ -13,4 +13,4 @@ bash scripts/run_server_web_regression.sh --suite theme-matrix --release --port 
 
 固定断言检查阅读页语义、标题与主题 CSS 已注入；人工复看标题、元信息、正文和底部栏是否可读、有无遮挡。默认矩阵不穷举浅/深色、跟随系统、全部视口或键盘状态；不能用结构断言代替视觉验收。
 
-历史证据：2026-04-10 的五主题人工结论仅适用于当时构建（`target/static-web-reader-theme-matrix/20260410-213206/`）。后续记录见 [2026-09-26 集成复验](../handoffs/2026-09-26-integration-revalidation.md)；每次新构建都要检查自己的产物。
+历史证据：2026-04-10 的五主题人工结论仅适用于当时构建（`target/static-web-reader-theme-matrix/20260410-213206/`）。后续记录见 [2026-09-26 集成复验](../handoffs/archive/2026-09/2026-09-26-integration-revalidation.md)；每次新构建都要检查自己的产物。

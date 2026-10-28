@@ -1,0 +1,41 @@
+{
+  "checkedAt": "2026-10-28T09:56:51.681424+00:00",
+  "buildSource": "67e1c2c299cf942ae972f1c5cab10d7f10bb98fe",
+  "productMain": "a9608056e23864446a69881e38676598e56869d7",
+  "artifacts": [
+    {
+      "name": "windows-app",
+      "bytes": 21301760,
+      "sha256": "c2b972dbbb500a91b8fc4dcde7e0146d6f44b843b5376cdd26ad1b60c8e47877"
+    },
+    {
+      "name": "android-debug-apk",
+      "bytes": 24885323,
+      "sha256": "32111b52c2396e53cd7afba5578f2b0b9aa2b9ee96e6024a061b0b4d4ee6fa8e"
+    },
+    {
+      "name": "previous-public-windows-zip",
+      "bytes": 7991014,
+      "sha256": "ce83c46a84e2aa93b4ebd42fea512f2c5aac66f35b89510bb317bbc793693122"
+    }
+  ],
+  "androidPackage": "io.github.develata.rssreader",
+  "androidTestVersionName": "0.1.0",
+  "androidTestVersionCode": 1,
+  "androidCertificateSha256": "0672a3442f32db36b7ea98aa9204b67b5dc540ecdaa47a1d64c0182845be450a",
+  "androidCertificateComparison": {
+    "method": "apksigner verify --print-certs, repeated on 2026-10-28",
+    "beforeArtifact": "android-installed-before.apk",
+    "beforeSha256": "0672a3442f32db36b7ea98aa9204b67b5dc540ecdaa47a1d64c0182845be450a",
+    "afterArtifact": "rssr-android.apk",
+    "afterSha256": "0672a3442f32db36b7ea98aa9204b67b5dc540ecdaa47a1d64c0182845be450a",
+    "matches": true
+  },
+  "androidInstalledHashMatched": true,
+  "releaseBoundary": "Native test artifacts, not signed v0.2.1 release artifacts. Formal APK/AAB and other platform package checks remain for the release workflow.",
+  "androidEmbeddedLibrary": {
+    "path": "lib/arm64-v8a/libmain.so",
+    "sha256": "be9c2cf9442240cc96c99b47e29d55a9b3109aed91a16e90039b74e15bbb184d",
+    "matchesBundledBuildOutput": true
+  }
+}
