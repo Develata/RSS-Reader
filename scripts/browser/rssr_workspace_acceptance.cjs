@@ -407,8 +407,15 @@ async function concurrentEntryWrites(page) {
 }
 
 async function bulkFailureRetry(page) {
+  const storedFlags = () => page.evaluate(() => {
+    const key = window.__rssrTestStateKey('rssr-web-entry-flags-v1');
+    return JSON.parse(localStorage.getItem(key)).entries.map(entry => ({
+      id: entry.id, is_read: entry.is_read, is_starred: entry.is_starred, is_archived: !!entry.is_archived,
+    })).sort((left, right) => left.id - right.id);
+  });
   for (const command of ['mark-selected-read', 'archive-selected']) {
     await seed(page, new URL(page.url()).origin);
+    const before = await storedFlags();
     for (const id of [72, 71]) await page.locator(`${rows}[data-position-entry="${id}"] ${action('select-entry')}`).check();
     await page.evaluate(() => {
       window.__workspaceOriginalSetItem = Storage.prototype.setItem;
@@ -423,17 +430,29 @@ async function bulkFailureRetry(page) {
       assert.equal(await page.locator(action(command)).isDisabled(), false, 'failed batch unlocks retry');
       assert.equal(await page.locator(selected).count(), 2, 'failed batch retains the selection');
       assert.equal(await page.locator(`${rows}[data-read="true"]`).count(), 0);
+      assert.deepEqual(await storedFlags(), before, 'failed batch leaves every persisted flag unchanged');
     } finally {
       await page.evaluate(() => { Storage.prototype.setItem = window.__workspaceOriginalSetItem; });
     }
     await page.locator(action(command)).click();
     await page.waitForFunction(() => document.querySelectorAll('[data-layout="entry-card"][data-selected="true"]').length === 0);
-    if (command === 'mark-selected-read') {
-      assert.equal(await page.locator(`${rows}[data-read="true"]`).count(), 2, 'retry only changes selected rows');
-    } else {
-      await page.waitForFunction(() => !document.querySelector('[data-position-entry="72"]') && !document.querySelector('[data-position-entry="71"]'));
-      assert.equal(await page.locator(rows).count(), 8, 'archive refills the page');
-    }
+    const verifyRows = async () => {
+      if (command === 'mark-selected-read') {
+        // SelectionApplied clears selection before the asynchronous reload returns.
+        await page.waitForFunction(() => [72, 71].every(id => document.querySelector(`[data-layout="entry-card"][data-position-entry="${id}"]`)?.dataset.read === 'true'));
+        assert.deepEqual(await page.locator(`${rows}[data-read="true"]`).evaluateAll(items => items.map(item => Number(item.dataset.positionEntry)).sort((a, b) => a - b)), [71, 72], 'retry changes the exact selected rows');
+      } else {
+        await page.waitForFunction(() => !document.querySelector('[data-position-entry="72"]') && !document.querySelector('[data-position-entry="71"]'));
+        assert.equal(await page.locator(rows).count(), 8, 'archive refills the page');
+      }
+    };
+    await verifyRows();
+    const changedField = command === 'mark-selected-read' ? 'is_read' : 'is_archived';
+    const expected = before.map(entry => [72, 71].includes(entry.id) ? { ...entry, [changedField]: true } : entry);
+    assert.deepEqual(await storedFlags(), expected, 'retry persists only the selected flag changes');
+    await page.reload(); await ready(page);
+    await verifyRows();
+    assert.deepEqual(await storedFlags(), expected, 'exact flags survive reopening');
   }
 }
 
