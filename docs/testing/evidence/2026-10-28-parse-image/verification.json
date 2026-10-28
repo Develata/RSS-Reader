@@ -1,7 +1,7 @@
 {
   "captured_utc": "2026-10-28T17:48:45.8526613Z",
   "base_commit": "6b2596d205b475c776a76cafb678233a9537b9f2",
-  "implementation_commit": "pending",
+  "implementation_commit": "743245f39f4e1fd9b17c803f9252b56ebe1c81ab",
   "branch": "codex/parse-image-performance",
   "source_worktree": "C:\\Users\\QQ\\.codex\\worktrees\\integrate-reading-workspace\\RSS-Reader",
   "capture_boundary": "Compiled and tested before local commit. Commands recorded by the executing agent; source hashes captured at finalization, not signed at test start. Existing logs are preserved by hash and selected excerpts.",
@@ -355,5 +355,6 @@
     "Historical 418-document corpus",
     "Arbitrary HTML whole-pipeline complexity proof",
     "Persistent image retry across restarts or autonomous retry after HTTP 304"
-  ]
+  ],
+  "finalized_utc": "2026-10-28T17:51:15.6958649Z"
 }
