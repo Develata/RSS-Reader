@@ -31,7 +31,7 @@ impl FeedsPageSession {
     }
 
     pub(crate) fn dismiss_edit(self) -> bool {
-        if self.state.peek().edit_feed_id.is_none() {
+        if self.state.peek().edit.feed_id().is_none() {
             return false;
         }
         // An in-flight save consumes Back too; the reducer keeps its form open
@@ -191,26 +191,112 @@ mod tests {
             assert!(!session.dismiss_edit());
             let mut state = session.state;
             state.with_mut(|state| {
-                state.edit_feed_id = Some(42);
-                state.edit_busy = true;
+                state.edit.begin_load(42);
             });
             assert!(session.dismiss_edit(), "loading dialog closes before navigation");
-            assert!(state.peek().edit_feed_id.is_none());
+            assert!(state.peek().edit.feed_id().is_none());
             state.with_mut(|state| {
-                state.edit_feed_id = Some(42);
-                state.edit_details = Some(rssr_domain::FeedEditDetails {
-                    feed_id: 42,
-                    url: "https://example.com/feed".into(),
-                    original_title: None,
-                    custom_title: Some("Draft".into()),
-                });
-                state.edit_busy = true;
+                let generation = state.edit.begin_load(42).unwrap();
+                state.edit.finish_load(
+                    42,
+                    generation,
+                    Ok(rssr_domain::FeedEditDetails {
+                        feed_id: 42,
+                        url: "https://example.com/feed".into(),
+                        original_title: None,
+                        custom_title: Some("Draft".into()),
+                    }),
+                );
+                state.edit.begin_save().unwrap();
             });
             assert!(session.dismiss_edit(), "saving consumes Back without navigation");
-            assert_eq!(state.peek().edit_feed_id, Some(42));
-            state.with_mut(|state| state.edit_busy = false);
+            assert_eq!(state.peek().edit.feed_id(), Some(42));
+            state.with_mut(|state| {
+                state.edit.finish_save(42, state.edit.generation(), Err("failed".into()));
+            });
             assert!(session.dismiss_edit(), "an idle draft can close");
             assert!(!session.dismiss_edit(), "the following Back can navigate normally");
+        });
+    }
+
+    #[test]
+    fn editor_publishes_gates_before_commands_and_retries_a_failed_save() {
+        let (mut dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch_intent_with(FeedsPageIntent::EditRequested(42), |command| {
+                assert!(session.state.peek().edit.is_busy());
+                let UiCommand::Feeds(FeedsCommand::LoadEdit { feed_id, generation }) = command
+                else {
+                    panic!("expected edit load")
+                };
+                std::future::ready(vec![UiIntent::FeedsPage(FeedsPageIntent::EditLoaded {
+                    feed_id,
+                    generation,
+                    result: Ok(rssr_domain::FeedEditDetails {
+                        feed_id,
+                        url: "https://example.com/feed".into(),
+                        original_title: Some("Original".into()),
+                        custom_title: None,
+                    }),
+                })])
+            });
+        });
+        dom.render_immediate_to_vec();
+        let (sender, receiver) = oneshot::channel();
+        let mut receiver = Some(receiver);
+        dom.in_scope(ScopeId::APP, || {
+            session.dispatch_intent(FeedsPageIntent::EditTitleChanged("draft".into()));
+            session.dispatch_intent_with(FeedsPageIntent::EditSaveRequested, |command| {
+                assert!(session.state.peek().edit.is_saving());
+                let UiCommand::Feeds(FeedsCommand::SaveEdit { edit, generation }) = command else {
+                    panic!("expected edit save")
+                };
+                assert_eq!(edit.custom_title.as_deref(), Some("draft"));
+                let receiver = receiver.take().expect("one save command");
+                async move {
+                    vec![UiIntent::FeedsPage(FeedsPageIntent::EditSaved {
+                        feed_id: edit.feed_id,
+                        generation,
+                        result: receiver.await.unwrap(),
+                    })]
+                }
+            });
+            session.dispatch_intent_with(
+                FeedsPageIntent::EditSaveRequested,
+                |_| -> std::future::Ready<Vec<UiIntent>> { panic!("duplicate save") },
+            );
+            assert!(session.dismiss_edit());
+            assert!(session.state.peek().edit.is_saving());
+            assert_eq!(*session.query_generation.peek(), 0);
+        });
+        dom.render_immediate_to_vec();
+        sender.send(Err("failed".into())).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.state.peek().edit.error(), Some("failed"));
+            assert_eq!(
+                session.state.peek().edit.details().unwrap().custom_title.as_deref(),
+                Some("draft")
+            );
+            session.dispatch_intent_with(FeedsPageIntent::EditSaveRequested, |command| {
+                assert!(session.state.peek().edit.is_saving());
+                assert!(session.state.peek().edit.error().is_none());
+                let UiCommand::Feeds(FeedsCommand::SaveEdit { edit, generation }) = command else {
+                    panic!("expected retry")
+                };
+                std::future::ready(vec![UiIntent::FeedsPage(FeedsPageIntent::EditSaved {
+                    feed_id: edit.feed_id,
+                    generation,
+                    result: Ok(()),
+                })])
+            });
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let state = session.snapshot();
+            assert!(state.edit.feed_id().is_none());
+            assert_eq!(state.reload_tick, 1);
+            assert_eq!(state.status, "来源已更新。");
         });
     }
 

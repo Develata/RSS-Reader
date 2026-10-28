@@ -42,6 +42,7 @@ async function eventually(read, expected, label) {
     await fs.mkdir(output, { recursive: true });
     // Replace any previous receipt before acquiring resources or validating the target.
     await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
+    assert.ok([undefined, 'lifecycle', 'edit'].includes(options.scenario), 'known feeds scenario');
     database = native ? new (require('node:sqlite').DatabaseSync)(path.resolve(options.database), { readOnly: true }) : null;
     browser = native ? await chromium.connectOverCDP(options.cdp) : await chromium.launch({ channel: 'chrome', headless: true });
     const context = native ? browser.contexts()[0] : await browser.newContext();
@@ -95,7 +96,7 @@ async function eventually(read, expected, label) {
       });
       await new Promise((resolve, reject) => { server.once('error', reject); server.listen(Number(base.port), '127.0.0.1', resolve); });
     }
-    for (const width of [1536, 390]) await scenario('feeds-flow-' + width, async () => {
+    for (const width of [1536, 390]) await scenario((options.scenario === 'edit' ? 'feeds-edit-' : 'feeds-flow-') + width, async () => {
       await page.setViewportSize({ width, height: 844 }); responseMode = 'success';
       if (!native) await page.goto(origin + '/__codex/setup-local-auth?seed=directory-contract&next=/feeds');
       else await page.locator('[data-nav="feeds"]').click();
@@ -107,6 +108,13 @@ async function eventually(read, expected, label) {
       await frames(page);
       if (!native) await page.screenshot({ path: path.join(output, `feeds-${width}.png`), animations: 'disabled', caret: 'hide' });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      if (options.scenario === 'edit') {
+        const evidence = await require('./feed_edit_scenarios.cjs')({ page, database, native, width, output });
+        assert.deepEqual(await flags(), originalFlags, 'editing preserves every article flag');
+        assert.deepEqual(await feedRows(), originalFeeds, 'edit acceptance restores the original subscription URLs');
+        assert.equal(await count('entries'), String(originalFlags.length));
+        return { ...evidence, articleCount: originalFlags.length };
+      }
       const first = page.locator(`${cards}[data-feed-id="1"]`);
       const title = await first.getAttribute('data-feed-title');
       await first.locator(action('refresh-feed')).click();

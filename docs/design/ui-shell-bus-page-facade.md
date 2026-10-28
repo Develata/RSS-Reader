@@ -107,6 +107,8 @@ Settings 的 `save_policy.rs` 准备提交副本、归并最后保存结果，�
 
 Feeds 的 `request_policy.rs` 区分 Shell 刷新、快照查询、单来源刷新与其他命令，只为快照分配和校验代次；过期查询整批丢弃，写入完成不受后来查询影响。单来源刷新在整批结果发布后捕获提示时长与清除身份，reducer 同时比较 revision 和消息后才清空。session 继续持有原查询 signal、页面任务和计时适配，“刷新全部”的任务与去重仍归 Shell。
 
+Feeds 的 `edit_state.rs` 将原编辑字段及转移收拢为内嵌状态，统一加载身份、草稿、保存与关闭 gate；页面 reducer 负责命令和页面级确认/提示/reload 的串接，session 保留执行职责。原生 dialog 的取消事件必须经过同一个 Rust 入口，不能因焦点离开已禁用控件而自行关闭。
+
 不再负责：
 
 - 直接拉 `AppServices::shared()`

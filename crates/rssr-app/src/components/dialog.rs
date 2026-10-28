@@ -50,6 +50,12 @@ pub(crate) fn Dialog(
                     }
                 }
             },
+            oncancel: move |event| {
+                // Disabling the focused control can move focus to body, bypassing
+                // onkeydown. Native dismissal must still pass through Rust's gate.
+                event.prevent_default();
+                on_close.call(());
+            },
             onclick: move |_| on_close.call(()),
             div { class: "workspace-dialog-body", onclick: move |event| event.stop_propagation(), {children} }
         }

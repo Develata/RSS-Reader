@@ -20,98 +20,46 @@ pub(crate) fn reduce_feeds_page_intent(
 ) -> Vec<UiCommand> {
     match intent {
         FeedsPageIntent::EditRequested(feed_id) => {
-            if state.edit_busy && state.edit_details.is_some() {
+            let Some(generation) = state.edit.begin_load(feed_id) else {
                 return Vec::new();
-            }
+            };
             if state.pending_delete_feed.is_some() || state.pending_config_import {
                 state.status.clear();
                 state.status_revision = state.status_revision.wrapping_add(1);
             }
             clear_pending_confirmations(state);
-            state.edit_generation = state.edit_generation.wrapping_add(1);
-            state.edit_feed_id = Some(feed_id);
-            state.edit_details = None;
-            state.edit_error = None;
-            state.edit_busy = true;
-            vec![UiCommand::Feeds(FeedsCommand::LoadEdit {
-                feed_id,
-                generation: state.edit_generation,
-            })]
+            vec![UiCommand::Feeds(FeedsCommand::LoadEdit { feed_id, generation })]
         }
         FeedsPageIntent::EditLoaded { feed_id, generation, result } => {
-            // A second visit to the same feed must not accept the first visit's
-            // delayed read, especially after the new draft has begun saving.
-            if state.edit_feed_id == Some(feed_id)
-                && state.edit_generation == generation
-                && state.edit_busy
-                && state.edit_details.is_none()
-            {
-                state.edit_busy = false;
-                match result {
-                    Ok(details) => state.edit_details = Some(details),
-                    Err(error) => state.edit_error = Some(error),
-                }
-            }
+            state.edit.finish_load(feed_id, generation, result);
             Vec::new()
         }
         FeedsPageIntent::EditTitleChanged(title) => {
-            if !state.edit_busy
-                && let Some(edit) = &mut state.edit_details
-            {
-                edit.custom_title = (!title.is_empty()).then_some(title);
-            }
+            state.edit.change_title(title);
             Vec::new()
         }
         FeedsPageIntent::EditUrlChanged(url) => {
-            if !state.edit_busy
-                && let Some(edit) = &mut state.edit_details
-            {
-                edit.url = url;
-            }
+            state.edit.change_url(url);
             Vec::new()
         }
         FeedsPageIntent::EditClosed => {
-            if !state.edit_busy || state.edit_details.is_none() {
-                state.edit_generation = state.edit_generation.wrapping_add(1);
-                state.edit_feed_id = None;
-                state.edit_details = None;
-                state.edit_error = None;
-                state.edit_busy = false;
-            }
+            state.edit.close();
             Vec::new()
         }
         FeedsPageIntent::EditSaveRequested => {
-            if state.edit_busy {
-                return Vec::new();
-            }
-            let Some(edit) = &state.edit_details else {
+            let Some(submission) = state.edit.begin_save() else {
                 return Vec::new();
             };
-            state.edit_busy = true;
-            state.edit_error = None;
             vec![UiCommand::Feeds(FeedsCommand::SaveEdit {
-                generation: state.edit_generation,
-                edit: rssr_domain::FeedEditRequest {
-                    feed_id: edit.feed_id,
-                    url: edit.url.clone(),
-                    custom_title: edit.custom_title.clone(),
-                },
+                generation: submission.generation,
+                edit: submission.request,
             })]
         }
         FeedsPageIntent::EditSaved { feed_id, generation, result } => {
-            if state.edit_feed_id == Some(feed_id) && state.edit_generation == generation {
-                state.edit_busy = false;
-                match result {
-                    Ok(()) => {
-                        state.edit_feed_id = None;
-                        state.edit_details = None;
-                        state.edit_error = None;
-                        state.reload_tick += 1;
-                        state.status = "来源已更新。".into();
-                        state.status_tone = "success".into();
-                    }
-                    Err(error) => state.edit_error = Some(error),
-                }
+            if state.edit.finish_save(feed_id, generation, result) {
+                state.reload_tick += 1;
+                state.status = "来源已更新。".into();
+                state.status_tone = "success".into();
             }
             Vec::new()
         }
@@ -323,13 +271,58 @@ mod tests {
     }
 
     #[test]
+    fn rejected_open_during_save_preserves_page_confirmations_and_feedback() {
+        let mut state = FeedsPageState::new();
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
+        let generation = state.edit.generation();
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditLoaded { feed_id: 42, generation, result: Ok(edit_details()) },
+        );
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditSaveRequested);
+        state.pending_delete_feed = Some(7);
+        state.pending_config_import = true;
+        state.status = "existing".into();
+        state.status_revision = u64::MAX;
+        let before = state.clone();
+        assert!(reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(7)).is_empty());
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn accepted_save_success_publishes_reload_and_feedback_once() {
+        let mut state = FeedsPageState::new();
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
+        let generation = state.edit.generation();
+        reduce_feeds_page_intent(
+            &mut state,
+            FeedsPageIntent::EditLoaded { feed_id: 42, generation, result: Ok(edit_details()) },
+        );
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditSaveRequested);
+        state.reload_tick = 5;
+        state.status_revision = 9;
+        state.feed_count = 6;
+        let complete = FeedsPageIntent::EditSaved { feed_id: 42, generation, result: Ok(()) };
+        assert!(reduce_feeds_page_intent(&mut state, complete.clone()).is_empty());
+        assert_eq!(state.reload_tick, 6);
+        assert_eq!(state.status, "来源已更新。");
+        assert_eq!(state.status_tone, "success");
+        assert_eq!(state.status_revision, 9);
+        assert_eq!(state.feed_count, 6);
+        assert!(state.edit.feed_id().is_none());
+        let completed = state.clone();
+        reduce_feeds_page_intent(&mut state, complete);
+        assert_eq!(state, completed);
+    }
+
+    #[test]
     fn old_edit_load_cannot_replace_reopened_draft_or_release_save_gate() {
         let mut state = FeedsPageState::new();
         reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
-        let older = state.edit_generation;
+        let older = state.edit.generation();
         reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditClosed);
         reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditRequested(42));
-        let latest = state.edit_generation;
+        let latest = state.edit.generation();
         assert_ne!(older, latest);
         // A late failure must not dismiss the new visit's loading state either.
         reduce_feeds_page_intent(
@@ -340,8 +333,8 @@ mod tests {
                 result: Err("old read failed".into()),
             },
         );
-        assert!(state.edit_busy);
-        assert!(state.edit_error.is_none());
+        assert!(state.edit.is_busy());
+        assert!(state.edit.error().is_none());
         reduce_feeds_page_intent(
             &mut state,
             FeedsPageIntent::EditLoaded {
@@ -361,15 +354,15 @@ mod tests {
                 result: Ok(edit_details()),
             },
         );
-        assert_eq!(state.edit_details.as_ref().unwrap().custom_title.as_deref(), Some("My draft"));
-        assert!(state.edit_busy, "a stale read must not make an in-flight save dismissible");
+        assert_eq!(state.edit.details().unwrap().custom_title.as_deref(), Some("My draft"));
+        assert!(state.edit.is_busy(), "a stale read must not make an in-flight save dismissible");
         reduce_feeds_page_intent(
             &mut state,
             FeedsPageIntent::EditSaved { feed_id: 42, generation: older, result: Ok(()) },
         );
-        assert_eq!(state.edit_feed_id, Some(42));
+        assert_eq!(state.edit.feed_id(), Some(42));
         reduce_feeds_page_intent(&mut state, FeedsPageIntent::EditClosed);
-        assert_eq!(state.edit_feed_id, Some(42), "saving still blocks dismissal");
+        assert_eq!(state.edit.feed_id(), Some(42), "saving still blocks dismissal");
         reduce_feeds_page_intent(
             &mut state,
             FeedsPageIntent::EditSaved {
@@ -378,9 +371,9 @@ mod tests {
                 result: Err("save failed".into()),
             },
         );
-        assert!(!state.edit_busy);
-        assert_eq!(state.edit_error.as_deref(), Some("save failed"));
-        assert_eq!(state.edit_details.unwrap().custom_title.as_deref(), Some("My draft"));
+        assert!(!state.edit.is_busy());
+        assert_eq!(state.edit.error(), Some("save failed"));
+        assert_eq!(state.edit.details().unwrap().custom_title.as_deref(), Some("My draft"));
     }
 
     #[test]
