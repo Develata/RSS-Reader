@@ -7,7 +7,7 @@ use super::{theme_apply::apply_custom_css_from_raw, theme_io::export_css_file};
 use super::theme_io::import_css_file;
 
 #[cfg(target_arch = "wasm32")]
-use super::theme_file_io::trigger_css_file_input_in_browser;
+use super::theme_file_io::{read_css_file_in_browser, trigger_css_file_input_in_browser};
 
 #[component]
 pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
@@ -33,7 +33,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                 let import_facade = import_file_facade.clone();
 
                 spawn(async move {
-                    match file.read_string().await {
+                    match read_css_file_in_browser(file).await {
                         Ok(raw) => apply_custom_css_from_raw(
                             &import_facade,
                             raw,

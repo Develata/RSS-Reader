@@ -32,6 +32,7 @@ dioxus = { workspace = true, features = ["desktop"] }
 chrono.workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd.workspace = true
+tokio = { workspace = true, features = ["fs"] }
 rssr-infra = { path = "../rssr-infra" }
 webbrowser.workspace = true
 
