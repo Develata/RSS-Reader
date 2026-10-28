@@ -103,6 +103,8 @@ Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面�
 
 Reader 的 `result_lifecycle.rs` 以命令所属文章 ID 和原状态的 `load_generation` 判断整批结果归属，加载、标记和图片本地化共用该规则。session 先同步发布加载开始状态，再捕获归属，保留原任务作用域和发布顺序；reducer 继续分配代次并执行状态转移，拒绝迟到 UI 结果不等于回滚已提交写入。
 
+Settings 的 `save_policy.rs` 准备提交副本、归并最后保存结果，并以提交快照和当前草稿决定回填及未保存提示。session 保留同步 pending gate、页面任务作用域、命令构造和 signal 发布；按整份草稿值比较，主题选择单独判断，不新增编辑代次或业务状态镜像。
+
 不再负责：
 
 - 直接拉 `AppServices::shared()`

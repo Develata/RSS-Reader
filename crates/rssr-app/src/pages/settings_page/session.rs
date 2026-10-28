@@ -1,7 +1,10 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
 
-use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
+use super::{
+    browser::open_repository_url, intent::SettingsPageIntent, save_policy::saved_draft_update,
+    themes::detect_preset_key,
+};
 use crate::{
     status::{set_status_error, set_status_info},
     theme::ThemeController,
@@ -77,15 +80,21 @@ impl SettingsPageSession {
         submitted_draft: &UserSettings,
         submitted_preset: &str,
     ) -> bool {
-        if *self.draft.peek() == *submitted_draft {
+        let update = saved_draft_update(
+            &settings,
+            submitted_draft,
+            submitted_preset,
+            &self.draft.peek(),
+            &self.preset_choice.peek(),
+        );
+        if update.replace_draft {
             self.draft.set(settings.clone());
         }
-        if self.preset_choice.peek().as_str() == submitted_preset {
-            self.preset_choice.set(detect_preset_key(&self.draft.peek().custom_css).to_string());
+        if let Some(preset) = update.preset_choice {
+            self.preset_choice.set(preset.to_string());
         }
-        let has_unsaved_edits = *self.draft.peek() != settings;
         self.theme.settings.set(settings);
-        has_unsaved_edits
+        update.has_unsaved_edits
     }
 
     pub(crate) fn set_status(self, message: impl Into<String>, tone: impl Into<String>) {

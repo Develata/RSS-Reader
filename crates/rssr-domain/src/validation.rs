@@ -66,7 +66,7 @@ pub fn validate_user_settings(settings: &UserSettings) -> crate::Result<()> {
 /// 不试图限制 CSS 能表达什么。自定义 CSS 本来就是用户自己写给自己的应用的。
 ///
 /// 注意本函数**不参与** [`validate_user_settings`]：设置页保存路径上的调用点
-/// （`settings_page/save/session.rs` 与 `theme_apply.rs`）在本函数搬进 domain 之前就已经
+/// （`settings_page/save_policy.rs` 与 `theme_apply.rs`）在本函数搬进 domain 之前就已经
 /// 在调用它了，语义与提示文案保持不变；而把它塞进 `validate_user_settings` 会让它
 /// 顺带作用到所有写设置的路径上，可能突然拒绝用户早已存好的 CSS。
 pub fn validate_custom_css(raw: &str) -> Result<(), &'static str> {

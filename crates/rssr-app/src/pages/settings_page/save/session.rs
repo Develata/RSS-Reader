@@ -1,16 +1,15 @@
 use std::future::Future;
 
-use dioxus::prelude::*;
-use rssr_domain::DEFAULT_ENTRIES_PAGE_SIZE;
-
 use super::state::SettingsPageSaveState;
 use crate::{
     pages::settings_page::{
-        intent::SettingsPageIntent, session::SettingsPageSession, themes::validate_custom_css,
+        save_policy::{SaveCompletion, prepare_save, saved_status_message},
+        session::SettingsPageSession,
     },
     status::{set_status_error, set_status_info},
-    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, execute_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, execute_ui_command},
 };
+use dioxus::prelude::*;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSaveSession {
@@ -39,7 +38,7 @@ impl SettingsPageSaveSession {
 
     fn save_with<F: Future<Output = Vec<UiIntent>> + 'static>(
         self,
-        mut success_message: String,
+        success_message: String,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
         // Every entry point, including theme preset buttons, passes this synchronous gate.
@@ -50,56 +49,48 @@ impl SettingsPageSaveSession {
         }
         let submitted_draft = self.page.draft().peek().clone();
         let submitted_preset = self.page.preset_choice().peek().clone();
-        let mut next = submitted_draft.clone();
-        if let Err(err) = validate_custom_css(&next.custom_css) {
-            set_status_error(
-                self.page.status_signal(),
-                self.page.status_tone_signal(),
-                format!("自定义 CSS 格式无效：{err}"),
-            );
-            return;
-        }
+        let prepared = match prepare_save(submitted_draft.clone(), success_message) {
+            Ok(prepared) => prepared,
+            Err(message) => {
+                set_status_error(
+                    self.page.status_signal(),
+                    self.page.status_tone_signal(),
+                    message,
+                );
+                return;
+            }
+        };
 
         let mut state = self.state;
         state.with_mut(|state| state.pending_save = true);
 
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
-        if next.entries_page_size == 0 {
-            next.entries_page_size = DEFAULT_ENTRIES_PAGE_SIZE;
-            success_message.push_str(&format!(
-                " 文章页每页数量输入为 0，已回退为默认值 {DEFAULT_ENTRIES_PAGE_SIZE}。"
-            ));
-        }
-
-        let saving = execute(SettingsCommand::SaveAppearance { settings: next, success_message });
+        let saving = execute(SettingsCommand::SaveAppearance {
+            settings: prepared.settings,
+            success_message: prepared.success_message,
+        });
         spawn(async move {
             let intents = saving.await;
             state.with_mut(|state| state.pending_save = false);
-            let mut saved_settings = None;
-            let mut status_message = String::new();
-            apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
-                match intent {
-                    SettingsPageIntent::SettingsLoaded(settings) => {
-                        saved_settings = Some(settings);
-                    }
-                    SettingsPageIntent::SetStatus { message, .. } => {
-                        status_message = message;
-                    }
+            match SaveCompletion::collect(
+                intents.into_iter().filter_map(UiIntent::into_settings_page_intent),
+            ) {
+                SaveCompletion::Saved { settings, message } => {
+                    let has_unsaved_edits = self.page.apply_saved_settings(
+                        settings,
+                        &submitted_draft,
+                        &submitted_preset,
+                    );
+                    set_status_info(
+                        status,
+                        status_tone,
+                        saved_status_message(message, has_unsaved_edits),
+                    );
                 }
-            });
-            if let Some(saved_settings) = saved_settings {
-                if self.page.apply_saved_settings(
-                    saved_settings,
-                    &submitted_draft,
-                    &submitted_preset,
-                ) {
-                    status_message.push_str(" 保存期间的新修改仍保留在草稿中，尚未保存。");
+                SaveCompletion::Failed { message } => {
+                    set_status_error(status, status_tone, message);
                 }
-                set_status_info(status, status_tone, status_message);
-            } else {
-                status_message.push_str(" 草稿已保留，可修改后重试。");
-                set_status_error(status, status_tone, status_message);
             }
         });
     }
@@ -110,8 +101,8 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use super::*;
-    use crate::theme::ThemeController;
-    use rssr_domain::{ThemeMode, UserSettings};
+    use crate::{pages::settings_page::intent::SettingsPageIntent, theme::ThemeController};
+    use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
@@ -238,5 +229,119 @@ mod tests {
             assert_eq!(session.page.preset_choice().peek().as_str(), "atlas-sidebar");
             assert!(!session.page.status().contains("尚未保存"));
         });
+    }
+
+    #[test]
+    fn invalid_css_never_starts_a_command_and_pending_gate_precedes_validation() {
+        let (mut dom, session, theme) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().custom_css = "}".into();
+            session.save_with("saved".into(), |_| -> std::future::Ready<Vec<UiIntent>> {
+                panic!("invalid input cannot construct a persistence command")
+            });
+            assert!(!session.snapshot().pending_save);
+            assert_eq!(session.page.status_tone(), "error");
+            assert!(session.page.status().starts_with("自定义 CSS 格式无效："));
+        });
+        let sender = dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().custom_css.clear();
+            let sender = start_save(session);
+            session.page.draft().write().custom_css = "}".into();
+            session.save_with("duplicate".into(), |_| -> std::future::Ready<Vec<UiIntent>> {
+                panic!("pending gate cannot construct a second command")
+            });
+            assert!(session.snapshot().pending_save);
+            assert_eq!(session.page.status_tone(), "info");
+            assert!(session.page.status().starts_with("上一份设置仍在保存"));
+            sender
+        });
+        sender.send(true).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(!session.snapshot().pending_save);
+            assert_eq!(session.page.draft().peek().custom_css, "}");
+            assert_eq!(theme.settings.peek().custom_css, "");
+            assert!(session.page.status().contains("尚未保存"));
+        });
+    }
+
+    #[test]
+    fn command_is_constructed_synchronously_after_pending_and_before_result_publication() {
+        let (mut dom, session, theme) = setup();
+        let called = Cell::new(false);
+        dom.in_scope(ScopeId::APP, || {
+            session.page.draft().write().entries_page_size = 0;
+            session.save_with("saved".into(), |command| {
+                called.set(true);
+                assert!(session.snapshot().pending_save);
+                assert_eq!(session.page.draft().peek().entries_page_size, 0);
+                let SettingsCommand::SaveAppearance { settings, success_message } = command else {
+                    panic!("expected appearance save")
+                };
+                assert_eq!(settings.entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
+                assert_eq!(success_message, "saved 文章页每页数量输入为 0，已回退为默认值 100。");
+                std::future::ready(vec![UiIntent::SettingsPage(
+                    SettingsPageIntent::SettingsLoaded(settings),
+                )])
+            });
+            assert!(called.get(), "executor construction must not be deferred into spawn");
+            assert!(session.snapshot().pending_save);
+            assert_eq!(session.page.draft().peek().entries_page_size, 0);
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(!session.snapshot().pending_save);
+            assert_eq!(session.page.draft().peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
+            assert_eq!(*theme.settings.peek(), *session.page.draft().peek());
+            assert_eq!(session.page.status(), "");
+            assert_eq!(session.page.status_tone(), "info");
+        });
+    }
+
+    #[test]
+    fn completion_projects_global_status_and_ignores_other_page_results() {
+        use crate::pages::reader_page::intent::ReaderPageIntent;
+
+        let (mut dom, session, theme) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            session.save_with("saved".into(), |_| {
+                std::future::ready(vec![
+                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(
+                        UserSettings::default(),
+                    )),
+                    UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
+                        message: "old status".into(),
+                        tone: "info".into(),
+                    }),
+                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(UserSettings {
+                        theme: ThemeMode::Dark,
+                        ..UserSettings::default()
+                    })),
+                    UiIntent::SetStatus { message: "last status".into(), tone: "error".into() },
+                    UiIntent::ReaderPage(ReaderPageIntent::SetStatus {
+                        message: "unrelated".into(),
+                        tone: "error".into(),
+                    }),
+                ])
+            });
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.status(), "last status");
+            assert_eq!(session.page.status_tone(), "info");
+            assert!(!session.snapshot().pending_save);
+        });
+    }
+
+    #[test]
+    fn disposing_the_page_drops_its_pending_save_future() {
+        let (mut dom, session, _) = setup();
+        let sender = dom.in_scope(ScopeId::APP, || start_save(session));
+        dom.render_immediate_to_vec();
+        assert!(!sender.is_closed(), "save is still pending in this page scope");
+        drop(dom);
+        assert!(sender.is_closed(), "page disposal cancels its task, not an external write");
     }
 }
