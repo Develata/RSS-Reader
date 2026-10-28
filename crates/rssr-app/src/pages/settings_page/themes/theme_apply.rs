@@ -8,6 +8,7 @@ pub(super) fn apply_custom_css_from_raw(
     raw: String,
     success_message: impl Into<String>,
 ) {
+    facade.invalidate_theme_import();
     if let Err(err) = validate_custom_css(&raw) {
         facade.set_status(format!("自定义 CSS 格式无效：{err}"), "error");
         return;

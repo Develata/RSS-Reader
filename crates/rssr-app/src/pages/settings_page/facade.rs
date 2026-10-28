@@ -1,9 +1,8 @@
 use super::themes::{detect_preset_key, preset_css, preset_display_name};
-use dioxus::prelude::WritableExt;
 
 use super::{
     save::{SettingsPageSaveSession, SettingsPageSaveState},
-    session::SettingsPageSession,
+    session::{SettingsPageSession, ThemeImportRequest},
     sync::{SettingsPageSyncSession, SettingsPageSyncState},
 };
 use rssr_domain::UserSettings;
@@ -33,10 +32,23 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn update_draft(&self, update: impl FnOnce(&mut UserSettings)) {
-        let mut draft = self.page.draft();
-        let mut next = draft();
-        update(&mut next);
-        draft.set(next);
+        self.page.update_draft(update);
+    }
+
+    pub(crate) fn begin_theme_import(&self) -> ThemeImportRequest {
+        self.page.begin_theme_import()
+    }
+
+    pub(crate) fn invalidate_theme_import(&self) {
+        self.page.invalidate_theme_import();
+    }
+
+    pub(crate) fn is_theme_import_current(&self, request: ThemeImportRequest) -> bool {
+        self.page.is_theme_import_current(request)
+    }
+
+    pub(crate) fn complete_theme_import(&self, request: ThemeImportRequest) -> bool {
+        self.page.complete_theme_import(request)
     }
 
     pub(crate) fn custom_css(&self) -> String {
@@ -56,8 +68,7 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn set_preset_choice(&self, value: impl Into<String>) {
-        let mut preset_choice = self.page.preset_choice();
-        preset_choice.set(value.into());
+        self.page.set_preset_choice(value);
     }
 
     pub(crate) fn status_message(&self) -> String {
@@ -73,6 +84,7 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn apply_selected_theme(&self) {
+        self.invalidate_theme_import();
         let choice = self.preset_choice();
         if choice == "none" {
             self.clear_custom_css("已清空自定义 CSS。");
@@ -127,10 +139,12 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn save(&self) {
+        self.invalidate_theme_import();
         self.save.save();
     }
 
     pub(crate) fn save_with_message(&self, success_message: impl Into<String>) {
+        self.invalidate_theme_import();
         self.save.save_with_message(success_message);
     }
 

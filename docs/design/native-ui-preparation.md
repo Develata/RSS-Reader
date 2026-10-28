@@ -78,7 +78,10 @@
 - Web 字节读取使用已有 `gloo-file` 适配器，错误事件会返回失败，页面任务释放时中止未完成读取。桌面先取得 `rfd::FileHandle`，再经 `tokio::fs` 读取，文件消失/不可读返回错误，不再经过会 panic 的 `rfd::FileHandle::read`。
 - 导出捕获点击时的草稿，不保存设置。桌面成功/取消/失败分别反馈；Web 成功表示已发起下载，不能据此确认用户最终保存到磁盘。Web 的下载节点准备失败不分配 object URL，插入节点失败也会清理已分配的 URL。
 - 原生导入/导出继续归属页面任务，私有 Future 注入点仅用于检验返回/取消契约。离页取消等待，不承诺关闭操作系统对话框，也不回滚已经发生的文件或配置写入；Android 系统保存器仍自行完成回调。
-- 未新增文件操作 busy 状态或请求代次。下一批可核对同一页连续导入和编辑交错的结果归属；本批只验证离页后的旧读取不会污染新页面。
+- `SettingsPageSession` 只持有一个主题导入代次；在打开选择器时同步分配身份。新导入即使取消或失败，也永久取代旧读取。`theme_io.rs` 在校验 CSS、发布提示、修改草稿或保存之前统一检查并消耗身份；过期的成功、失败和取消均不产生页面副作用。
+- 用户修改设置草稿、选择预设、应用/清空主题或显式保存时，使在途导入失效；同值事件和改回原值也不能恢复旧身份。Web 隐藏 input 只暂存本次选择器身份，不持有另一份设置；桌面任务在开始轮询选择器前也检查身份。
+- 加载或保存结果实际替换草稿/预设时同样使导入失效；回填完全相同的值、仅更新提示、以及既有保存保留后续编辑时，不取消新导入。这不改变加载/同步/保存之间原有的结果回填规则。
+- 不新增文件操作 busy 状态，也不取消已接纳的设置保存。若上一份设置正在保存，新文件可成为后续草稿，继续由公共保存 gate 提示尚未提交，并要求显式保存。离页仍由页面任务作用域释放等待。
 
 ## Feeds 查询与刷新提示规则的使用约束
 
@@ -146,6 +149,7 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - Windows Settings 验收从新启动的 Entries 页开始；任何导航、编辑或 fixture 设置准备前，先只读核对数据库的 5000 个连续 ID/固定标题，再对照当前页面已挂载文章的 ID/标题。错误目标直接记为 `status: failed`，不得先修正归档阈值后才检查目标。这个检查不能替代调用方的独立进程、复制数据库和独立 profile 要求；负向复现见 [Settings review 交接](../handoffs/2026-10-28-settings-save-review.md)。
 - Settings 配置交换：`scripts/browser/rssr_settings_sync_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 与离线 fixture，覆盖 1536/390 视口的确认/修改目标/上传清除确认、参数快照、成功导入、404、无效配置和重新确认后重试。自管 `127.0.0.1:9277` WebDAV fixture 保留原订阅集合，仅修改配置中的主题/合法归档阈值；比对全体文章标记及订阅 ID/URL。Web 由 Playwright 转发到回环服务，不覆盖真实站点的 CORS/网络权限；Windows 传 `--cdp <endpoint> --database <isolated-db>`，先校验 5000 篇数据库和当前页面身份及回环来源 URL，再开始操作。调用方负责独立进程/profile/复制库，见 [Settings 同步边界交接](../handoffs/2026-10-28-settings-sync-boundary.md)。启动失败回归可复用 `rssr_feeds_lifecycle_startup_test.cjs <artifact-dir> settings-sync`。
 - 主题文件：`scripts/browser/rssr_theme_files_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 与隔离 fixture，覆盖 1536/390 视口的有效/空/无效 CSS、UTF-8/BOM/CRLF、同名重选、取消、真实下载字节、错误事件、导出失败清理、离页、持久化失败重试及全部文章标记。`--baseline true` 仅用于记录旧版本的已知缺陷，不能当作候选通过；默认模式严格要求修复后的行为。Rust 的文件适配测试使用真实临时文件，页面取消/返回使用 Dioxus 可控 Future，不替代系统选择器实机验收。见 [主题文件交接](../handoffs/2026-10-28-theme-file-contracts.md)。
+- 主题导入归属：同一运行器追加 `--scenario ownership`，覆盖新旧文件乱序、旧读取失败/无效 CSS、草稿改回原值、外观/预设编辑、清空、同值保存、新选择器取消和新文件校验失败；真实 Web Lock 延迟保存，确认已开始的保存仍完成且保留后来导入的草稿。旧基线与候选使用相同脚本，候选不得传 `--baseline true`；证据和未覆盖的原生 GUI 边界见 [主题导入归属交接](../handoffs/2026-10-28-theme-import-ownership.md)。
 - Feeds 查询与提示：`scripts/browser/rssr_feeds_lifecycle_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 构建包和离线 fixture，在 1536/390 视口验证成功/错误提示消退、旧计时器保留删除确认、全局刷新 busy、添加/删除后的统计重取以及全体文章标记保持。Windows 模式传 `--cdp <endpoint> --database <isolated-db> --feed-origin http://127.0.0.1:<port>`，调用方须提供独立进程、profile 和 5000 篇复制 fixture，并预先将复制库中的来源 URL 指向该空闲端口；脚本先只读核对数据库、当前 Entries 页及 URL，再启动自己管理的回环 RSS 服务。乱序快照和离页取消由 Dioxus 可控 Future 测试覆盖；源码/产物身份与平台边界见 [Feeds 查询与提示交接](../handoffs/2026-10-28-feeds-request-lifecycle.md)。
 - Feeds 验收启动失败也必须覆盖旧报告并释放连接；清理错误计入失败，最终报告在清理后写出。`node scripts/browser/rssr_feeds_lifecycle_startup_test.cjs <证据目录>` 使用自建无头 Chrome、临时 SQLite 和回环 HTTP 端点验证缺少目标页、数据库打不开、CDP 拒绝连接三类真实失败，检查非零退出、旧成功报告替换，以及调用方浏览器和数据库保持不变。复现与修复见 [Feeds review 交接](../handoffs/2026-10-28-feeds-lifecycle-review.md)。
 - 来源编辑复用上述 Feeds 运行器，追加 `--scenario edit`，由 `feed_edit_scenarios.cjs` 验证取消、重复地址失败保留草稿、修正后重试、重开回填、恢复原名、确认状态清除；两视口比对所有文章标记及来源 ID/URL/名称。Web 以真实 Web Lock 延迟保存，检查禁用、重复 submit、焦点移出后的 Esc；Windows 仍要求隔离副本，仅覆盖正常保存流程，忙碌与乱序边界另由纯 Rust / Dioxus 测试覆盖。

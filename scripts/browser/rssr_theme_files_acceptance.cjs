@@ -23,12 +23,14 @@ async function eventually(read, expected, label) {
 (async () => {
   const output = path.resolve(options['artifact-dir'] || 'target/theme-files-acceptance');
   const baseline = options.baseline === 'true';
-  const report = { status: 'running', baseline, results: [], pageErrors: [], consoleErrors: [] };
+  const report = { status: 'running', baseline, scenario: options.scenario || 'files', results: [], pageErrors: [], consoleErrors: [] };
   let browser, page;
   try {
     await fs.mkdir(output, { recursive: true });
     await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
+    assert.ok(['files', 'ownership'].includes(report.scenario));
     report.scriptSha256 = crypto.createHash('sha256').update(await fs.readFile(__filename)).digest('hex');
+    if (report.scenario === 'ownership') report.scenarioSha256 = crypto.createHash('sha256').update(await fs.readFile(path.join(__dirname, 'theme_import_scenarios.cjs'))).digest('hex');
     report.publicRoot = path.resolve(__dirname, '../..', process.env.PUBLIC_DIR || 'target/dx/rssr-app/release/web/public');
     await fs.access(path.join(report.publicRoot, 'index.html'));
     browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -111,6 +113,12 @@ async function eventually(read, expected, label) {
       const original = await settings(), originalFlags = await flags();
       const evidence = { width, pass: false }; report.results.push(evidence);
       await shot('initial-' + width);
+      if (report.scenario === 'ownership') {
+        evidence.cases = await require('./theme_import_scenarios.cjs')({ page, baseline, pick, settings, status, feedback, checkSaved, ready, shot, width });
+        assert.deepEqual(await flags(), originalFlags, 'all article flags preserved');
+        evidence.pass = true; evidence.articleCount = originalFlags.length;
+        console.log('PASS theme-import-ownership-' + width); continue;
+      }
       await pick(null); assert.deepEqual(await feedback(), []); await checkSaved(original);
       await pick(Buffer.from('body {')); await status('自定义 CSS 格式无效', 'error');
       assert.equal(await page.locator(field('custom-css')).inputValue(), original.custom_css); await checkSaved(original);

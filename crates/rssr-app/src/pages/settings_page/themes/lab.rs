@@ -8,11 +8,15 @@ use super::theme_io::import_css_file;
 
 #[cfg(target_arch = "wasm32")]
 use super::theme_file_io::{read_css_file_in_browser, trigger_css_file_input_in_browser};
+#[cfg(target_arch = "wasm32")]
+use super::theme_io::complete_css_import;
 
 #[component]
 pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
     #[cfg(target_arch = "wasm32")]
     let import_file_facade = facade.clone();
+    #[cfg(target_arch = "wasm32")]
+    let mut picker_request = use_signal(|| None);
     let import_trigger_facade = facade.clone();
     let input_facade = facade.clone();
     let apply_facade = facade.clone();
@@ -27,21 +31,17 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
             r#type: "file",
             accept: ".css,text/css",
             onchange: move |event| {
+                let Some(request) = picker_request.write().take() else { return; };
                 let Some(file) = event.files().into_iter().next() else {
+                    import_file_facade.complete_theme_import(request);
                     return;
                 };
+                if !import_file_facade.is_theme_import_current(request) { return; }
                 let import_facade = import_file_facade.clone();
 
                 spawn(async move {
-                    match read_css_file_in_browser(file).await {
-                        Ok(raw) => apply_custom_css_from_raw(
-                            &import_facade,
-                            raw,
-                            "已从文件载入并应用自定义 CSS。",
-                        ),
-                        Err(err) => import_facade
-                            .set_status(format!("载入 CSS 文件失败：{err}"), "error"),
-                    }
+                    let result = read_css_file_in_browser(file).await.map(Some);
+                    complete_css_import(&import_facade, request, result);
                 });
             },
         }
@@ -57,9 +57,11 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
             "data-variant": "secondary",
             "data-action": "import-custom-css-file",
             onclick: move |_| {
+                let request = import_trigger_facade.begin_theme_import();
+                picker_request.set(Some(request));
                 if let Err(err) = trigger_css_file_input_in_browser() {
-                    import_trigger_facade
-                        .set_status(format!("载入 CSS 文件失败：{err}"), "error");
+                    picker_request.set(None);
+                    complete_css_import(&import_trigger_facade, request, Err(err));
                 }
             },
             "导入主题文件"

@@ -3,7 +3,7 @@ use dioxus::prelude::spawn;
 #[cfg(not(target_arch = "wasm32"))]
 use std::future::Future;
 
-use crate::pages::settings_page::facade::SettingsPageFacade;
+use crate::pages::settings_page::{facade::SettingsPageFacade, session::ThemeImportRequest};
 
 #[cfg(not(target_arch = "wasm32"))]
 use super::theme_file_io::{pick_css_file_contents, save_css_file};
@@ -21,18 +21,33 @@ fn import_css_file_with(
     facade: &SettingsPageFacade,
     read: impl Future<Output = anyhow::Result<Option<String>>> + 'static,
 ) {
-    use super::theme_apply::apply_custom_css_from_raw;
-
+    let request = facade.begin_theme_import();
     let facade = facade.clone();
     spawn(async move {
-        match read.await {
-            Ok(Some(raw)) => {
-                apply_custom_css_from_raw(&facade, raw, "已从文件载入并应用自定义 CSS。")
-            }
-            Ok(None) => facade.set_status("已取消载入 CSS 文件。", "info"),
-            Err(err) => facade.set_status(format!("载入 CSS 文件失败：{err}"), "error"),
+        if !facade.is_theme_import_current(request) {
+            return;
         }
+        complete_css_import(&facade, request, read.await);
     });
+}
+
+pub(super) fn complete_css_import(
+    facade: &SettingsPageFacade,
+    request: ThemeImportRequest,
+    result: anyhow::Result<Option<String>>,
+) {
+    if !facade.complete_theme_import(request) {
+        return;
+    }
+    match result {
+        Ok(Some(raw)) => super::theme_apply::apply_custom_css_from_raw(
+            facade,
+            raw,
+            "已从文件载入并应用自定义 CSS。",
+        ),
+        Ok(None) => facade.set_status("已取消载入 CSS 文件。", "info"),
+        Err(err) => facade.set_status(format!("载入 CSS 文件失败：{err}"), "error"),
+    }
 }
 
 pub(super) fn export_css_file(raw: String, facade: &SettingsPageFacade) {
@@ -113,29 +128,88 @@ mod tests {
     }
 
     #[test]
-    fn cancelled_or_failed_import_preserves_later_draft_and_applied_theme() {
+    fn import_feedback_requires_current_request_and_preserves_applied_theme() {
         for (result, message, tone) in [
             (Ok(None), "已取消载入 CSS 文件。", "info"),
             (Err(anyhow::anyhow!("file vanished")), "载入 CSS 文件失败：file vanished", "error"),
             (Ok(Some("body {".into())), "自定义 CSS 格式无效：", "error"),
         ] {
-            let (mut dom, facade, theme) = setup();
-            let (sender, receiver) = oneshot::channel();
-            dom.in_scope(ScopeId::APP, || {
-                import_css_file_with(&facade, async move { receiver.await.unwrap() });
-                facade.set_custom_css("/* edited while choosing */".into());
-            });
-            dom.render_immediate_to_vec();
-            sender.send(result).unwrap();
-            dom.render_immediate_to_vec();
-            dom.in_scope(ScopeId::APP, || {
-                assert_eq!(facade.custom_css(), "/* edited while choosing */");
-                assert_eq!(theme.settings.peek().custom_css, "/* persisted */");
-                assert!(facade.status_message().starts_with(message));
-                assert_eq!(facade.status_tone(), tone);
-                assert!(!facade.is_save_pending());
-            });
+            for edited in [false, true] {
+                let (mut dom, facade, theme) = setup();
+                let (sender, receiver) = oneshot::channel();
+                dom.in_scope(ScopeId::APP, || {
+                    import_css_file_with(&facade, async move { receiver.await.unwrap() });
+                });
+                dom.render_immediate_to_vec();
+                if edited {
+                    dom.in_scope(ScopeId::APP, || {
+                        facade.set_custom_css("/* later draft */".into());
+                        facade.set_status("new feedback", "info");
+                    });
+                }
+                // Recreate the result because anyhow::Error is intentionally not Clone.
+                let outcome = match &result {
+                    Ok(value) => Ok(value.clone()),
+                    Err(error) => Err(anyhow::anyhow!(error.to_string())),
+                };
+                sender.send(outcome).unwrap();
+                dom.render_immediate_to_vec();
+                dom.in_scope(ScopeId::APP, || {
+                    assert_eq!(
+                        facade.custom_css(),
+                        if edited { "/* later draft */" } else { "/* persisted */" }
+                    );
+                    assert_eq!(theme.settings.peek().custom_css, "/* persisted */");
+                    assert!(facade.status_message().starts_with(if edited {
+                        "new feedback"
+                    } else {
+                        message
+                    }));
+                    assert_eq!(facade.status_tone(), if edited { "info" } else { tone });
+                    assert!(!facade.is_save_pending());
+                });
+            }
         }
+    }
+
+    #[test]
+    fn newer_cancelled_import_permanently_rejects_an_older_failure() {
+        let (mut dom, facade, _) = setup();
+        let (old_sender, old_receiver) = oneshot::channel();
+        let (new_sender, new_receiver) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            import_css_file_with(&facade, async move { old_receiver.await.unwrap() })
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            import_css_file_with(&facade, async move { new_receiver.await.unwrap() })
+        });
+        dom.render_immediate_to_vec();
+        new_sender.send(Ok(None)).unwrap();
+        dom.render_immediate_to_vec();
+        old_sender.send(Err(anyhow::anyhow!("obsolete error"))).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(facade.status_message(), "已取消载入 CSS 文件。");
+            assert_eq!(facade.status_tone(), "info");
+        });
+    }
+
+    #[test]
+    fn superseded_import_does_not_poll_the_picker_future() {
+        use std::{cell::Cell, rc::Rc};
+        let (mut dom, facade, _) = setup();
+        let polled = Rc::new(Cell::new(false));
+        let observed = polled.clone();
+        dom.in_scope(ScopeId::APP, || {
+            import_css_file_with(&facade, async move {
+                observed.set(true);
+                Ok(None)
+            });
+            facade.set_preset_choice("newsprint");
+        });
+        dom.render_immediate_to_vec();
+        assert!(!polled.get());
     }
 
     #[test]
