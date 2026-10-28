@@ -1,0 +1,84 @@
+{
+  "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+  "windows": {
+    "binaries": [
+      {
+        "name": "RSS-Reader.exe",
+        "sha256": "673a43af3afcb103487f781289e634bd86728253648d7eeed2226180bb9d4b8b",
+        "fileVersion": "0.2.1",
+        "productVersion": "0.2.1",
+        "authenticode": "NotSigned"
+      },
+      {
+        "name": "rssr-cli.exe",
+        "sha256": "59fefd0471dcdd68ae1ca558734d6871105615e1577a832322fcd552bf0e3f70",
+        "fileVersion": null,
+        "productVersion": null,
+        "authenticode": "NotSigned"
+      }
+    ],
+    "cliVersion": "rssr 0.2.1",
+    "guiLaunchAndGracefulClose": true,
+    "databaseComparison": "windows-database.json",
+    "fullInteractionRerun": false
+  },
+  "android": {
+    "serial": "emulator-5580",
+    "apiLevel": "36",
+    "androidRelease": "16",
+    "abis": "x86_64,arm64-v8a",
+    "systemImage": "system-images;android-36.1;google_apis;x86_64",
+    "package": "io.github.develata.rssreader",
+    "versionBefore": "0.2.0",
+    "versionCodeBefore": 200,
+    "versionAfter": "0.2.1",
+    "versionCodeAfter": 201,
+    "appId": 10226,
+    "firstInstallTimePreserved": true,
+    "installedApkSha256": "6dd2855780b25f9e3425a831c4dba3d78cc0c61977643ca5a010a06f0f1d5bc5",
+    "releaseCertificateSha256": "4ed80b39e18b306e7072cbe258c7adf99ea9223d9026a81f9e78a6fb1f95dc17",
+    "formalApkReplacementWithoutUninstall": true,
+    "freshPersistentDirectoryInitialization": true,
+    "databaseFixture": "Windows v0.2.0 single-library fixture, injected into an initialized persistent directory; not real legacy Android relocation",
+    "uninitializedFixtureGuardObserved": true,
+    "limitations": [
+      "ARM64 code runs through the emulator native bridge",
+      "No real-device signed-package upgrade performed",
+      "No real old Android library relocation certified",
+      "The old fixture contains no custom settings rows"
+    ]
+  },
+  "androidDatabaseComparison": "android-database.json",
+  "linux": {
+    "cliVersion": "rssr 0.2.1",
+    "debMetadata": "Package: rssr-app\nVersion: 0.2.1\nArchitecture: amd64\nDepends: libc6 (>= 2.39), libcairo2 (>= 1.10.0), libgcc-s1 (>= 4.2), libgdk-pixbuf-2.0-0 (>= 2.36.9), libglib2.0-0t64 (>= 2.66.0), libgtk-3-0t64 (>= 3.21.4), libjavascriptcoregtk-4.1-0, libsoup-3.0-0 (>= 3.0.3), libssl3t64 (>= 3.0.0), libwayland-client0 (>= 1.11.0), libwebkit2gtk-4.1-0 (>= 2.39.91), libxdo3 (>= 1:3.20130104.1)\n",
+    "guiInstalledLocally": false
+  },
+  "aabSignature": {
+    "jarsignerExitCode": 0,
+    "certificateSha256": "4ed80b39e18b306e7072cbe258c7adf99ea9223d9026a81f9e78a6fb1f95dc17",
+    "matchesPreviousRelease": true,
+    "warningsAlsoObservedOnV020": [
+      "self-signed certificate and untrusted chain",
+      "no timestamp",
+      "POSIX attributes ignored by signing",
+      "manifest appears last; JarInputStream interpretation differs"
+    ]
+  },
+  "rawEvidenceRoot": "E:\\gitclone\\RSS-Reader\\target\\release-v0.2.1-20261028",
+  "androidScreenshot": "android-v021-fixture.png",
+  "androidScreenshotVisuallyInspected": true,
+  "testEnvironment": "Isolated emulator and Windows fixture; existing Xiaomi test app data was not modified. Owned Windows instance closed normally; owned emulator stopped.",
+  "aabManifest": {
+    "tool": "bundletool 1.17.1 dump manifest --module=base",
+    "exitCode": 0,
+    "package": "io.github.develata.rssreader",
+    "versionName": "0.2.1",
+    "versionCode": 201,
+    "aabSha256": "86280a9e76641750fdc22a0b171865be557f1565a321cfa6920e0dde0c40b098",
+    "dumpFile": "android-aab-manifest.xml",
+    "rawDumpSha256": "6b50293c5a388285cc280fe520632dc21a1b9d99beeb0d2e20259f6637406a33",
+    "dumpNormalization": "Trailing whitespace removed and line endings normalized to LF; XML values unchanged",
+    "dumpSha256": "9cdfc585040498d0332127be45806185bc18587e58ffd737287ad4e58db9e325"
+  }
+}

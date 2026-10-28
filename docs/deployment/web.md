@@ -1,6 +1,6 @@
 # Web / Docker 部署
 
-本文对应已发布的 [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)。正式 Web 页面由匹配构建的 `rssr-web` 托管，经同源 `/api/v1` 使用服务器上的 `LocalBackend`。单独托管正式 Web 静态文件不能提供可用的阅读器；仅 [Pages 演示](./github-pages.md) 可独立静态托管。
+本文对应已发布的 [v0.2.1](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1)。正式 Web 页面由匹配构建的 `rssr-web` 托管，经同源 `/api/v1` 使用服务器上的 `LocalBackend`。单独托管正式 Web 静态文件不能提供可用的阅读器；仅 [Pages 演示](./github-pages.md) 可独立静态托管。
 
 服务器的数据目录（容器内 `/data`）保存 `library.sqlite3`（订阅、文章、正文、已读/收藏与设置）、`auth.sqlite3`（凭据与会话）和 `outbound.json`（出站策略）。多个浏览器与同数据目录的 CLI 直接访问同一资料库；浏览器不保存文章副本。浏览器仍可保存设备偏好，以及重新加载或登录前的本标签页草稿（`sessionStorage`）。
 
@@ -21,7 +21,7 @@ v0.2 发布流程按宿主平台打包同一次构建的服务和页面：
 | macOS Intel | `rssr-web-macos-x86_64.tar.gz` |
 | macOS Apple Silicon | `rssr-web-macos-aarch64.tar.gz` |
 
-每个包包含 `rssr-web`（Windows 为 `.exe`）、`public/` 和记录构建标识及文件 SHA-256 的 `build.json`。先解压整个包，在包目录里启动服务，不能只替换页面或只复制程序。v0.2 不再发布单独的 `RSS-Reader-web.tar.gz`；Pages 演示仍独立构建与部署。上述四个包均可从 [v0.2.0 Release](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0) 下载。
+每个包包含 `rssr-web`（Windows 为 `.exe`）、`public/` 和记录构建标识及文件 SHA-256 的 `build.json`。先解压整个包，在包目录里启动服务，不能只替换页面或只复制程序。v0.2 不再发布单独的 `RSS-Reader-web.tar.gz`；Pages 演示仍独立构建与部署。上述四个包均可从 [v0.2.1 Release](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1) 下载。
 
 Linux / macOS 本机示例（Windows 可在 PowerShell 中设置同名 `$env:` 变量后运行 `.\rssr-web.exe`）：
 
@@ -68,7 +68,7 @@ docker compose up -d
 printf '%s\n' '新的强密码' | docker compose exec -T rss-reader rssr-web passwd
 ```
 
-需要固定本版时，设置 `RSS_READER_IMAGE=ghcr.io/develata/rss-reader:v0.2.0`。该镜像复用 v0.2.0 的已验证 Linux 服务包；`latest` 会随后续发布变化。公开附件与镜像的本次核对结果见 [发布记录](../handoffs/2026-10-23-v0.2.0-release.md)。
+需要固定本版时，设置 `RSS_READER_IMAGE=ghcr.io/develata/rss-reader:v0.2.1`。该镜像复用 v0.2.1 的已验证 Linux 服务包；`latest` 会随主线镜像构建或后续发布变化。公开附件与镜像的本次核对结果见 [发布记录](../handoffs/2026-10-28-v0.2.1-release.md)。从 v0.2.0 升级服务器前应停止服务并备份资料库；回退到旧程序时需恢复升级前备份。
 
 ## 会话与退出登录
 
