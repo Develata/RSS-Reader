@@ -1,6 +1,6 @@
 # 原生界面前置模块边界
 
-核对日期：2026-10-27。本文件记录当前阅读分支已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
+核对日期：2026-10-28。本文件记录 main `a9608056` 已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
 
 ## 已有可独立测试的 Rust 规则
 
@@ -68,7 +68,7 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - 纯状态与策略：`cargo test -p rssr-app --locked`。
 - 初始化/查询适配：`scripts/browser/rssr_entries_lifecycle_acceptance.cjs`，通过离线 fixture 覆盖选择、筛选、写入失败/重试、偏好重开、查询稳定性，以及桌面/小视口搜索、刷新和阅读返回。基线和候选分别指定 `ARTIFACT_DIR`，构建目录可由 `PUBLIC_DIR` 指定。
 - 目录实际行为：`scripts/browser/rssr_small_viewport_assertions.mjs --directory-only true`，包含日期/来源/文章层级、跨页、手动/跟随、显隐和选择保持。
-- 不启动预览服务的回归：先构建 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。Playwright 在隔离无头 Chrome 内提供构建文件与测试数据；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样可离线回归旧目录通道。
+- 隔离 fixture 回归：先构建正式 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。脚本启动真实同源服务器和隔离 SQLite 资料库，由无头 Chrome 操作当前构建，不依赖用户的线上订阅；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样使用隔离 fixture 核对旧目录通道。
 - `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。
 - 阅读位置及快捷键：`scripts/browser/rssr_reading_position_acceptance.cjs`，包含返回、切文、M/F、修饰键/IME、正文测量次数。
 - 具体源码身份、命令和平台范围见 [2026-10-26 交接](../handoffs/2026-10-26-native-ui-preparation.md)。编译、浏览器运行、原生设备运行和性能结论分别记录。

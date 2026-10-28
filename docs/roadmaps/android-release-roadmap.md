@@ -1,17 +1,17 @@
 # Android 构建与验收状态
 
-这份文档记录 Android 交付链已经做到哪里，以及仍需真机确认什么。历史分阶段工作见 [`2026-07-27-android-release-signing.md`](../handoffs/2026-07-27-android-release-signing.md)；当前发布证据见 [`v0.1.20` 交接记录](../handoffs/2026-09-26-v0.1.20-release.md)。
+这份文档记录 Android 交付链已经做到哪里，以及仍需真机确认什么。历史签名工作见 [2026-07-27 记录](../handoffs/archive/2026-07/2026-07-27-android-release-signing.md)；当前发布证据见 [v0.2.0 交接记录](../handoffs/2026-10-23-v0.2.0-release.md)。主线的新改动与正式发布分开记录，见[维护状态](../current-status.md)。
 
-## 当前源码状态（2026-09-30）
+## 当前源码状态（2026-10-28，main `a9608056`）
 
 | 能力 | 状态 | 证据边界 |
 | --- | --- | --- |
 | 共享 Rust 订阅 / 阅读逻辑 | 已实现 | UI、application 与其他端复用；平台差异留在 adapter / host capability |
 | Android debug 构建与自动化 smoke | 已接入 | CI 检查 ARM64 构建、APK 资源、ABI 与版本信息 |
-| 正式签名 APK / AAB | 已发布 | 仓库最近发布记录 `v0.1.20` 含 `RSS-Reader-android-arm64-v8a-release.apk` 和 `.aab`；签名和 tag 版本在发布 workflow 验证 |
-| 真机交互 | 待验收 | 构建与浏览器触摸模拟不能证明 Android 系统返回、长按选择、下拉刷新或图片缩放 |
+| 正式签名 APK / AAB | v0.2.0 已发布 | Release 含 `RSS-Reader-android-arm64-v8a-release.apk` 和 `.aab`；来源、证书与版本边界见发布交接 |
+| 真机交互 | 已有专项结果，当前候选仍须复验 | 2026-10-25 / 26 的结果只适用于记录中的源码、设备与场景；构建和浏览器触摸模拟不能替代实际操作 |
 
-2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/2026-10-25-android-back-and-persistent-storage.md)。这部分结果不替代下述其他设备/正式签名与功能验收。
+2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/2026-10-25-android-back-and-persistent-storage.md)。2026-10-26 又完成目录和阅读返回专项，见[原生目录记录](../handoffs/2026-10-26-native-directory-validation.md)。这些结果不替代最新候选、其他设备或正式签名包的验收。
 
 打 tag 的发布流程要求 Android signing secrets 齐全，否则 `build-android` 失败；手动 workflow dispatch 可用于不带长期签名的 debug 验证。正式签名包与临时 debug 签名包不能互相覆盖安装。卸载会清除本地订阅、文章和图片缓存；卸载前先导出配置，但配置导出本身不包含文章库和已读状态。`versionCode` / `versionName` 从发布 tag 派生，不读取 workspace `Cargo.toml` 的版本号。
 

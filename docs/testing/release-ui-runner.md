@@ -229,9 +229,9 @@ Chrome 154.0.8037.93，Python 3.14.7。仓库根目录保持 `E:/gitclone/RSS-Re
 外部 feed 的 DNS/HTTPS 限制仍保留为单独未通过项，不以本地 fixture 代替外部可达性证据。
 Linux/Windows CI 及最终提交状态以交接记录和 PR 为准；不能把本机 Windows 结果写作
 Unix 信号验证。完整交接见
-[2026-10-03-release-ui-runner-rust.md](../handoffs/2026-10-03-release-ui-runner-rust.md)。
+[2026-10-03-release-ui-runner-rust.md](../handoffs/archive/2026-10/2026-10-03-release-ui-runner-rust.md)。
 后续审阅修复及对应复现证据见
-[2026-10-03-release-ui-runner-review-fixes.md](../handoffs/2026-10-03-release-ui-runner-review-fixes.md)。
+[2026-10-03-release-ui-runner-review-fixes.md](../handoffs/archive/2026-10/2026-10-03-release-ui-runner-review-fixes.md)。
 
 ## web-auth 生命周期迁移（第一小步，2026-10-05）
 
@@ -277,12 +277,12 @@ readiness 日志 `rssr-web-readiness.log` 和断言日志
 Cargo JSON。后续 HTTP 迁移应在成本与语义验证后移除这一单份 adapter，
 不得长期维护两套断言。新增测试使用 Python 标准库本地 HTTP peer，
 它属于验收夹具，不进入产品运行时。迁移测量、平台边界和 CI 结果见
-[交接记录](../handoffs/2026-10-05-web-auth-owned-process.md)。
+[交接记录](../handoffs/archive/2026-10/2026-10-05-web-auth-owned-process.md)。
 
 2026-10-06 的清理等待及 Windows 文件路径阻塞修复、固定输入复测与最终 CI
-状态见 [后续交接](../handoffs/2026-10-06-web-auth-blocker-fixes.md)。
+状态见 [后续交接](../handoffs/archive/2026-10/2026-10-06-web-auth-blocker-fixes.md)。
 2026-10-06 的退出观察延迟复测后，readiness 使用有限的 5/10/20 ms
 早期 sleep，随后恢复 40 ms；Unix stop 使用 5/10 ms 后恢复 25 ms。
 完整 1.5 秒进程组宽限与 ESRCH 提前结束条件保持。固定版本的分段归因、
 30 组 A/B/C 耗时/CPU 结果和 Windows 补验见
-[轮询优化交接](../handoffs/2026-10-06-web-auth-polling-latency.md)。
+[轮询优化交接](../handoffs/archive/2026-10/2026-10-06-web-auth-polling-latency.md)。

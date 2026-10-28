@@ -94,7 +94,7 @@ RSS_READER_WEB_PASSWORD_HASH=请填入Argon2哈希
 RSS_READER_WEB_TRUST_PROXY_HEADERS=false
 ```
 
-页面和服务器必须来自同一构建；服务器会拒绝构建标识不匹配的写请求。镜像和发布包均注入明确的构建标识；旧页面对新服务的验证结果以 [C6 记录](../handoffs/2026-10-22-c6-web-distribution.md) 为准。
+页面和服务器必须来自同一构建；服务器会拒绝构建标识不匹配的写请求。镜像和发布包均注入明确的构建标识；旧页面对新服务的验证结果以 [C6 记录](../handoffs/archive/2026-10/2026-10-22-c6-web-distribution.md) 为准。
 
 `production` 要求 `RSS_READER_WEB_PUBLIC_ORIGIN` 是 https 地址，cookie 随之带 `Secure`。反向代理要原样转发浏览器的 `Origin`、`Cookie`、`X-RSSR-Build`、`X-RSSR-CSRF` 请求头和 `Set-Cookie` 响应头。页面与 `/api/v1` 使用同一 origin；不要重定向 `/api` 写请求，也不要把 API 的 JSON 错误改成登录 HTML。`RSS_READER_WEB_TRUST_PROXY_HEADERS` 仅在可信反向代理正确覆盖转发头时启用；默认保持 `false`。
 

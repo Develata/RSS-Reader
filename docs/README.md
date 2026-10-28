@@ -1,120 +1,38 @@
 # 文档索引
 
-根目录 [README.md](../README.md) 面向首次使用；这里按部署、开发和验收任务提供下一步入口。历史记录说明当时做过什么，当前行为以源码、发布说明及长期文档为准。
+根目录 [README](../README.md) 面向首次使用；这里提供维护、设计和验收入口。核对日期：2026-10-28，代码基线为 main `a9608056`。已发布版本为 [v0.2.0](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0)；合并后的阅读工作区改进尚未发布为新版本。
 
-本轮 Web 文档核对日期：2026-10-22，源码基线 `b417653`（v0.2 C4c）。正式 Web 使用服务器资料库；Pages 演示仍使用浏览器样例库。当前使用与接口说明持续维护；带日期的审查、handoff 和已关闭 spec 保留历史上下文，不代表最新版本已完成相同验收，也不表示 v0.2 已发布。
+正式 Web 使用服务器上的 SQLite 资料库；Pages 使用每次加载重建的内存 SQLite 和预抓取 RSS 快照。当前状态与验证边界见[维护状态](./current-status.md)，带日期的记录只证明其指定版本和场景。
 
-## 从哪里开始
+## 按任务进入
 
-如果你要直接使用，先看[根 README 的 30 秒开始阅读](../README.md#30-秒开始阅读)和[最新 Release](https://github.com/Develata/RSS-Reader/releases/latest)。英文入口是 [README.en.md](./README.en.md)。
+| 要做的事 | 先读 | 需要时继续读 |
+| --- | --- | --- |
+| 使用、升级、备份 | [使用指南](./user-guide.md) | [英文入口](./README.en.md)、[原生旧库升级](./testing/native-upgrade-verification.md) |
+| 部署服务器 / Docker | [Web 部署](./deployment/web.md) | [服务包与容器验收](./testing/web-distribution.md) |
+| 修改业务或界面 | [功能边界](./design/functional-design-philosophy.md) | [设计索引](./design/README.md)、[前端命令契约](./design/frontend-command-reference.md) |
+| 修改主题或同步 Penpot | [主题选择器](./design/theme-author-selector-reference.md) | [Penpot 代码基准](./design/penpot-code-baseline.md) |
+| 检查主线 / 准备发布 | [测试索引](./testing/README.md) | [主线矩阵](./testing/mainline-validation-matrix.md)、[发布 UI 清单](./testing/release-ui-regression-checklist.md) |
+| 构建或验收 Android | [Android 状态](./roadmaps/android-release-roadmap.md) | [原生阅读验收](./testing/native-reading-baseline.md) |
+| 接手当前工作 | [维护状态](./current-status.md) | [近期交接](./handoffs/README.md) |
+| 追溯旧决定或旧实现 | [历史交接索引](./handoffs/archive/README.md) | [2026-04 总览](./agent-handoff.md)、[2026-10 审计](./engineering-audit-2026-10.md) |
 
-如果你要部署或开发，按任务进入：
+## 文档职责
 
-- 部署带登录、同源 API 与服务器资料库的 Web 版：[Web / Docker 部署](./deployment/web.md)。
-- 从旧版 Web 升级（文章不迁移、正式 Web 不再离线可读）：[升级说明](./deployment/web.md#从-v01-升级)。
-- 查询订阅、阅读、主题和备份细节：[使用指南](./user-guide.md)。
-- 构建 Android 或了解实机验收缺口：[Android 构建与验收状态](./roadmaps/android-release-roadmap.md)。
-- 修改业务或 UI：[功能设计哲学](./design/functional-design-philosophy.md)、[前端命令与界面接口清单](./design/frontend-command-reference.md)。
-- 运行 CI 同等检查：[主线验证矩阵](./testing/mainline-validation-matrix.md)；准备发布 UI 验收：[测试与回归索引](./testing/README.md)。
-- 提交贡献：[贡献说明](../CONTRIBUTING.md)；追溯最近实现：[Agent 交接记录](./handoffs/README.md)。
+- `design/`：现行行为、架构和公开接口；历史实施计划在索引中单列，不作为待办列表。
+- `deployment/`、`user-guide.md`：可实际执行的使用、升级与部署说明。
+- `testing/`：持续维护的验证入口、覆盖矩阵和环境边界；`evidence/`、`baselines/` 保存指定版本的证据。
+- `roadmaps/`：尚未完成的平台交付和验收范围。
+- `handoffs/`：近期执行记录；v0.2.0 发布前的记录按月份放入 `handoffs/archive/`。归档不表示其中所有风险已消失。
+- `reviews/` 和带日期的审计：当时的发现，是否仍成立须对照当前代码复核。
 
-如果你已经知道自己要做什么，可以直接走下面的分流：
+## 维护规则
 
-- 想追溯 2026-04 架构审查及当时的 application 收敛计划：
-  - [架构审查报告（2026-04）](./architecture-review-2026-04.md)
-  - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
-- 想改主题或让 AI 生成 CSS：
-  - [主题作者选择器参考](./design/theme-author-selector-reference.md)
-- 想理解当前产品边界、缓存策略和样式体系：
-  - [功能设计哲学](./design/functional-design-philosophy.md)
-- 想确认当前前端命令面和稳定界面接口：
-  - [前端命令与界面接口清单](./design/frontend-command-reference.md)
-- 想理解 Headless Active Interface 的长期设计方向：
-  - [Headless Active Interface 设计目标](./design/headless-active-interface.md)
-- 想核对已完成的 application 收敛与后续边界：
-  - [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
-- 想准备 Android 发包或验收：
-  - [Android 构建与验收状态](./roadmaps/android-release-roadmap.md)
-- 想跑一轮人工验证：
-  - [手工回归测试清单](./testing/manual-regression.md)
-- 想提交代码或补文档：
-  - [贡献说明](../CONTRIBUTING.md)
+1. 改变用户行为、命令、存储或平台边界时，同步修改对应长期文档；仅写 handoff 不算完成文档维护。
+2. 当前状态只在[维护状态](./current-status.md)汇总。必须区分主线提交、发布 tag、构建成功和实际交互验收。
+3. 每次交付按[交接模板](./handoffs/TEMPLATE.md)记录命令、源码身份、结果、未覆盖项及提交状态；不要把旧的“通过”复制成新版本结论。
+4. 归档保留原始事实和证据，修复仓库内引用；已退役入口链接到明确的历史版本，不能改指到语义不同的新命令。
+5. 不存在或无法回读的证据明确标记“未找到 / 未核对”，不补造结果。外部证据路径、Penpot 版本和下载文件都要注明验证边界。
+6. 修改文档后检查相对链接与 `git diff --check`。文档审计不代替产品测试；发布前仍按覆盖矩阵补足本次变更涉及的场景。
 
-## 文档分区
-
-### 使用与部署
-
-- [使用指南](./user-guide.md)：日常操作与数据备份边界。
-- [Web / Docker 部署](./deployment/web.md)：已发布镜像、认证状态、生产 HTTPS 与本地部署态验证。
-- [Android 构建与验收状态](./roadmaps/android-release-roadmap.md)：构建命令、已发布签名包与未完成的真机路径。
-
-### 设计文档
-
-- [设计文档索引](./design/README.md)
-- [功能设计哲学](./design/functional-design-philosophy.md)
-- [Headless Active Interface 设计目标](./design/headless-active-interface.md)
-- [前端命令与界面接口清单](./design/frontend-command-reference.md)
-- [主题作者选择器参考](./design/theme-author-selector-reference.md)
-- [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
-
-这组文档主要回答：
-
-- 行为与样式边界怎么划分
-- 产品功能边界为什么只围绕订阅、阅读、基本设置和基础配置交换
-- 当前前端命令面和界面接口有哪些稳定约束
-- 前端如何保持语义化 UI 与 headless 命令面一致
-- 哪些 selector / hook 可以长期依赖
-- 怎样在不碰 Rust 逻辑的前提下自定义主题
-- 怎样把这套接口直接交给 AI 生成 CSS
-
-### 架构审查与收敛
-
-- [架构审查报告（2026-04）](./architecture-review-2026-04.md)
-- [工程审计报告（2026-10）](./engineering-audit-2026-10.md)
-- [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md)
-- [Agent 交接记录](./handoffs/README.md)
-
-这组文档主要回答：
-
-- 2026-04 这轮架构审查最初指出了哪些边界失真
-- 2026-10 审计在 v0.1.23 基线上发现了哪些一致性、抓取稳健性、Web 存储与构建可复现性问题，哪些已有确定性红测试
-- 哪些 application façade 已经删除，哪些 use case 明确保留
-- 当前 application naming baseline 和后续收敛顺序是什么
-- 最近一轮 agent 工作已经做到哪里，还有哪些边界仍在收敛中
-
-### 路线图
-
-- [路线图索引](./roadmaps/README.md)
-- [Android 构建与验收状态](./roadmaps/android-release-roadmap.md)
-
-这组文档主要回答：
-
-- 哪些平台能力已经落地
-- 哪些还在持续推进
-- 下一步发布链和验收重点在哪里
-
-### 测试与回归
-
-- [测试与回归索引](./testing/README.md)
-- [手工回归测试清单](./testing/manual-regression.md)
-- [Headless 重构视觉等价验收](./testing/headless-refactor-equivalence.md)
-
-这组文档主要回答：
-
-- Web / desktop 应该如何做手工回归
-- 回归结果怎么记录
-- 模块级 headless 重构如何做真实浏览器视觉等价验收
-- 当前哪些交互最值得重点观察
-
-## 文档组织约定
-
-- `docs/deployment/`
-  - 运行、部署、认证和发布产物的长期操作说明
-- `docs/design/`
-  - 长期设计原则、接口边界、样式/交互约束
-- `docs/roadmaps/`
-  - 尚未完全并入当前稳定交付范围、但已进入规划或部分落地的平台路线
-- `docs/testing/`
-  - 手工验证、回归记录、测试说明
-- `docs/handoffs/`
-  - 按日期记录已执行工作及仍未验证的边界；不替代当前使用指南
+贡献流程见 [CONTRIBUTING](../CONTRIBUTING.md)，仓库约束见 [AGENTS](../AGENTS.md)。

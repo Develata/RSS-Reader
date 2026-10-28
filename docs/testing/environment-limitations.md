@@ -67,7 +67,7 @@
 
 过去曾在 WSL2 遇到 `bind() failed: Cannot assign requested address (99)` / `driver failed to start`，这是具体运行环境的故障，不是 WSL 的普遍限制。
 
-2026-09-26 的同仓库 WSL/Linux 已通过三个真实 wasm browser harness，使用独立 driver 与 `CHROMEDRIVER_REMOTE=http://127.0.0.1:9518`；见 [集成复验](../handoffs/2026-09-26-integration-revalidation.md)。端口是该次记录，不要求其他环境照搬。
+2026-09-26 的同仓库 WSL/Linux 已通过三个真实 wasm browser harness，使用独立 driver 与 `CHROMEDRIVER_REMOTE=http://127.0.0.1:9518`；见 [集成复验](../handoffs/archive/2026-09/2026-09-26-integration-revalidation.md)。端口是该次记录，不要求其他环境照搬。
 
 复验时检查 Chrome/driver 版本、实际监听地址、端口占用、沙箱权限与代理环境，并在隔离 profile 下重试 `scripts/run_wasm_contract_harness.sh`。若需要独立 driver，只启动并清理本次进程。仍无法启动时记录完整日志，浏览器契约标为未运行；`cargo test ... --no-run` 只证明可编译。也可使用相同版本的 Linux CI 环境验证。
 
@@ -76,7 +76,7 @@
 - 受影响入口：正式 Web 的服务器订阅抓取、发现、图片本地化与 WebDAV；默认 `public_only` 策略拒绝保留地址。
 - 归因需要本次证据：从服务器所在环境解析实际目标，并核对 `outbound.json` 与错误日志。返回 `198.18.0.0/15` 等地址时，按策略拒绝不是远端站点已通过验收；不要为 smoke 放宽规则。
 - 复验：使用正常 DNS 的环境，按 [手工 Smoke](./rssr-web-browser-smoke.md) 重跑同一远端地址。`bash scripts/run_server_web_regression.sh --suite feed-smoke` 只验证本地夹具流程，不替代公网可达性。
-- 2026-09-26 的旧代理路径复现保留在 [发布准备交接](../handoffs/2026-09-26-push-and-release-readiness.md)，不能作为新版服务器的本次运行结果。
+- 2026-09-26 的旧代理路径复现保留在 [发布准备交接](../handoffs/archive/2026-09/2026-09-26-push-and-release-readiness.md)，不能作为新版服务器的本次运行结果。
 
 ## 与 handoff 的关系
 

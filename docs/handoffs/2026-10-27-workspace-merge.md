@@ -59,6 +59,7 @@
 
 ## 风险与后续事项
 
+- 2026-10-28 回读更新：下面三次 main 运行均已完成且为 `success`，源码仍为 `a9608056`；没有将 PR 检查结果替代 main 运行结果。
 - 合并到 main 后自动触发的运行，在本记录写入时仍未结束：[CI #40579374354](https://github.com/Develata/RSS-Reader/actions/runs/40579374354)、[Pages #40579374375](https://github.com/Develata/RSS-Reader/actions/runs/40579374375)、[Docker #40579374505](https://github.com/Develata/RSS-Reader/actions/runs/40579374505)。不把 PR 成功当作这些运行或部署已成功。
 - Claude 提及同一个 FeedEntriesPage 实例直接替换 feed_id 的旧回执边界；此行为在基线已存在，正常界面经过订阅页并卸载实例，不作为本次新增缺陷。若以后增加订阅之间的直接导航，需复查页面身份约束。
 - 没有新建 tag 或正式 release，没有删除分支、归档 worktree 或处理任务外改动。

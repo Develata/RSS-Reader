@@ -179,13 +179,15 @@ Home（文章列表首页）、Subscribe 及其他普通页面的左右页边距
 
 ## 7. 视觉与验收记录
 
+原文引用的 6 份 2026-10-24 Penpot 交接未在当前可达 Git 历史中找到，下面保留名称供追查，不将其视作可重新核对的证据。当前画板与版本证据见 [Penpot 代码基准](./penpot-code-baseline.md)。
+
 实际预览截图位于 `C:/Users/QQ/.codex/visualizations/2026/10/22/01a16568-e398-7fb0-9847-e636e6fdecb2/`：
 
-当前勾选样式 v8：`penpot-rss-reader-v8-control-states.png`、`v8-desktop.png`、`v8-selected.png`、`v8-row-hover.png`、`v8-area-hover.png`、`v8-select-all-hover.png`、`v8-narrow.png`、`v8-16x9-1920x1080.png`、`v8-16x9-1536x864.png`（均使用完整 `penpot-rss-reader-` 前缀）。均为实际 Penpot 预览截图，见[轻量勾选反馈交接](../handoffs/2026-10-24-penpot-selection-feedback.md)。
+当前勾选样式 v8：`penpot-rss-reader-v8-control-states.png`、`v8-desktop.png`、`v8-selected.png`、`v8-row-hover.png`、`v8-area-hover.png`、`v8-select-all-hover.png`、`v8-narrow.png`、`v8-16x9-1920x1080.png`、`v8-16x9-1536x864.png`（均使用完整 `penpot-rss-reader-` 前缀）。均为实际 Penpot 预览截图，见轻量勾选反馈交接（`2026-10-24-penpot-selection-feedback.md`，未找到）。
 
 其他布局沿用 v7：`penpot-rss-reader-v7-desktop.png`、`v7-selected.png`、`v7-narrow.png`、`v7-narrow-directory.png`、`v7-control-states.png`、`v7-source-grouping.png`、`v7-source-filter.png`、`v7-subscribe.png`、`v7-source-edit.png`（均使用完整 `penpot-rss-reader-` 前缀）。v7 勾选样式及 v6 截图保留作历史对照。以下 v4／v5 图片仅为历史记录，旧外围留白和分页不作为现行规格。
 
-16∶9 补充截图：`penpot-rss-reader-16x9-1920x1080.png`、`penpot-rss-reader-16x9-1536x864.png`，均为完整画板的实际浏览器预览，像素尺寸与文件名一致。验证及边界见[宽屏尺寸预览交接](../handoffs/2026-10-24-penpot-widescreen-preview.md)。
+16∶9 补充截图：`penpot-rss-reader-16x9-1920x1080.png`、`penpot-rss-reader-16x9-1536x864.png`，均为完整画板的实际浏览器预览，像素尺寸与文件名一致。验证及边界见宽屏尺寸预览交接（`2026-10-24-penpot-widescreen-preview.md`，未找到）。
 
 - `penpot-rss-reader-v4-desktop.png`：桌面双面板。
 - `penpot-rss-reader-v4-narrow.png`：窄窗口默认收起目录。
@@ -196,4 +198,4 @@ Home（文章列表首页）、Subscribe 及其他普通页面的左右页边距
 - `penpot-rss-reader-v5-source-filter-comparison.png`：全部／部分来源展开对照。
 - `penpot-rss-reader-v5-source-filter-collapsed.png`：实际来源筛选结果的省略号入口。
 
-当前验证及未覆盖事项见[v7 视觉精修交接](../handoffs/2026-10-24-penpot-visual-polish.md)；历史见[v6 统一收敛交接](../handoffs/2026-10-24-penpot-design-refinements.md)、[阅读工作区交接](../handoffs/2026-10-24-penpot-reading-workspace.md)和[来源展开态交接](../handoffs/2026-10-24-penpot-source-filter-expanded.md)。验收目标是布局紧凑但不拥挤、文章容易扫读、目录容易定位、多选不因目录浏览意外失效。真实应用、跨端输入和性能验收另行执行。
+当前验证及未覆盖事项见v7 视觉精修交接（`2026-10-24-penpot-visual-polish.md`，未找到）；历史见v6 统一收敛交接（`2026-10-24-penpot-design-refinements.md`，未找到）、阅读工作区交接（`2026-10-24-penpot-reading-workspace.md`，未找到）和来源展开态交接（`2026-10-24-penpot-source-filter-expanded.md`，未找到）。验收目标是布局紧凑但不拥挤、文章容易扫读、目录容易定位、多选不因目录浏览意外失效。真实应用、跨端输入和性能验收另行执行。
