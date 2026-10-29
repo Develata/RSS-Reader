@@ -3,20 +3,21 @@
 - 日期：2026-10-29
 - 作者 / Agent：Codex
 - 分支：本地 `codex/pr40-main-integration`；PR `codex/native-ui-preparation-20261029` → `main`
-- 审查 HEAD：`6117a353e398a96c7bf1488df221d7e5ff01f924`
-- 最新主线：`85b679a5afb12df9de53d40903cfb99745874b1e`（PR #44）
-- 相关 commit：pending；主线文档整合及本记录待提交，最终 PR 合并回执待补充
+- 产品源码审查 HEAD：`6117a353e398a96c7bf1488df221d7e5ff01f924`；最终 PR HEAD：`adb7c5af3b802bafa117e357f0e605372435fa40`（仅追加主线文档和本轮证据）
+- 合并前 main：`85b679a5afb12df9de53d40903cfb99745874b1e`（PR #44）
+- 当前产品 HEAD / PR 合并 commit：`ad5e8f31f8dc2d3cb2e6239f82f0076c66d92b12`
+- 相关 commit：`adb7c5af`（文档整合及审查记录）、`ad5e8f31`（合入 main）；本记录收口及维护入口更新随其后的独立文档提交归档，可由本文件 git log 查询
 - 相关 tag / release：无
-- 状态：`draft`（代码审查及补核通过；等待最新 head CI 和最终合并）
+- 状态：`validated`（最终 PR head CI 通过，已普通合并到 main）
 
 ## 工作摘要
 
-按用户授权再次审查 [PR #40](https://github.com/Develata/RSS-Reader/pull/40)，没有发现需要修复的阻塞问题。合并前 main 新增 PR #44，仅有文档及协作规则变化；本次普通合并保留双方交接入口和新增的自动化验收要求，不改产品代码。最终合并结果将在本记录收口。
+按用户授权再次审查 [PR #40](https://github.com/Develata/RSS-Reader/pull/40)，没有发现需要修复的阻塞问题。合并前 main 新增 PR #44，仅有文档及协作规则变化；本次普通合并保留双方交接入口和新增的自动化验收要求，不改产品代码。最终 PR head 检查全部结束后，以 expected-head 校验执行普通 merge，已合入 main。
 
 ## 影响范围
 
 - 审查模块：Entries、Reader、Feeds、Settings 的私有规则模块及 session 接线；dialog 关闭门禁；原生字符串传输和主题文件适配；新增验收脚本及 CI 接入。
-- 本次改动：接入主线文档、解决交接索引冲突，新增最终审查记录与数值投影补核回执。
+- 本次改动：接入主线文档、解决交接索引冲突，新增最终审查记录与数值投影补核回执；合并后更新维护状态、契约入口及最终 CI/合并回执。
 - 平台：共享 Rust / Web / Windows 原生代码审查；本轮额外运行的是正式 Web 自动化。没有把浏览器视口当作 Android 设备。
 - 工作树：仅操作 `C:/Users/QQ/.codex/worktrees/pr40-main-integration/RSS-Reader`，其他工作树及用户资料库保持原状。
 
@@ -39,6 +40,10 @@
 - `node target/pr40-final-numeric-review.cjs`：1536 / 390 两视口通过；四个数值框清空后，等值保存清除解析提示并恢复真实存储值，全部存储设置不变，页面异常为 0。[紧凑回执](../testing/evidence/2026-10-29-pr40-final-review/numeric-projection.json)。复用当前正式 Web 构建和真实服务器夹具，隔离端口 9325，结束时关闭服务器和浏览器。
 - 重新读取 `6117a353` 的检查：37 项成功，Pages deploy 1 项预期跳过，无失败或未完成项。[CI 40916567382](https://github.com/Develata/RSS-Reader/actions/runs/40916567382)、[Pages 40916567417](https://github.com/Develata/RSS-Reader/actions/runs/40916567417)。
 - 重新核对已下载的 `ci-reading-workspace` artifact `12917096276`：ZIP SHA-256 `d6bd03b6f597393cf6301e448b8cf500b842f9ec77e74baa878378534475aa0f`；workspace 18、Entries 8、Settings 8、目录顺序 26、目录窗口 26、窗口边界 11、目录复核 8，transport 通过。
+- 接入 PR #44 后的 `adb7c5af`：[CI 40922158041](https://github.com/Develata/RSS-Reader/actions/runs/40922158041)、[Pages 40922158045](https://github.com/Develata/RSS-Reader/actions/runs/40922158045) 均成功；37 项成功，Pages deploy 1 项预期跳过，最终汇总门禁通过，无待执行或失败项。上述数字来自最终 head 的完整检查列表。
+- 下载并核对最终 head 的阅读 artifact `12919620857`：ZIP SHA-256 `506d8d6ddc8265ec2fb2fc76f4e9ac75d7859788b650bafc56b070fe7da933f8` 与 GitHub digest 相同。七组场景分别为 workspace 18、Entries 8、Settings 8、目录顺序 26、目录窗口 26、窗口边界 11、目录复核 8，transport 通过；检查了各 JSON 和 workspace 阶段日志，页面异常为空。原始文件保留在 `target/pr40-adb7c5af-reading-workspace/`。
+- `git diff --exit-code adb7c5af3b802bafa117e357f0e605372435fa40 ad5e8f31f8dc2d3cb2e6239f82f0076c66d92b12`：无差异，合并树与通过 CI 的审查树一致。
+- `git diff --cached --check`、未解决冲突检查、交接相对链接检查及产品路径无变化检查：通过。
 
 ### 已有同产品内容证据
 
@@ -52,7 +57,10 @@
 ## 结果与合并回执
 
 - 产品代码无需修复；主线文档冲突保留双方内容。
-- 最新文档整合 commit、对应 CI、PR 合并 SHA 及后续交接 commit：pending，完成后按实际回执补充。
+- PR 于 `2026-10-29T17:42:29Z` 普通合并，GitHub 回读状态为 `merged`；合并提交 `ad5e8f31f8dc2d3cb2e6239f82f0076c66d92b12`。未 squash、rebase 或改写历史。
+- 合并前再次读取远端 head / main 及 review / review threads：head 为 `adb7c5af`、main 为 `85b679a5`，没有审查意见；merge API 使用 `expected_head_sha=adb7c5af3b802bafa117e357f0e605372435fa40` 防止误合入未审查提交。
+- 当前工作树已 fast-forward 到实际合并提交。首次 fetch 遇到临时 TLS 握手失败，正常重试成功；未修改 TLS 校验或全局网络设置。
+- [结构化合并与 CI 回执](../testing/evidence/2026-10-29-pr40-final-review/merge-receipt.json) 保存最终检查名称、结论、run 和 artifact 身份。合并后文档收口提交不改变产品内容；其 main 推送检查与此处已通过的 PR CI 是独立运行，不以 PR 结果冒充后续运行结果。
 - 不打 tag、不发布新版本。
 
 ## 风险与后续事项

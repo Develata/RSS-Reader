@@ -1,6 +1,6 @@
 # 原生控件适配契约
 
-核对日期：2026-10-29。PR #40 合并 main 8932a5ac 后的契约；旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
+核对日期：2026-10-29。本文对应 PR #40 合入 main 后的实现，实际提交与检查见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
 
 ## 架构与状态所有权
 

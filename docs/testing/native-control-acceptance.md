@@ -1,6 +1,6 @@
 # 原生控件前置验收
 
-核对日期：2026-10-29。本文件对应 PR #40 与 main 8932a5ac 的整合，当前契约见[控件适配契约](../design/native-control-adapter-contracts.md)。此前各批证据保留在[历史交接](../handoffs/README.md)，不能替代整合后源码的验收。
+核对日期：2026-10-29。本文件对应 PR #40 合入 main 后的实现，当前契约见[控件适配契约](../design/native-control-adapter-contracts.md)，实际提交与检查见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)。此前各批证据保留在[历史交接](../handoffs/README.md)，不能替代整合后源码的验收。
 
 ## 当前入口
 
