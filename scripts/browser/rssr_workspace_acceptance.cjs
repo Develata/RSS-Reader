@@ -350,13 +350,17 @@ async function sourceIdentity(page) {
 }
 
 async function holdWrites(page, interaction) {
-  let release, seen;
+  let release, seen = false;
   const gate = new Promise(resolve => { release = resolve; });
-  const captured = new Promise(resolve => { seen = resolve; });
+  // Start the bounded wait when the interaction asks for it, after its click.
+  // A raw Promise here is unaffected by page.setDefaultTimeout().
+  const captured = () => expect.poll(() => seen, {
+    message: 'the interaction must issue an intercepted API write', timeout: 15000,
+  }).toBe(true);
   const pending = [];
   const handler = async route => {
     if (route.request().method() === 'GET') return route.continue();
-    seen();
+    seen = true;
     const continued = gate.then(() => route.continue());
     pending.push(continued);
     await continued;
@@ -372,7 +376,7 @@ async function pendingWrites(page) {
   await first.locator(action('select-entry')).check();
   await holdWrites(page, async captured => {
     await first.locator(action('mark-read')).click();
-    await captured;
+    await captured();
     assert.equal(await first.locator(action('mark-read')).isDisabled(), true, 'the pending row rejects repeated writes');
     assert.equal(await first.locator(action('toggle-starred')).isDisabled(), true);
     assert.equal(await page.locator(`${rows}[data-position-entry="71"] ${action('mark-read')}`).isDisabled(), false, 'other rows remain usable');
@@ -385,7 +389,7 @@ async function pendingWrites(page) {
   await page.locator(`${rows}[data-position-entry="71"] ${action('select-entry')}`).check();
   await holdWrites(page, async captured => {
     await page.locator(action('archive-selected')).click();
-    await captured;
+    await captured();
     assert.equal(await page.locator(`${rows} [data-layout="entry-card-actions"] button`).evaluateAll(buttons => buttons.every(button => button.disabled)), true, 'batch writes block overlapping per-row actions');
   });
   await page.waitForFunction(() => !document.querySelector('[data-position-entry="72"]') && !document.querySelector('[data-position-entry="71"]'));
@@ -409,19 +413,24 @@ async function preferenceOrdering(page) {
   await seed(page, new URL(page.url()).origin);
   for (const labels of [['仅未读', '仅未读'], ['来源', '时间']]) {
     const before = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
+    console.log(`preferenceOrdering: ${labels.join(' -> ')} start`);
     let afterClicks;
     let finalSave;
+    const finishedSaves = new Set();
     const observeSave = response => {
       const request = response.request();
       if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/v1/workspace') return;
       const workspace = request.postDataJSON();
       if (workspace.read_filter === 'all' && workspace.grouping_mode === 'time') finalSave = response;
     };
+    const observeFinished = request => finishedSaves.add(request);
     page.on('response', observeSave);
+    page.on('requestfinished', observeFinished);
     try {
       await holdWrites(page, async captured => {
         await page.getByRole('button', { name: labels[0], exact: true }).click();
-        await captured;
+        await captured();
+        console.log('preferenceOrdering: first write intercepted');
         await page.getByRole('button', { name: labels[1], exact: true }).click();
         afterClicks = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
         assert.equal(afterClicks, 'false', 'the visible filter must already reflect the final All choice');
@@ -429,7 +438,9 @@ async function preferenceOrdering(page) {
         // first write is blocked. Polling that value alone cannot prove success.
         const initial = await page.evaluate(async () => {
           const input = encodeURIComponent(JSON.stringify({load_preferences:true,load_feeds:false}));
-          return (await (await fetch('/api/v1/entries/bootstrap?input=' + input)).json()).workspace;
+          return (await (await fetch('/api/v1/entries/bootstrap?input=' + input, {
+            signal: AbortSignal.timeout(15000),
+          })).json()).workspace;
         });
         assert.equal(initial.read_filter, 'all');
         assert.equal(initial.grouping_mode, 'time');
@@ -439,9 +450,13 @@ async function preferenceOrdering(page) {
       // to finish before reloading can cancel the document's remaining tasks.
       await expect.poll(() => Boolean(finalSave), { message: 'the final workspace save must respond', timeout: 15000 }).toBe(true);
       assert.ok(finalSave.ok(), `the final workspace save failed: ${finalSave.status()}`);
-      assert.equal(await finalSave.finished(), null, 'the final workspace response must finish');
+      await expect.poll(() => finishedSaves.has(finalSave.request()), {
+        message: 'the final workspace response must finish', timeout: 15000,
+      }).toBe(true);
+      console.log('preferenceOrdering: final save finished');
     } finally {
       page.off('response', observeSave);
+      page.off('requestfinished', observeFinished);
     }
     // Read the persisted server preference before unloading page tasks.
     await page.waitForFunction(async () => {
@@ -548,7 +563,7 @@ async function reopeningDuringSourceEdit(page) {
   await page.locator('#feed-edit-url').fill(editedURL);
   await holdWrites(page, async (captured, release) => {
     await page.locator(action('save-feed-edit')).click();
-    await captured;
+    await captured();
     // Browser history can leave a native modal even while its save is pending.
     await page.goBack();
     await page.locator('[data-page="entries"]').waitFor();
@@ -579,7 +594,7 @@ async function articleWritesSurviveNavigation(page) {
     const saved = page.waitForResponse(response => response.url().includes('/api/v1/entries/') && response.request().method() !== 'GET');
     await holdWrites(page, async captured => {
       await (bulk ? page.locator(action(command)) : first.locator(action(command))).click();
-      await captured;
+      await captured();
       await page.locator('[data-nav="feeds"]').first().click();
       await page.locator('[data-feed-id="1"]').waitFor();
     });
@@ -650,7 +665,7 @@ async function readerWritesSurviveNavigation(page) {
       .then(response => ({ response }), error => ({ error }));
     await holdWrites(page, async captured => {
       await page.locator(`[data-layout="reader-bottom-bar"] ${action(command)}`).click();
-      await captured;
+      await captured();
       await page.locator('[data-nav="back"]').click();
       await ready(page);
     });
@@ -730,7 +745,7 @@ if (require.main === module) (async () => {
     await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
     await seed(page, fixture.origin);
     for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation, toolbarThemes })) {
-      try { await run(page); console.log(`PASS ${name}`); }
+      try { console.log(`START ${name}`); await run(page); console.log(`PASS ${name}`); }
       catch (error) {
         const fs = require('node:fs/promises'), path = require('node:path');
         const output = path.resolve(process.env.ARTIFACT_DIR || 'target/workspace-server-regression');

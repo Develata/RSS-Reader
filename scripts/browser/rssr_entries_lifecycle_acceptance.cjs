@@ -69,6 +69,7 @@ async function searchRefreshReturn(page, width) {
   });
   const scenario = async (name, run) => {
     currentScenario = name;
+    console.log('START ' + name);
     try {
       const evidence = await run();
       results.push({ name, pass: true, evidence });
