@@ -87,3 +87,11 @@
 - 算法背景与此前红绿对照见 [阅读顺序模型修正](./2026-10-29-directory-reading-order.md)。PR：<https://github.com/Develata/RSS-Reader/pull/43>。
 - 原始录像、截图、JSON、隔离资料库和临时验收脚本均保留在本机证据目录，未提交大体积产物到仓库。
 - 文档位于独立验收分支；不要把本次复测误认为安装升级、版本发布或全部平台验收。
+
+## 同日补充：仓库级自动化验收约定
+
+- 背景：用户要求把“优先自动化测试，减少 computer use”写入仓库级指引。
+- 影响：根级 `AGENTS.md` 新增“Agent 测试与验收方式”，约定 Rust / 脚本 / Playwright / CDP 优先，Windows 原生端直接验证实际 WebView2 宿主；computer use 限于自动化接口覆盖不到的系统级检查。
+- 边界：沿用已有授权，保留隔离资料库、原生交互证据及未覆盖范围的要求；没有产品代码或运行行为变更。
+- 验证：`git diff --check` 通过，已核对规则措辞；纯文档变更无需重跑应用测试。
+- 工作区：`codex/directory-native-verification`，本次修改基线 `50694c87`；规则与本段交接随独立本地文档提交归档，未推送。
