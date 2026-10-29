@@ -31,6 +31,7 @@
 | FORM-03 | 保存前捕获快照；后来不同草稿保留，改回提交值仍可回填；失败可重试；零页大小只在提交副本回退 | `rssr_settings_save_acceptance.cjs`；Windows write/reopen 模式验证真实存储，延迟边界另验 |
 | FORM-04 | 下载确认前后分别编辑；发出后编辑保留，实际已保存主题更新。保存与下载相互拒绝、重复下载不排队，失败释放 gate | `rssr_settings_sync_acceptance.cjs --scenario lifecycle`；还须确认 endpoint/path 捕获及阻止后重新确认 |
 | FILE-01 | 新旧导入乱序、新选择器取消、读取错误、草稿改回原值；旧读取不能显示提示、回填或保存 | `rssr_theme_files_acceptance.cjs --scenario ownership`；桌面系统窗口另按 W-FILE 验证 |
+| STATUS-01 | 上传/导出期间同页继续编辑；原请求完成仍可发布提示，导出使用点击时 CSS 且不保存设置；页面卸载后不再发布 | 上传接线见 [sync/session.rs](../../crates/rssr-app/src/pages/settings_page/sync/session.rs)；[theme_io.rs](../../crates/rssr-app/src/pages/settings_page/themes/theme_io.rs) 已有导出快照/完成提示/卸载测试。不要把导入的身份过滤或保存/下载 gate 加到这两条路径；Android 导出单在途限制保持 |
 | DIALOG-01 | 来源加载中关闭/切换、保存中重复 submit、Esc、背景与原生 cancel；失败保留草稿、成功关闭 | `rssr_feeds_lifecycle_acceptance.cjs --scenario edit`；当前 HTML Dialog 的失焦场景已有 Web 测试，新 OS 控件须实测关闭通知和焦点 |
 | READ-01 | 正文作用域 M/F/方向键；带修饰键、Ctrl+F、输入框、组词期间不误触发；切文结果不污染新访问 | `rssr_reader_lifecycle_acceptance.cjs`、`rssr_reading_position_acceptance.cjs`；真实 IME、选择复制/系统菜单须宿主验证 |
 | NAV-01 | 目录未挂载目标先布局再聚焦；筛选/翻页/离页后的旧回复失效；手动滚动压过迟到自动跟随 | `rssr_directory_window_boundaries.cjs`、`rssr_directory_window_review.cjs`；新宿主需验证布局提交及像素单位 |
@@ -57,9 +58,11 @@ Windows CDP 运行器只接受显式独立进程、profile 和复制库，先核
 ### 环境与样本
 
 1. 固定待验源码、锁文件、EXE SHA-256 和运行副本。记录 Windows / WebView2 版本、profile、进程路径/PID、测试库绝对路径；窗口标题不能独自证明目标身份。
-2. 复用已 checkpoint 的隔离 fixture：复制库、独立应用目录和 profile；CDP 先只读核对 5000 个固定 ID/标题与当前 Entries 页，再导航。全部文件选择及导出只使用新的测试目录；不覆盖用户文件。需要修改构建时，保存旧候选，做相同路径比较。
-3. 准备有效中文 CSS、空文件、无效 CSS、无效 UTF-8、带 BOM/CRLF 的文件及专用可覆盖输出文件；保存每个样本的原始字节和 SHA-256。用可控制的临时路径构造真实读写失败，失败注入方法和实际发生阶段必须可证明。
-4. 系统 GUI 验收须看到或可靠定位实际 OS 对话框及其所属进程，记录打开/选择/取消/返回焦点；页面可经 CDP 操作，但 DOM 文件赋值、注入 Future 和文件 I/O 单测不能替代系统对话框。启动辅助进程保持隐藏，只有这项验收需要交互的测试窗口进入可见状态。
+2. 建立新的测试目录，将 EXE 复制到其中，并把已 checkpoint 的 `rss-reader.db` / `rss-reader-content.db` 放入该 EXE 同目录下的 `RSS-Reader/`。Windows 数据目录由[可执行文件位置](../../crates/rssr-infra/src/db/sqlite_native.rs)决定，只改工作目录或 WebView profile 不会隔离数据库。只从已知 fixture 复制；本机历史样本是 `target/reading-baseline-20261025/seed-matched/`，缺失时先重新准备，不改用用户库。设置独立 `WEBVIEW2_USER_DATA_FOLDER`；保留源样本及其哈希，不向源样本写入。
+3. 启动前只读核对复制库的 5000 个固定 ID/标题和 6 个订阅，将**复制库**中的 feed URL 指向本次独占的回环服务，保留来源 ID 并记录这项准备差异；服务返回受控响应，不能依赖旧 fixture 端口仍属于原测试。复制库和 EXE 路径确认后再启动；CDP 再核对当前 Entries 页与复制库一致，失败即停止，不执行设置准备或文件动作。
+4. 当前历史 fixture 的 `archive_after_months` 为 **0**，合法设置保存要求至少为 1；有效 CSS 导入会保存整份设置，因此直接照旧样本执行 W-FILE-01 会因归档阈值失败。身份检查通过后，按[现有 Settings 验收准备](../../scripts/browser/rssr_settings_save_acceptance.cjs)的做法，在隔离页面将该值设为 120 并明确保存，等待 pending 释放，再只读核对数据库。只对值为 0 的旧样本做这项准备，其他有效值不改；不要放宽生产校验。准备差异单独记录，确认文章标记和来源集合未被意外改变，随后捕获 W-FILE 的设置/标记/来源基线。
+5. 准备有效中文 CSS、空文件、无效 CSS、无效 UTF-8、带 BOM/CRLF 的文件及专用可覆盖输出文件；保存每个样本的原始字节和 SHA-256。用可控制的临时路径构造真实读写失败，失败注入方法和实际发生阶段必须可证明。全部文件选择及导出只使用测试目录；需要修改构建时，保存旧候选，做相同路径比较。
+6. 系统 GUI 验收须看到或可靠定位实际 OS 对话框及其所属进程，记录打开/选择/取消/返回焦点；页面可经 CDP 操作，但 DOM 文件赋值、注入 Future 和文件 I/O 单测不能替代系统对话框。启动辅助进程保持隐藏，只有这项验收需要交互的测试窗口进入可见状态。
 
 ### 必跑场景
 
