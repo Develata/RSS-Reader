@@ -12,9 +12,19 @@
 | `pages/entries_page/directory/controller.rs` | 上下文重置、活动路径、展开集合、跟随/手动、消息校验、回复和导航请求 | presenter 身份、Dioxus signal、事件桥接、渲染确认、滚动执行 |
 | `pages/entries_page/directory/window.rs` | 可变行高缓存、可见范围、占位高度、测量变化时的锚点补偿、未挂载目标与焦点保留 | 当前挂载行与视口测量、同步键盘默认动作、提交确认后的滚动/聚焦 |
 | `hooks/reader_shortcut_policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，执行导航和 session 命令 |
+| `hooks/use_mobile_back_navigation/policy.rs` | history/fallback 选择、系统返回决策、首页提示及代次、超时和恢复前台 | 页面 dismiss 事实、路由事实、signal 投影、计时器、位置采集和 Android 退后台 |
 | `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |
 
 这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → `Backend` → application；平台 I/O 由 infra 的本地或 HTTP 适配器承担。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
+
+## 返回导航与退出提示的使用约束（2026-10-29）
+
+- `policy.rs` 是 hook 内的私有普通 Rust 模块。工具栏与系统返回共用 history 优先、不同 fallback 次之、无目标则停留的选择；fallback 等于当前路由时不替换。
+- 页面继续拥有浮层状态和 dismiss gate。策略只接收已消费、首页或已解析导航目标的事实；Entries 的来源筛选先于目录，Reader 图片查看器和 Feeds 来源编辑仍先消费返回。来源保存中消费返回但不关闭，不建立全局浮层副本。
+- 首页系统返回不沿历史后退；首次显示提示并开始 5 秒计时，提示仍有效时再次返回才退后台。`BackPolicy` 独占提示状态与代次，返回给页面的 `Signal<bool>` 仅为显示投影，不参与决策。
+- 超时是带提示代次的显式事件，旧超时不能清除新提示；恢复前台清除提示，不复用旧计时器身份。真实 sleep、窗口恢复和 JNI 执行仍在 hook/宿主适配器。
+- 工具栏返回同步执行，继续由 DOM 捕获阶段保存位置。Android 系统返回才使用既有原子 guard，采集最多等待 500 ms，失败/超时仍继续；完成后只在路由未变化时重新解析并导航。`back_capture::finish_capture` 持有 guard 至该流程结束，任务未轮询或等待中取消均释放。
+- 输入合并、页面监听代次及注销规则仍由原 `android_bridge.rs` 负责。单元测试、Dioxus 投影测试、Web 运行、原生编译与实际宿主验收分别记录，见[本批交接](../handoffs/2026-10-29-native-back-policy.md)。不从本次提取推断性能改善。
 
 ## 文章工作区请求生命周期的使用约束
 

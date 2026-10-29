@@ -1,0 +1,367 @@
+{
+  "status": "native-acceptance-pending",
+  "date": "2026-10-29",
+  "productBaseline": "4101520c33266026747db867c33e2b13baea3d23",
+  "branch": "codex/native-back-policy",
+  "androidPackage": "io.github.develata.rssreader.backpolicytest",
+  "artifacts": [
+    {
+      "sha256": "d1d285697287fa8dd7554b80118655d0acbc2cbfae77b3b97d45928a7fc09ad8",
+      "path": "baseline-source.tar"
+    },
+    {
+      "sha256": "00deeff30d703683c578bfc968fe7843507885bd2934cf43a817a735ce23fa4f",
+      "path": "windows-baseline/rssr-app.exe"
+    },
+    {
+      "sha256": "172bfb1a0ecafa2c94aa832fdd4f102f2d4f9b00e463e5fa15a251ebfa375967",
+      "path": "windows-candidate/rssr-app.exe"
+    },
+    {
+      "sha256": "af4c077e25bd9962fcc9de1316ee026bc5f082662ad14d108817d602822470b4",
+      "path": "baseline.apk"
+    },
+    {
+      "sha256": "256390897d0d6a7ba6219ad90457365175fd1883b5c50c3efe1433d432751366",
+      "path": "candidate.apk"
+    },
+    {
+      "sha256": "e6baca1efbaf4fabe2503cc1631fb677084c2c0155d7f664f06d482a8a97636f",
+      "path": "web-return-compare.cjs"
+    },
+    {
+      "sha256": "0f437a564043de1587820bc160cd0558e70181eb91ea28e7b7adb6bbd0037d5a",
+      "path": "rssr_back_navigation_acceptance.cjs"
+    },
+    {
+      "path": "web-baseline/index.html",
+      "sha256": "71f1ceb9392ab1a3a2288d692b696742dd674f5c610eaef96e47d29981ab3a75"
+    },
+    {
+      "path": "web-baseline/assets/rssr-app-dxh131388dad6a73ccf.js",
+      "sha256": "cfef81212cb6785f3cd08b521f0ec7d43e65b1e28cb0c74b917b8e41b460bfc1"
+    },
+    {
+      "path": "web-baseline/assets/rssr-app_bg-dxha15947ee90ecb387.wasm",
+      "sha256": "028a358b1298fc50191fdb7def1047b2876edecc800748e3f4ccc42a952e6176"
+    },
+    {
+      "path": "web-candidate/index.html",
+      "sha256": "7456b0f093e90cd75020f02fe9a1c2cabf28787c7d45583d4458a3abe3620a76"
+    },
+    {
+      "path": "web-candidate/assets/rssr-app-dxh131388dad6a73ccf.js",
+      "sha256": "cfef81212cb6785f3cd08b521f0ec7d43e65b1e28cb0c74b917b8e41b460bfc1"
+    },
+    {
+      "path": "web-candidate/assets/rssr-app-dxh2111b5ccc6eb1175.js",
+      "sha256": "d7aad0dca70747868cc97802791ddbad223deff1cb5a22cc13caca14963ef8a4"
+    },
+    {
+      "path": "web-candidate/assets/rssr-app_bg-dxh10cc162bf9d3c6e2.wasm",
+      "sha256": "2cd3e58c3b63dd350971611f16de621863c36c6d02e3ec968b4e511dfd42d90f"
+    },
+    {
+      "path": "web-candidate/assets/rssr-app_bg-dxha15947ee90ecb387.wasm",
+      "sha256": "028a358b1298fc50191fdb7def1047b2876edecc800748e3f4ccc42a952e6176"
+    },
+    {
+      "path": "web-baseline-server/rssr-web.exe",
+      "sha256": "d38bf18c36be3c27f1f7019fb2a7f5c6ecadefcfc5064a14d8a11fdb364d5a0c"
+    },
+    {
+      "path": "web-candidate-server/rssr-web.exe",
+      "sha256": "3d5eeee8d4b5a38a7d001a4179070c4ee9fc996f1bc8be2962394bf596fcc3ea"
+    }
+  ],
+  "sources": [
+    {
+      "androidSnapshotMatches": true,
+      "path": "crates/rssr-app/src/hooks/use_mobile_back_navigation.rs",
+      "sha256": "cdd1af000a048d09ae7ea93fdfe991478f9f697453a5ede9438f443a85dbe578"
+    },
+    {
+      "androidSnapshotMatches": true,
+      "path": "crates/rssr-app/src/hooks/use_mobile_back_navigation/back_capture.rs",
+      "sha256": "5a207c8c7fbaa0a60f1d995d25eaf6eb076cbe373dfb9401c4a7ae45b2d7bdcf"
+    },
+    {
+      "androidSnapshotMatches": true,
+      "path": "crates/rssr-app/src/hooks/use_mobile_back_navigation/policy.rs",
+      "sha256": "232acfa75ac36d785368e5cac52f9cd2bd6c2a94f0890b3a7924d9775811705c"
+    }
+  ],
+  "denials": [
+    "blocked by policy",
+    "approval required by policy, but AskForApproval is set to Never"
+  ],
+  "nativeExecution": "not run: isolated fixture initialization denied by automatic approval review",
+  "baseHead": "faf4c21102de25de5d6cbaf77e97d2706e5a8856",
+  "validation": {
+    "appTests": {
+      "passed": 373,
+      "ignored": 1,
+      "failed": 0
+    },
+    "backModuleTests": {
+      "passed": 16,
+      "new": 12
+    },
+    "clippy": "passed: cargo clippy -p rssr-app --all-targets --locked -- -D warnings",
+    "format": "passed",
+    "windowsBuild": "passed; not run",
+    "webBuild": "baseline and candidate passed",
+    "androidBuild": "baseline and verified candidate APKs passed; not installed or run",
+    "workspace": {
+      "baseline": 18,
+      "candidate": 18,
+      "pageErrors": 0
+    },
+    "return": {
+      "baseline": {
+        "status": "passed",
+        "checks": [
+          {
+            "name": "history-return-and-overlays-1280",
+            "pass": true
+          },
+          {
+            "name": "direct-reader-fallback-1280",
+            "pass": true
+          },
+          {
+            "name": "feeds-settings-1280",
+            "pass": true
+          },
+          {
+            "name": "history-return-and-overlays-390",
+            "pass": true
+          },
+          {
+            "name": "direct-reader-fallback-390",
+            "pass": true
+          },
+          {
+            "name": "feeds-settings-390",
+            "pass": true
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": [],
+        "builds": [
+          "dev-faf4c21102de-dirty-7397074f0232"
+        ]
+      },
+      "candidate": {
+        "status": "passed",
+        "checks": [
+          {
+            "name": "history-return-and-overlays-1280",
+            "pass": true
+          },
+          {
+            "name": "direct-reader-fallback-1280",
+            "pass": true
+          },
+          {
+            "name": "feeds-settings-1280",
+            "pass": true
+          },
+          {
+            "name": "history-return-and-overlays-390",
+            "pass": true
+          },
+          {
+            "name": "direct-reader-fallback-390",
+            "pass": true
+          },
+          {
+            "name": "feeds-settings-390",
+            "pass": true
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": [],
+        "builds": [
+          "dev-faf4c21102de-dirty-0d479f1a558c"
+        ]
+      }
+    },
+    "boundaries": {
+      "baseline": [
+        {
+          "name": "Retired focus reply after search",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after source-filter",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after page",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after group",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after empty-and-restore",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after reader-return",
+          "pass": true
+        },
+        {
+          "name": "A newer page choice cancels the pending directory jump",
+          "pass": true
+        },
+        {
+          "name": "A newer page choice cancels the pending directory jump even after returning to its page",
+          "pass": true
+        },
+        {
+          "name": "A new search cancels the pending directory jump",
+          "pass": true
+        },
+        {
+          "name": "source filtered last-page reader return",
+          "pass": true
+        },
+        {
+          "name": "time filtered last-page reader return",
+          "pass": true
+        }
+      ],
+      "candidate": [
+        {
+          "name": "Retired focus reply after search",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after source-filter",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after page",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after group",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after empty-and-restore",
+          "pass": true
+        },
+        {
+          "name": "Retired focus reply after reader-return",
+          "pass": true
+        },
+        {
+          "name": "A newer page choice cancels the pending directory jump",
+          "pass": true
+        },
+        {
+          "name": "A newer page choice cancels the pending directory jump even after returning to its page",
+          "pass": true
+        },
+        {
+          "name": "A new search cancels the pending directory jump",
+          "pass": true
+        },
+        {
+          "name": "source filtered last-page reader return",
+          "pass": true
+        },
+        {
+          "name": "time filtered last-page reader return",
+          "pass": true
+        }
+      ]
+    },
+    "visual": [
+      {
+        "name": "1280-entries.png",
+        "width": 1280,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 1080320
+      },
+      {
+        "name": "1280-feed-edit.png",
+        "width": 1280,
+        "height": 844,
+        "differentPixels": 1015,
+        "totalPixels": 1080320
+      },
+      {
+        "name": "1280-reader.png",
+        "width": 1280,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 1080320
+      },
+      {
+        "name": "1280-settings.png",
+        "width": 1280,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 1080320
+      },
+      {
+        "name": "1280-sources.png",
+        "width": 1280,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 1080320
+      },
+      {
+        "name": "390-directory.png",
+        "width": 390,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 329160
+      },
+      {
+        "name": "390-entries.png",
+        "width": 390,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 329160
+      },
+      {
+        "name": "390-feed-edit.png",
+        "width": 390,
+        "height": 844,
+        "differentPixels": 539,
+        "totalPixels": 329160
+      },
+      {
+        "name": "390-reader.png",
+        "width": 390,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 329160
+      },
+      {
+        "name": "390-settings.png",
+        "width": 390,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 329160
+      },
+      {
+        "name": "390-sources.png",
+        "width": 390,
+        "height": 844,
+        "differentPixels": 0,
+        "totalPixels": 329160
+      }
+    ],
+    "visualNotes": "9 of 11 pairs identical. Feed editor differences are dynamic loopback fixture port and refresh time; inspected at both widths."
+  },
+  "evidenceRoot": "target/back-policy-20261029",
+  "review": "self-review; no new product defect reproduced; actual native lifecycle remains unverified"
+}

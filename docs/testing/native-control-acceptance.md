@@ -7,6 +7,7 @@
 | 范围 | 命令/入口 | 证明的边界 |
 | --- | --- | --- |
 | Rust 规则与 Dioxus 接线 | cargo test --workspace --locked | 保留 main 全部用例，补写入规则、编辑状态、文件归属、逐字段数值提示；不证明 OS 控件 |
+| 返回与退出提示 | cargo test -p rssr-app --locked use_mobile_back_navigation | 普通 Rust 事件序列、Dioxus 提示投影、捕获完成/失败/超时/取消/路由变化与旧监听清理；不证明实际 Android 返回 |
 | 静态检查 | cargo fmt --all --check；cargo clippy --workspace --all-targets --locked -- -D warnings | 编译、格式与 lint |
 | 正式 Web | dx build --platform web --package rssr-app --locked --release --debug-symbols false | 当前 HTTP Backend 包；不使用 pages-demo |
 | Entries/来源编辑/阅读 | rssr_entries_lifecycle_acceptance.cjs、rssr_workspace_acceptance.cjs，以及主线 rssr_server_acceptance.mjs | 真实服务器、单库、离页回执、失败恢复、偏好顺序、目录与返回 |
@@ -25,6 +26,7 @@ Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library
 - 新文件选择器、后续 CSS/预设编辑、明确保存或下载准入后，旧文件成功/错误都不能改草稿或再次保存。
 - process.json 的 pid/exe/profile/cdp 必须属于本次隔离进程，单库路径在其 target 下的运行目录内；核对 fixture 身份后才写入。
 - 不修改用户原库，不用历史哈希或 mock 回执替代本次产物验收。
+- 返回策略的实际宿主验收须另测首页首次/再次返回、5 秒超时、旧提示超时与恢复前台、浮层关闭顺序、保存中消费返回、连续阅读及位置恢复。Web 与 Windows 小视口不能替代 Android；本批编译/运行范围与阻塞见[返回策略交接](../handoffs/2026-10-29-native-back-policy.md)。
 
 ## 已退役的旧分支运行器
 
