@@ -29,6 +29,7 @@ pub(super) struct WriteRequest {
 pub(super) struct SettingsRequestLifecycle {
     revision: u64,
     editing: EditingRevision,
+    draft_replacement_revision: u64,
     pending: Option<SettingsWrite>,
 }
 
@@ -43,6 +44,16 @@ impl SettingsRequestLifecycle {
 
     pub fn edit_preset(&mut self) {
         self.editing.preset = self.editing.preset.wrapping_add(1);
+    }
+
+    pub fn draft_replacement_revision(&self) -> u64 {
+        self.draft_replacement_revision
+    }
+
+    /// Accepted result projection retires old field feedback, even for equal values.
+    /// This is not a user edit and must not affect load/download admission.
+    pub fn note_draft_replacement(&mut self) {
+        self.draft_replacement_revision = self.draft_replacement_revision.wrapping_add(1);
     }
 
     pub fn pending(&self) -> Option<SettingsWrite> {

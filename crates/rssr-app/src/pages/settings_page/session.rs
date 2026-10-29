@@ -91,6 +91,10 @@ impl SettingsPageSession {
         self.draft
     }
 
+    pub(crate) fn draft_replacement_revision(self) -> u64 {
+        (self.requests)().draft_replacement_revision()
+    }
+
     pub(crate) fn preset_choice(self) -> Signal<String> {
         self.preset_choice
     }
@@ -201,6 +205,7 @@ impl SettingsPageSession {
         }
         if replace_draft {
             self.draft.set(settings.clone());
+            self.requests.with_mut(SettingsRequestLifecycle::note_draft_replacement);
         }
         let unsaved = *self.draft.peek() != settings;
         self.theme.settings.set(settings);
@@ -231,6 +236,7 @@ impl SettingsPageSession {
         }
         if update.replace_draft {
             self.draft.set(settings.clone());
+            self.requests.with_mut(SettingsRequestLifecycle::note_draft_replacement);
         }
         if let Some(preset) = update.preset_choice {
             self.preset_choice.set(preset.to_string());
@@ -289,6 +295,84 @@ mod tests {
             custom_css: css.into(),
             ..Default::default()
         }))]
+    }
+
+    #[test]
+    fn accepted_backfills_retire_feedback_even_for_equal_values_and_round_trips() {
+        let (dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            let original = UserSettings::default();
+            let invalid_revision = session.draft_replacement_revision();
+            let import = session.begin_theme_import();
+            session.apply_loaded_settings(original.clone(), EditingRevision::default());
+            assert_ne!(session.draft_replacement_revision(), invalid_revision);
+            assert!(
+                session.complete_theme_import(import),
+                "equal backfill is not a new import intent"
+            );
+
+            let replaced = session.draft_replacement_revision();
+            let changed = UserSettings {
+                refresh_interval_minutes: 60,
+                archive_after_months: 6,
+                entries_page_size: 50,
+                reader_font_scale: 1.2,
+                ..original.clone()
+            };
+            session.apply_loaded_settings(changed, EditingRevision::default());
+            session.apply_loaded_settings(original.clone(), EditingRevision::default());
+            assert_ne!(session.draft_replacement_revision(), replaced);
+            assert_ne!(session.draft_replacement_revision(), invalid_revision);
+            assert_eq!(*session.draft.peek(), original);
+            assert_eq!(session.requests.peek().editing(), EditingRevision::default());
+        });
+    }
+
+    #[test]
+    fn later_unparsed_edits_keep_feedback_when_initial_or_download_backfill_is_rejected() {
+        let (dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            let invalid_revision = session.draft_replacement_revision();
+            session.note_draft_edit();
+            session.apply_loaded_settings(UserSettings::default(), EditingRevision::default());
+            assert_eq!(session.draft_replacement_revision(), invalid_revision);
+
+            let request = session.begin_write(SettingsWrite::Download).unwrap();
+            session.note_draft_edit();
+            let changed = UserSettings { entries_page_size: 50, ..Default::default() };
+            assert!(session.complete_write(request));
+            session.apply_loaded_settings(changed.clone(), request.editing);
+            assert_eq!(session.draft_replacement_revision(), invalid_revision);
+            assert_eq!(*session.draft.peek(), UserSettings::default());
+            assert_eq!(*session.theme.settings.peek(), changed);
+        });
+    }
+
+    #[test]
+    fn save_feedback_replacement_keeps_value_equality_instead_of_edit_revision() {
+        let (dom, session) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            session.update_draft(|draft| draft.entries_page_size = 0);
+            let submitted = session.draft.peek().clone();
+            let saved = UserSettings::default();
+            let first_revision = session.draft_replacement_revision();
+            let editing = session.requests.peek().editing();
+            session.apply_saved_settings(saved.clone(), &submitted, "none");
+            let normalized_revision = session.draft_replacement_revision();
+            assert_ne!(normalized_revision, first_revision);
+            assert_eq!(session.requests.peek().editing(), editing);
+
+            session.update_draft(|draft| draft.entries_page_size = 51);
+            session.apply_saved_settings(saved.clone(), &submitted, "none");
+            assert_eq!(session.draft_replacement_revision(), normalized_revision);
+            session.update_draft(|draft| draft.entries_page_size = 0);
+            session.note_draft_edit(); // A later parse failure still retains the same submitted value.
+            let editing = session.requests.peek().editing();
+            session.apply_saved_settings(saved.clone(), &submitted, "none");
+            assert_ne!(session.draft_replacement_revision(), normalized_revision);
+            assert_eq!(session.requests.peek().editing(), editing);
+            assert_eq!(*session.draft.peek(), saved);
+        });
     }
 
     #[test]

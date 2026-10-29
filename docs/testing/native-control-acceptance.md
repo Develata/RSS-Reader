@@ -10,7 +10,8 @@
 
 | 能力 | 普通 Rust / Dioxus | 静态 Web | Windows | Android / 其他宿主 | 证据入口 |
 | --- | --- | --- | --- | --- | --- |
-| Settings 初次加载 / 下载交错 | 10/29 已有代次、写入 gate、任务边界测试 | 10/29 两视口各 18 场景；真实 Web Lock / 回环响应延迟 | 10/29 仅正常同步，独立 WebView2 + HTTP + SQLite；未注入同样乱序 | Android 仅编译；Linux/macOS、托管 `rssr-web` 未运行 | [回填交接](../handoffs/2026-10-29-settings-load-ownership.md) |
+| Settings 初次加载 / 下载交错 | 10/29 已有代次、写入 gate、任务边界测试 | 两视口各 18 场景；表单批次重跑通过 | 回填批次仅正常同步；表单批次新增下载中的编辑场景，见下一行；初次加载延迟仍未在 Windows 注入 | Android 仅编译；Linux/macOS、托管 `rssr-web` 未运行 | [回填交接](../handoffs/2026-10-29-settings-load-ownership.md)、[表单交接](../handoffs/2026-10-29-settings-form-feedback.md) |
+| Settings 三枚举 / 四数字与解析提示 | 表单批次 Settings 61 项，新增 3 项回填代次测试 | 两视口各 45 场景；旧版复现、新版通过；保存 4 场景通过 | 同样各 45 场景；真实 HTTP / SQLite，另进程重启通过；重复同值通知为合成 DOM 事件 | Android 仅编译；真实 IME、前台原生视觉未验 | [表单交接](../handoffs/2026-10-29-settings-form-feedback.md) |
 | Settings 保存、主题文件、导入归属 | 本批 Settings 58 项通过，含 5 项真实文件 I/O 与 6 项 Dioxus 文件任务测试；均不包含 OS GUI | 回填批次已有保存/文件/导入归属结果，本批未新跑 Web UI | 旧候选 6 项 OS 导入场景通过并发现 BOM 错位；修复候选 CDP 13 项与进程重启通过，GUI 仍部分验收 | 本批 Android 编译通过；系统文件设备路径、Linux/macOS 未验 | [本批文件与传输交接](../handoffs/2026-10-29-native-theme-file-acceptance.md)、[文件契约交接](../handoffs/2026-10-28-theme-file-contracts.md)、[导入归属交接](../handoffs/2026-10-28-theme-import-ownership.md) |
 | Entries 查询 / 写入 / Reader 结果 | 已有纯规则及适配测试 | 10/27–28 历史同路径与迟到结果场景 | 历史正常流程、写入/重开；不覆盖全部宿主乱序 | 历史编译边界按各交接；不能由桌面小视口推定移动通过 | [Entries 查询](../handoffs/2026-10-27-entries-request-lifecycle.md)、[Entries 写入](../handoffs/2026-10-28-entries-write-lifecycle.md)、[Reader](../handoffs/2026-10-28-reader-result-lifecycle.md) |
 | Feeds 编辑 / 弹窗 | 已有身份、关闭 gate、失败重试测试 | 10/28 历史保存延迟、禁用后失焦 Esc、CDP composition | 历史正常编辑，未覆盖真实输入法或精确延迟 | Android 系统返回及 Linux/macOS UI 未验 | [编辑交接](../handoffs/2026-10-28-feed-editor-state.md) |
@@ -19,6 +20,16 @@
 10/29 Settings 已有结果：工作区 571 通过 / 0 失败 / 2 个既有性能探针忽略；Windows 正常同步每视口核对 5000 篇文章标记和 6 个订阅。它们是上一批的执行结果，**不是本轮新增测试数**。Web 四张比较图中三张逐字节相同，窄屏 loaded 图 R 标识有 108 像素差异，原因未确立；不能记为全像素一致。详见上述回填交接。
 
 契约审计使用 `target/settings-load-20261029/` 的 `validation-identity.json`、`final-receipt.json` 和六份最终验收回执。WASM SHA-256 为 `9bea9bf2e6af9f317ed290c8623d8931df770d396ee18afbaa776b8d0d161293`，旧 Windows EXE 为 `7f1cd5e5b19b06f7827af65ce5d0efa03f813ac5314cb3d3ac338ad3b056980c`；审计回执在 `target/native-control-contracts-20261029/`。本批文件/传输证据位于 `target/native-theme-files-20261029/`。这些是本机 ignored 证据，其他 checkout 缺失时应记“证据不可用”，不能凭文档补写通过。
+
+## Settings 表单直接验收与提示归属修复
+
+2026-10-29 表单批次通过 CLI / Playwright / 原生 CDP 完成。接纳的草稿回填现在会永久作废旧数字解析提示，包括同值结果和 A→B→A；回填因后来编辑被拒绝时保留提示。输入解析、范围校验、保存值相等和下载编辑代次规则保持不变，没有新增自动保存或设置副本。
+
+`rssr_settings_sync_acceptance.cjs --scenario form` 在 1536×844 / 390×844 分别运行 45 场景，旧、新 Web 与 Windows EXE 使用同一运行器。涵盖三枚举的所有值、四数字上下界、清空/整数小数/溢出、范围失败重试、零页大小回退、程序回填无通知、重复同值通知及下载期间继续编辑。Web 每视口核对 72 篇文章标记与 6 个订阅；Windows 每视口核对 5000 篇与 6 个订阅。旧版结果为 `baseline-reproduced`，不算候选通过。
+
+候选工作区测试 574 通过 / 0 失败 / 2 忽略，Clippy、格式、WASM/Android 编译通过；Web 初次加载/下载回归 36 场景和保存回归 4 场景通过。Web 初始与恢复后的四张完整页面图逐字节相同；错误提示变化单独核验。原生隐藏窗口截图超时，因此最终运行器沿用原生不截图的路径；原生结果只证明实际 WebView 控件/布局和持久化，不证明前台视觉、OS 控件或真实输入法。
+
+本批证据位于 `target/settings-form-20261029/`，准确源码/EXE/WASM/脚本身份及命令见[表单交接](../handoffs/2026-10-29-settings-form-feedback.md)。原始样本哈希不变，复制库索引/正文完整性均为 `ok`，完整文章表和正文表双向 `EXCEPT` 为零。原生截图失败及连接过早失败的尝试保留记录，不充作通过证据。
 
 ## Windows 文件实测与 BOM 修复结果
 
@@ -51,7 +62,7 @@ node scripts/browser/rssr_native_transport_acceptance.cjs --process-file '<run>/
 
 | ID | 场景和成功标准 | 现有入口 / 仍需的宿主验证 |
 | --- | --- | --- |
-| FORM-01 | 三枚举、四数字逐一输入；清空/无法解析时保留上次可解析值和提示，仍算编辑；控件程序回填不触发编辑或自动保存 | `preferences.rs`、Settings 单测；新控件逐字段验收，包含真实 IME 和重复同值通知 |
+| FORM-01 | 三枚举、四数字逐一输入；无法解析时保留上次可解析值并计为编辑；接纳回填永久作废旧提示，拒绝回填保留提示；程序回填不触发编辑或自动保存 | `rssr_settings_sync_acceptance.cjs --scenario form`、Settings 单测；现有 Web / WebView 已逐字段验证，重复通知为合成事件；真实 IME 与新 OS 控件另验 |
 | FORM-02 | 延迟初次加载，先编辑或 A→B→A；草稿/预设不被覆盖。先保存/下载后释放旧加载，旧成功和旧错误均无效 | `rssr_settings_sync_acceptance.cjs --scenario lifecycle`；现有受控场景仅 Web，原生需独立证据 |
 | FORM-03 | 保存前捕获快照；后来不同草稿保留，改回提交值仍可回填；失败可重试；零页大小只在提交副本回退 | `rssr_settings_save_acceptance.cjs`；Windows write/reopen 模式验证真实存储，延迟边界另验 |
 | FORM-04 | 下载确认前后分别编辑；发出后编辑保留，实际已保存主题更新。保存与下载相互拒绝、重复下载不排队，失败释放 gate | `rssr_settings_sync_acceptance.cjs --scenario lifecycle`；还须确认 endpoint/path 捕获及阻止后重新确认 |

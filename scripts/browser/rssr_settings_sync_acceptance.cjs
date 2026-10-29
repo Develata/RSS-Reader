@@ -32,13 +32,17 @@ async function eventually(read, expected, label) {
   try {
     await fs.mkdir(output, { recursive: true });
     await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
-    assert.ok(['sync', 'lifecycle'].includes(report.scenario));
+    assert.ok(['sync', 'lifecycle', 'form'].includes(report.scenario));
     if (report.scenario === 'lifecycle') assert.equal(native, false, 'controlled lifecycle fixture runs only in isolated Web');
     report.scriptSha256 = crypto.createHash('sha256').update(await fs.readFile(__filename)).digest('hex');
     if (report.scenario === 'lifecycle') report.scenarioSha256 = crypto.createHash('sha256').update(await fs.readFile(path.join(__dirname, 'settings_load_scenarios.cjs'))).digest('hex');
+    if (report.scenario === 'form') report.scenarioSha256 = crypto.createHash('sha256').update(await fs.readFile(path.join(__dirname, 'settings_form_scenarios.cjs'))).digest('hex');
     report.publicRoot = native ? null : path.resolve(process.env.PUBLIC_DIR || 'target/dx/rssr-app/release/web/public');
     database = native ? new (require('node:sqlite').DatabaseSync)(path.resolve(options.database), { readOnly: true }) : null;
-    browser = native ? await chromium.connectOverCDP(options.cdp) : await chromium.launch({ channel: 'chrome', headless: true });
+    browser = native ? await chromium.connectOverCDP(options.cdp) : await chromium.launch({
+      ...(process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH } : { channel: 'chrome' }), headless: true,
+    });
+    report.browserVersion = browser.version();
     const context = native ? browser.contexts()[0] : await browser.newContext();
     if (!native) {
       await fixture.install(context, path.resolve(__dirname, '../..')); await installStorageHelpers(context);
@@ -67,6 +71,9 @@ async function eventually(read, expected, label) {
       ? database.prepare('SELECT id, url FROM feeds WHERE is_deleted = 0 ORDER BY id').all().map(row => ({ ...row }))
       : page.evaluate(() => JSON.parse(localStorage.getItem(window.__rssrTestStateKey('rssr-web-state-v1'))).feeds.filter(row => !row.is_deleted).map(({ id, url }) => ({ id, url })).sort((a, b) => a.id - b.id));
     if (native) {
+      const feedOrigin = new URL(options['feed-origin'] || origin);
+      assert.equal(feedOrigin.hostname, '127.0.0.1', 'native fixture feeds stay on loopback');
+      report.feedOrigin = feedOrigin.origin;
       // No navigation or mutation until the supplied database and current UI both match the fixture.
       const catalog = database.prepare('SELECT id, title FROM entries ORDER BY id').all();
       assert.equal(catalog.length, 5000);
@@ -77,7 +84,7 @@ async function eventually(read, expected, label) {
       const visible = await page.locator('[data-layout="entry-card"][data-position-entry]').evaluateAll(rows => rows.map(row => ({ id: Number(row.dataset.positionEntry), title: row.querySelector('[data-slot="entry-card-title"]').textContent.trim() })));
       assert.ok(visible.length > 0);
       for (const row of visible) assert.equal(row.title, catalog[row.id - 1]?.title, 'UI matches isolated fixture');
-      for (const row of await feeds()) assert.equal(new URL(row.url).origin, origin, 'fixture feeds use loopback only');
+      for (const row of await feeds()) assert.equal(new URL(row.url).origin, feedOrigin.origin, 'fixture feeds use the caller-owned loopback service');
       report.preflight = { articleCount: catalog.length, visibleRowsChecked: visible.length };
     }
     server = http.createServer(async (request, response) => {
@@ -134,6 +141,18 @@ async function eventually(read, expected, label) {
       assert.equal(await page.locator(field('webdav-endpoint')).inputValue(), '');
       assert.equal(await page.locator(field('webdav-remote-path')).inputValue(), 'config/rss-reader.json');
       await screenshot(`sync-${width}`);
+      if (report.scenario === 'form') {
+        const cases = await require('./settings_form_scenarios.cjs')({
+          page, baseline: report.baseline, settings, waitStatus, eventually, screenshot, width, origin,
+          requests: report.requests, setRemote: value => { remote = value; }, getRemote: () => remote,
+          holdDownload: () => { gate = new Promise(resolve => { release = resolve; }); },
+          releaseDownload: () => { release?.(); gate = Promise.resolve(); },
+        });
+        assert.deepEqual(await flags(), originalFlags, 'all article flags preserved');
+        assert.deepEqual(await feeds(), originalFeeds, 'all feed identities and URLs preserved');
+        report.results.push({ width, pass: true, cases, articleCount: originalFlags.length, feedCount: originalFeeds.length });
+        console.log('PASS settings-form-' + width); continue;
+      }
       if (report.scenario === 'lifecycle') {
         const cases = await require('./settings_load_scenarios.cjs')({
           page, baseline: report.baseline, origin, settings, waitStatus, eventually, screenshot, width,
@@ -196,7 +215,7 @@ async function eventually(read, expected, label) {
       console.log('PASS settings-sync-' + width);
     }
     assert.deepEqual(report.pageErrors, []); assert.deepEqual(report.consoleErrors, []); assert.equal(report.serverError, undefined);
-    report.status = 'passed';
+    report.status = report.scenario === 'form' && report.baseline ? 'baseline-reproduced' : 'passed';
   } catch (error) {
     report.status = 'failed'; report.error = String(error.stack); throw error;
   } finally {
