@@ -1,24 +1,49 @@
 # 原生控件适配验收清单
 
-核对日期：2026-10-29；当前源码基线：`ea70ff19f7713220e8c1dec93aa53fa6fd679bc9`。配套[适配契约](../design/native-control-adapter-contracts.md)定义输入、回填和取消边界；本文定义如何证明它们。**本轮是契约和证据核对，未新运行浏览器或设备验收。**
+核对日期：2026-10-29；契约基线：`ea70ff19f7713220e8c1dec93aa53fa6fd679bc9`。配套[适配契约](../design/native-control-adapter-contracts.md)定义输入、回填和取消边界；本文定义如何证明它们。Windows 系统文件实测发现的 BOM 传输缺陷及修复候选身份，见[本批交接](../handoffs/2026-10-29-native-theme-file-acceptance.md)；不能把旧候选的系统窗口结果视为修复后全部 GUI 通过。
 
 ## 证据等级与平台边界
 
 每条结果都写出“源码/产物身份、执行载体、实际动作、回执和缺口”。普通 Rust 单测、Dioxus 可控 Future、真实浏览器、WebView2/CDP、系统 GUI/设备手工和编译检查分别记录；不得互相升级。隐藏 WebView 截图不证明前台视觉，注入 composition 事件不证明真实输入法，`--baseline true` 只证明旧缺陷被记录。
 
-下表是已有证据索引，不是所有平台在当前 HEAD 上新跑过。2026-10-29 Settings 回执与产物在本轮只读复核身份；其他历史交接仅用于定位场景，未重验其旧产物，也未声明等同当前版本。
+下表是已有证据索引，不是所有平台在当前 HEAD 上新跑过。Settings 回填批次的回执与产物在契约审计时只读复核身份；本批新增 Windows 文件部分实测和原生传输回归另列。其他历史交接仅用于定位场景，未重验其旧产物，也未声明等同当前版本。
 
 | 能力 | 普通 Rust / Dioxus | 静态 Web | Windows | Android / 其他宿主 | 证据入口 |
 | --- | --- | --- | --- | --- | --- |
 | Settings 初次加载 / 下载交错 | 10/29 已有代次、写入 gate、任务边界测试 | 10/29 两视口各 18 场景；真实 Web Lock / 回环响应延迟 | 10/29 仅正常同步，独立 WebView2 + HTTP + SQLite；未注入同样乱序 | Android 仅编译；Linux/macOS、托管 `rssr-web` 未运行 | [回填交接](../handoffs/2026-10-29-settings-load-ownership.md) |
-| Settings 保存、主题文件、导入归属 | 10/29 工作区回归包含已有用例；真实临时文件 I/O 不包含 OS GUI | 10/29 保存/失败重试、文件、导入归属回执均通过 | 保存与重开另见 10/28 历史；Windows OS 文件选择/保存 GUI 未验 | Android 导入未实现；系统导出设备路径本批未验 | [保存交接](../handoffs/2026-10-28-settings-save-policy.md)、[文件交接](../handoffs/2026-10-28-theme-file-contracts.md)、[导入交接](../handoffs/2026-10-28-theme-import-ownership.md) |
+| Settings 保存、主题文件、导入归属 | 本批 Settings 58 项通过，含 5 项真实文件 I/O 与 6 项 Dioxus 文件任务测试；均不包含 OS GUI | 回填批次已有保存/文件/导入归属结果，本批未新跑 Web UI | 旧候选 6 项 OS 导入场景通过并发现 BOM 错位；修复候选 CDP 13 项与进程重启通过，GUI 仍部分验收 | 本批 Android 编译通过；系统文件设备路径、Linux/macOS 未验 | [本批文件与传输交接](../handoffs/2026-10-29-native-theme-file-acceptance.md)、[文件契约交接](../handoffs/2026-10-28-theme-file-contracts.md)、[导入归属交接](../handoffs/2026-10-28-theme-import-ownership.md) |
 | Entries 查询 / 写入 / Reader 结果 | 已有纯规则及适配测试 | 10/27–28 历史同路径与迟到结果场景 | 历史正常流程、写入/重开；不覆盖全部宿主乱序 | 历史编译边界按各交接；不能由桌面小视口推定移动通过 | [Entries 查询](../handoffs/2026-10-27-entries-request-lifecycle.md)、[Entries 写入](../handoffs/2026-10-28-entries-write-lifecycle.md)、[Reader](../handoffs/2026-10-28-reader-result-lifecycle.md) |
 | Feeds 编辑 / 弹窗 | 已有身份、关闭 gate、失败重试测试 | 10/28 历史保存延迟、禁用后失焦 Esc、CDP composition | 历史正常编辑，未覆盖真实输入法或精确延迟 | Android 系统返回及 Linux/macOS UI 未验 | [编辑交接](../handoffs/2026-10-28-feed-editor-state.md) |
 | 目录 / 阅读位置 / 手势 | 已有控制器、几何、快捷键策略测试 | 历史跨页、窗口替换、焦点和手动/自动交错 | 有历史目录/返回证据，不能外推到新控件 | 有历史 Android 目录证据，版本和设备范围按原记录；真实 IME 未覆盖 | [目录设备记录](../handoffs/2026-10-26-native-directory-validation.md)、[窗口化](../handoffs/2026-10-26-directory-windowing.md)、[边界回归](../handoffs/2026-10-27-directory-window-boundaries.md) |
 
 10/29 Settings 已有结果：工作区 571 通过 / 0 失败 / 2 个既有性能探针忽略；Windows 正常同步每视口核对 5000 篇文章标记和 6 个订阅。它们是上一批的执行结果，**不是本轮新增测试数**。Web 四张比较图中三张逐字节相同，窄屏 loaded 图 R 标识有 108 像素差异，原因未确立；不能记为全像素一致。详见上述回填交接。
 
-本轮复核使用 `target/settings-load-20261029/` 的 `validation-identity.json`、`final-receipt.json` 和六份最终验收回执。WASM SHA-256 为 `9bea9bf2e6af9f317ed290c8623d8931df770d396ee18afbaa776b8d0d161293`，Windows EXE 为 `7f1cd5e5b19b06f7827af65ce5d0efa03f813ac5314cb3d3ac338ad3b056980c`；本轮审计回执在 `target/native-control-contracts-20261029/`。这些是本机 ignored 证据，其他 checkout 缺失时应记“证据不可用”，不能凭文档补写通过。
+契约审计使用 `target/settings-load-20261029/` 的 `validation-identity.json`、`final-receipt.json` 和六份最终验收回执。WASM SHA-256 为 `9bea9bf2e6af9f317ed290c8623d8931df770d396ee18afbaa776b8d0d161293`，旧 Windows EXE 为 `7f1cd5e5b19b06f7827af65ce5d0efa03f813ac5314cb3d3ac338ad3b056980c`；审计回执在 `target/native-control-contracts-20261029/`。本批文件/传输证据位于 `target/native-theme-files-20261029/`。这些是本机 ignored 证据，其他 checkout 缺失时应记“证据不可用”，不能凭文档补写通过。
+
+## Windows 文件实测与 BOM 修复结果
+
+旧 EXE 的实际 OS 导入将 BOM/CRLF 原文正确写入 SQLite，但 Dioxus 字符串表解码丢掉了开头的 BOM，导致文本框、枚举、数字和保存按钮状态一同错位。修复限定在原生文档启动适配：仅为解释器的文本解码器保留 BOM，不改导入原文、Web 去 BOM 规则、保存 gate 或浏览器全局解码器。
+
+新 EXE SHA-256：`43cc29086c9f9097aa6426c7eefc055e82778792a62ae398e52bffafbc1ef8ee`。`rssr_native_transport_acceptance.cjs` 在真实 WebView2 中直接输入并应用 CSS，捕获真实 Rust 字符串表，旧候选稳定复现、新候选 13 项通过。1280×900 / 390×900 普通 CSS 渲染图逐字节相同；这属于 CDP 渲染证据，不是前台 OS 视觉或真实输入法验收。
+
+| W-FILE | 已执行结果与范围 |
+| --- | --- |
+| 01 | 旧候选：系统选择有效中文 CSS、自动保存、重开页面通过；源文件、全部文章标记/订阅保持。新候选未重跑系统选择器 |
+| 02 | 旧候选：取消、同名重选、空文件 3 项通过；取消后可继续导入 |
+| 03 | 旧候选：无效 CSS / UTF-8 各通过；BOM 显示缺陷已修复并经新 EXE/CDP 验证。系统选定后真实读失败未覆盖；真实文件单测单独列出 |
+| 04 / 05 | 系统保存框、覆盖确认、真实 OS 写失败及重试未执行；Rust 文件 I/O 与 Dioxus 导出快照测试不代替这些结果 |
+| 06 | 系统窗口等待期间离页未执行；普通页面重开和进程重启已验，不算该异步场景通过 |
+| 07 | 旧候选：中文路径、Esc 取消及返回导入按钮焦点、滚动位置保持已记录；Tab/Shift+Tab 和真实 IME 未覆盖 |
+
+本批后半段按用户要求使用命令行与 CDP，不继续 Computer Use。系统文件流程总体仍为**部分验收**；修复候选的原生传输、58 项 Settings 测试、Clippy、WASM/Android 编译及数据保护结果见交接。
+
+可重复的原生传输入口（调用方先启动独立 EXE/profile/复制库与回环服务，页面停在 Entries；不是 OS 选择器运行器）：
+
+```powershell
+node scripts/browser/rssr_native_transport_acceptance.cjs --process-file '<run>/process.json' --artifact-dir '<evidence>/transport' --baseline false
+```
+
+`process.json` 包含 `pid`、`exe`、`profile`、`cdp`。脚本核对实际进程、CDP 所属进程链、`target/` 下的复制库与 5000 篇 fixture，才允许设置写入；启动失败覆盖旧回执并返回非零。旧候选另传 `--baseline true`，结果只记 `baseline-reproduced`。调用方负责退出本次进程与回环服务。
 
 ## 按改动面选择验收
 
@@ -51,7 +76,7 @@ node scripts/browser/rssr_theme_files_acceptance.cjs --scenario ownership --arti
 
 Windows CDP 运行器只接受显式独立进程、profile 和复制库，先核对当前 Entries 页及数据库身份再写入。现有主题文件运行器是 Web 文件路径验收，**没有 Windows OS 选择器驱动能力**；不要给它加 `--cdp` 就记为原生文件验收。
 
-## 下一批：Windows 系统 CSS 文件流程
+## Windows 系统 CSS 文件流程（验收规范）
 
 范围限定在现有 `theme_file_io.rs` / `theme_io.rs` 的桌面适配与验收工具。先跑现有实现，只有发现可复现缺陷才修改对应边界；不引入新渲染器、新设置状态或新的跨平台能力。
 

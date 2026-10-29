@@ -67,11 +67,14 @@ Settings 的详细发布顺序见[既有模块边界](./native-ui-preparation.md
 | 焦点和模态 | HTML `<dialog>` 负责焦点约束；移除时仅向仍连接的原节点恢复焦点 | 打开、Tab/Shift+Tab、Esc、原生关闭事件、IME 与禁用控件交错；回焦不额外滚动。OS 文件窗口和 HTML 弹窗分开验收 |
 | 布局提交和滚动 | 目录 bridge 按 epoch/revision 等待挂载，异步后复查实例所有权；位置恢复有 visit/sequence | 先挂载/布局后滚动或聚焦；替换窗口后旧回复不能复活，手动滚动不能被迟到自动跟随覆盖；宽度变化重测行高 |
 | 文件读写 | Web 字节读取/下载；桌面 rfd + 文件 I/O；Android 系统保存器 | 成功、取消、真实读写失败、重复选择和页面离开分开记录；不能用临时文件单测代替系统选择器 GUI |
+| 原生文本传输 | [原生文档启动适配](../../crates/rssr-app/src/bootstrap/native_document.rs)为 Dioxus 解释器保留字符串表开头的 BOM；不修改文件或业务草稿，不替换全局 `TextDecoder` | Dioxus / sledgehammer 升级时复核私有 `c` 解码器及 module → DOMContentLoaded → load 启动顺序；用真实 Rust 字符串表验证 BOM、Unicode 和后续字段对齐，见[传输运行器](../../scripts/browser/rssr_native_transport_acceptance.cjs) |
 | Android 文件回调 | [Rust 导出桥](../../crates/rssr-app/src/pages/settings_page/themes/theme_android_export.rs) 与 [MainActivity](../../android/MainActivity.kt) 协作，返回成功/取消/失败；Activity 销毁报告未完成 | 实测系统文档提供器、系统返回、前后台和销毁后的回调；页面离开不等于 OS 写入停止。Android 文件导入仍未接入，手动粘贴是当前路径 |
 | 正文、图片、选择复制 | 沿用现有已消毒 HTML、图片入口和系统选择/剪贴板行为 | 必须在实际宿主验收中文输入、选择复制、图片缩放/关闭和系统返回；Rust 单测与 Web 小视口不能替代设备验证 |
 
 ## 首个适配切口
 
 先补 **Windows 主题 CSS 文件选择/保存的实际宿主验收**。理由是当前已有 rfd 适配和真实文件单测，Web 也有明确回归场景，而 OS GUI 完整路径仍缺证据；可以验证平台边界而无需决定新渲染器。具体成功标准见[验收清单](../testing/native-control-acceptance.md)的 W-FILE 场景。
+
+2026-10-29 已完成部分系统导入实测，并修复由此发现的原生 BOM 传输错位；修复后以命令行/CDP 验收。系统导出、窗口等待期间离页和真实输入法仍有缺口，不能声明此切口全部完成，详见[本批交接](../handoffs/2026-10-29-native-theme-file-acceptance.md)。
 
 后续若进入新控件实现，最小表单候选为 Settings 阅读偏好的三个枚举和四个数字字段：输入面小，可直接核验编辑/回填差异。此项只是范围建议；需先明确宿主、渲染及 CSS 兼容方案。当前继续保持七个 crate 与 facade/session → `UiCommand` → runtime → application/host 的职责，不为这项建议提前添加控制器或持久状态。
