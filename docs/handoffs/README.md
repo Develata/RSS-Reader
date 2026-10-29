@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| 2026-10-29 | [目录入口、固定标题与 Penpot 同步](./2026-10-29-directory-toolbar-sticky-header.md) |
 | 正文性能与后台图片调度 | [PR 与 CI 验收](./2026-10-29-parse-image-pr-ci.md)、[实现及证据](./2026-10-28-parse-image-performance.md)、[长期预算契约](../design/reader-processing-budgets.md) |
 | 文档维护与归档 | [2026-10-28 整理](./2026-10-28-docs-maintenance.md)、[历史索引](./archive/README.md) |
 | 历史待办核实与 PR 收尾 | [本轮核实](./2026-10-28-historical-followup-audit.md)、[当前待办](../maintenance-backlog.md) |

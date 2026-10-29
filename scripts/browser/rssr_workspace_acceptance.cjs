@@ -140,6 +140,20 @@ async function responsive(page) {
     assert.ok(metrics.next.x - metrics.previous.x < 140, 'paging buttons stay close');
     assert.equal(metrics.railVisible, width > 1000);
     if (width <= 1000) {
+      const toolbar = await page.evaluate(() => {
+        const r = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+        return {title:r('.entries-toolbar-title'), panel:r('.entries-toolbar'), buttons:[
+          '[data-action="mark-selected-read"]', '[data-action="archive-selected"]',
+          '.entries-view-options summary', '[data-action="open-directory"]',
+        ].map(r)};
+      });
+      for (const [index, button] of toolbar.buttons.entries()) {
+        assert.ok(button.width >= 44 && button.height >= 44, `${width}px toolbar hit target`);
+        assert.ok(Math.abs(button.y - toolbar.title.y) <= 1, `${width}px actions stay in the title row`);
+        if (index) assert.ok(button.x >= toolbar.buttons[index-1].right, `${width}px toolbar actions do not overlap`);
+      }
+      assert.ok(Math.abs(toolbar.buttons[3].right - toolbar.panel.right) <= 1, `${width}px directory opens from the far right`);
+      assert.ok(toolbar.buttons[0].x >= toolbar.title.right, `${width}px title does not overlap actions`);
       await page.locator(action('open-directory')).click();
       assert.equal(await page.locator(rail).isVisible(), true);
       await page.locator(action('close-directory')).click();
@@ -162,6 +176,50 @@ async function responsive(page) {
   assert.ok(box.x >= 0 && box.x + box.width <= 361 && box.y >= 0 && box.y + box.height <= 801, JSON.stringify(box));
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#source-filter-dialog').count(), 0);
+}
+
+async function toolbarThemes(page) {
+  for (const preset of [null, 'atlas-sidebar', 'newsprint', 'amethyst-glass', 'midnight-ledger']) {
+    await page.goto('about:blank');
+    const session = await fixture.get(page).server.useSeed('directory-contract', {preset});
+    const split = session.cookie.indexOf('=');
+    await page.context().addCookies([{name:session.cookie.slice(0,split), value:session.cookie.slice(split+1), url:fixture.origin, httpOnly:true, sameSite:'Strict'}]);
+    await page.goto(fixture.origin + '/entries'); await ready(page);
+    for (const width of [360, 600, 601, 760, 1000, 1001, 1200]) {
+      await page.setViewportSize({width, height:900});
+      if (await page.locator(rail).isVisible()) await page.locator(action('close-directory')).click();
+      const geometry = await page.evaluate(() => {
+        const r = selector => document.querySelector(selector).getBoundingClientRect().toJSON();
+        return {title:r('.entries-toolbar-title'), toolbar:r('.entries-toolbar'), overflow:document.documentElement.scrollWidth>innerWidth,
+          buttons:['[data-action="mark-selected-read"]','[data-action="archive-selected"]','.entries-view-options summary','[data-action="open-directory"]'].map(r)};
+      });
+      const label = `${preset || 'default'}/${width}`;
+      assert.equal(geometry.overflow, false, label);
+      geometry.buttons.forEach((button, index) => {
+        assert.ok(button.width>=44 && button.height>=44, `${label} hit area`);
+        assert.ok(Math.abs(button.y-geometry.title.y)<1, `${label} title row`);
+        assert.ok(button.x>=(index?geometry.buttons[index-1].right:geometry.title.right)-1, `${label} no overlap`);
+      });
+      assert.ok(Math.abs(geometry.buttons[3].right-geometry.toolbar.right)<1, `${label} right edge`);
+      await page.locator(action('open-directory')).click();
+      const alpha = await page.locator('.directory-heading-row').evaluate(e => {
+        const canvas=document.createElement('canvas'), ctx=canvas.getContext('2d');
+        ctx.fillStyle=getComputedStyle(e).backgroundColor; ctx.fillRect(0,0,1,1);
+        return ctx.getImageData(0,0,1,1).data[3];
+      });
+      assert.equal(alpha, 255, `${label} scrolling text cannot show through the heading`);
+      // Stress only the label's layout; keep the fixture's selection state intact.
+      const longCount = await page.locator('.entries-count').evaluate(e => {
+        const original=e.textContent;
+        e.textContent='已选 12345678901234567890';
+        const title=e.parentElement.getBoundingClientRect(), actions=document.querySelector('.entries-toolbar-actions').getBoundingClientRect();
+        const result={sameRow:Math.abs(title.y-actions.y)<1, fits:title.right<=actions.left+1, ellipsis:getComputedStyle(e).textOverflow};
+        e.textContent=original;
+        return result;
+      });
+      assert.ok(longCount.sameRow && longCount.fits && longCount.ellipsis==='ellipsis', `${label} long count stays inside the title`);
+    }
+  }
 }
 
 async function editEdges(page) {
@@ -635,7 +693,7 @@ async function dialogComposition(page) {
   }
 }
 
-module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation };
+module.exports = { seed, selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation, toolbarThemes };
 if (require.main === module) (async () => {
   const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN });
@@ -645,7 +703,7 @@ if (require.main === module) (async () => {
     page.setDefaultTimeout(15000);
     await fixture.install(page.context(), require('node:path').resolve(__dirname,'../..'));
     await seed(page, fixture.origin);
-    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation })) {
+    for (const [name, run] of Object.entries({ selection, sources, editing, responsive, editEdges, queryStability, importNames, sourceIdentity, pendingWrites, preferenceOrdering, shortSourceDialog, dialogComposition, preferencesSurviveNavigation, reopeningDuringSourceEdit, articleWritesSurviveNavigation, preferencesRecoveredAfterArticleWrites, readerWritesSurviveNavigation, toolbarThemes })) {
       try { await run(page); console.log(`PASS ${name}`); }
       catch (error) {
         const fs = require('node:fs/promises'), path = require('node:path');
