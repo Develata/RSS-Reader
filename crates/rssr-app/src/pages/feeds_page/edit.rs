@@ -12,7 +12,7 @@ pub(super) fn FeedEditDialog(facade: FeedsPageFacade) -> Element {
     let reset = facade.clone();
     let save = facade.clone();
     let details = facade.edit_details();
-    let saving = facade.edit_busy() && details.is_some();
+    let saving = facade.edit_saving();
     rsx! {
         Dialog { id: "feed-edit-dialog", label: "编辑来源", on_close: move |_| close.edit_close(),
             div { class: "workspace-dialog-heading",

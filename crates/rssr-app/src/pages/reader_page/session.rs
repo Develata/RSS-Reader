@@ -5,7 +5,10 @@ use dioxus::prelude::*;
 use crate::bootstrap::ReaderNavigation;
 use crate::ui::{ReaderCommand, UiCommand, UiIntent, run_ui_command};
 
-use super::{reducer::dispatch_reader_page_intent, state::ReaderPageState};
+use super::{
+    reducer::dispatch_reader_page_intent, result_lifecycle::ReaderResultScope,
+    state::ReaderPageState,
+};
 
 #[derive(Clone, Copy)]
 pub(crate) struct ReaderPageSession {
@@ -194,15 +197,11 @@ impl ReaderPageSession {
     }
 
     fn spawn_result(self, result: impl Future<Output = Vec<UiIntent>> + 'static) {
-        let generation = self.state.peek().load_generation;
+        let scope = self.state.with_peek(|state| ReaderResultScope::capture(self.entry_id, state));
         spawn(async move {
-            let intents = result.await;
-            let current = self.state.peek();
-            if current.current_entry_id != self.entry_id || current.load_generation != generation {
-                return;
-            }
-            drop(current);
-            for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent) {
+            let intents = result.await.into_iter().filter_map(UiIntent::into_reader_page_intent);
+            let accepted = self.state.with_peek(|state| scope.complete(state, intents));
+            for intent in accepted {
                 dispatch_reader_page_intent(self.state, intent);
             }
         });

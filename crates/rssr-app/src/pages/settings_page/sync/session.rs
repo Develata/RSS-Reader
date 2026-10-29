@@ -94,6 +94,7 @@ impl SettingsPageSyncSession {
             );
             return;
         }
+        self.page.invalidate_theme_import();
         let snapshot = self.snapshot();
         self.state.with_mut(|state| state.clear_pending_remote_pull());
         let pulling = execute(UiCommand::Settings(SettingsCommand::PullConfig {

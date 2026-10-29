@@ -2,6 +2,9 @@ pub(crate) mod external_link;
 pub(crate) mod local_time;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod native_document;
+
+#[cfg(not(target_arch = "wasm32"))]
 #[path = "bootstrap/native.rs"]
 mod imp;
 

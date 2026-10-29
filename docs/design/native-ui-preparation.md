@@ -78,3 +78,14 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 `34a63202` 的 Windows / Android 实际目录、连续返回和本会话阅读位置恢复已验证；完整证据与未验范围见 [原生目录验收](../handoffs/2026-10-26-native-directory-validation.md)。真实输入法留待用户空闲，后台 WebView 的降频样本不能用作前台性能基线。
 
 Android 展开一个包含 597 篇文章的来源月份时，渲染 trace 显示样式计算和布局是明确成本。现已按上述边界实现文章分支窗口化，功能、原生验收和测量范围见 [目录窗口化交接](../handoffs/2026-10-26-directory-windowing.md)。不切掉文章层级，不用固定行高假设，不改变查询或业务层职责；挂载节点、布局耗时、宿主往返延迟和内存应分别报告，不能仅凭节点数减少推断整应用更快。
+
+## PR #40 与主线整合（2026-10-29）
+
+在 main 8932a5ac 的 Backend、单库与逐字段 Settings 设计上接入：
+
+- Entries 的 write_lifecycle.rs 输出写入准入和有序回执，后续读取映射到完整 Reread；preferences_policy.rs 只保留就绪准入，App 保存队列和来源编辑排序不变。
+- Reader 的 result_lifecycle.rs 处理访问归属；主线的读取恢复、只读刷新和离页写入回执不变。
+- Feeds 的 edit_state.rs 与 request_policy.rs 提供编辑状态、读取代次和反馈规则；保留主线 typed failure、配置指纹与 App 作业。
+- Settings 的 draft_edits.rs 独占 submitted/pending 补丁转换和失败恢复，request_lifecycle.rs 独占读取身份、写入门禁和暂存读取；状态字段私有，session 仅经转换方法装配副作用。save_policy.rs 只准备逐字段补丁和汇总回执；stored → submitted → pending 规则不变。旧分支的整份草稿替换策略已退役。
+- 保留 main 的主题卡片、导入与恢复默认仅预览、统一显式保存和离页撤销预览；主题文件归属、严格 UTF-8、可恢复文件错误和原生 BOM 传输兼容保留。数值解析提示改为字段投影代次，不影响逐字段保存。
+- 验收与未来控件输入/取消边界见[适配契约](./native-control-adapter-contracts.md)和[验收入口](../testing/native-control-acceptance.md)。旧 BrowserStore 场景由当前真实服务器入口替换。

@@ -142,6 +142,6 @@ impl EntriesPageSession {
     pub(super) fn can_save_browsing_preferences(self, preferences_loaded: bool) -> bool {
         // The captured flag also matters: an effect queued before bootstrap
         // finished still contains default values, even if the live state is ready.
-        preferences_loaded && self.state.peek().preferences_load.is_loaded()
+        super::super::preferences_policy::can_schedule_save(&self.state.peek(), preferences_loaded)
     }
 }

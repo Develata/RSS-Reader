@@ -2,10 +2,15 @@ use std::future::Future;
 
 use dioxus::prelude::*;
 
-use super::{intent::FeedsPageIntent, reducer::dispatch_feeds_page_intent, state::FeedsPageState};
+use super::{
+    intent::FeedsPageIntent,
+    reducer::dispatch_feeds_page_intent,
+    request_policy::{FeedsRequestPlan, RefreshFeedback},
+    state::FeedsPageState,
+};
 use crate::{
     theme::ThemeController,
-    ui::{AppShellState, FeedsCommand, ShellCommand, UiCommand, UiIntent, run_ui_command},
+    ui::{AppShellState, FeedsCommand, UiCommand, UiIntent, run_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -31,7 +36,7 @@ impl FeedsPageSession {
     }
 
     pub(crate) fn dismiss_edit(self) -> bool {
-        if self.state.peek().edit_feed_id.is_none() {
+        if self.state.peek().edit.feed_id().is_none() {
             return false;
         }
         // An in-flight save consumes Back too; the reducer keeps its form open
@@ -84,21 +89,14 @@ impl FeedsPageSession {
         }
         let commands = dispatch_feeds_page_intent(self.state, intent);
         for command in commands {
-            if matches!(command, UiCommand::Shell(ShellCommand::ManualRefresh)) {
+            let plan = FeedsRequestPlan::for_command(&command, *self.query_generation.peek());
+            if plan == FeedsRequestPlan::ManualRefresh {
                 self.shell.manual_refresh();
                 continue;
             }
-            // Refresh completion and feed mutations can start overlapping snapshots.
-            // Only reads use this token; writes must still publish their completion.
-            let generation =
-                matches!(command, UiCommand::Feeds(FeedsCommand::LoadSnapshot)).then(|| {
-                    self.query_generation.with_mut(|generation| {
-                        *generation = generation.wrapping_add(1);
-                        *generation
-                    })
-                });
-            let single_refresh =
-                matches!(command, UiCommand::Feeds(FeedsCommand::RefreshFeed { .. }));
+            if let Some(generation) = plan.query_generation() {
+                self.query_generation.set(generation);
+            }
             // Jobs (refreshing one subscription, adding one) are the app's: leaving the page does
             // not stop the wait, and their end re-reads every page (C4b item 3).
             let job = matches!(
@@ -129,7 +127,7 @@ impl FeedsPageSession {
                 if shell_owned {
                     self.shell.reread_now();
                 }
-                if generation.is_some_and(|generation| *self.query_generation.peek() != generation)
+                if plan.query_generation().is_some() && !plan.accepts(*self.query_generation.peek())
                 {
                     return;
                 }
@@ -176,22 +174,17 @@ impl FeedsPageSession {
                 for intent in intents {
                     self.dispatch_intent(intent);
                 }
-                if single_refresh {
-                    let (revision, message, failed) = self.state.with(|state| {
-                        let tone = state.status_tone.as_str();
-                        let lasting = tone == "error" || tone == crate::ui::failure::TONE_UNKNOWN;
-                        (state.status_revision, state.status.clone(), lasting)
+                if plan == FeedsRequestPlan::SingleRefresh {
+                    let feedback = self.state.with_peek(|state| {
+                        RefreshFeedback::capture(
+                            state.status_revision,
+                            &state.status,
+                            &state.status_tone,
+                        )
                     });
-                    crate::ui::wait_for_refresh_feedback(std::time::Duration::from_secs(
-                        if failed { 6 } else { 3 },
-                    ))
-                    .await;
-                    // The wait is the app's too: the page may have been left meanwhile.
+                    crate::ui::wait_for_refresh_feedback(feedback.delay).await;
                     if self.state.try_peek().is_ok() {
-                        self.dispatch_intent(FeedsPageIntent::ClearRefreshStatus {
-                            revision,
-                            message,
-                        });
+                        self.dispatch_intent(feedback.clear);
                     }
                 }
             };
@@ -275,24 +268,29 @@ mod tests {
             assert!(!session.dismiss_edit());
             let mut state = session.state;
             state.with_mut(|state| {
-                state.edit_feed_id = Some(42);
-                state.edit_busy = true;
+                state.edit.begin_load(42);
             });
             assert!(session.dismiss_edit(), "loading dialog closes before navigation");
-            assert!(state.peek().edit_feed_id.is_none());
+            assert!(state.peek().edit.feed_id().is_none());
             state.with_mut(|state| {
-                state.edit_feed_id = Some(42);
-                state.edit_details = Some(rssr_domain::FeedEditDetails {
-                    feed_id: 42,
-                    url: "https://example.com/feed".into(),
-                    original_title: None,
-                    custom_title: Some("Draft".into()),
-                });
-                state.edit_busy = true;
+                let generation = state.edit.begin_load(42).unwrap();
+                state.edit.finish_load(
+                    42,
+                    generation,
+                    Ok(rssr_domain::FeedEditDetails {
+                        feed_id: 42,
+                        url: "https://example.com/feed".into(),
+                        original_title: None,
+                        custom_title: Some("Draft".into()),
+                    }),
+                );
+                state.edit.begin_save().unwrap();
             });
             assert!(session.dismiss_edit(), "saving consumes Back without navigation");
-            assert_eq!(state.peek().edit_feed_id, Some(42));
-            state.with_mut(|state| state.edit_busy = false);
+            assert_eq!(state.peek().edit.feed_id(), Some(42));
+            state.with_mut(|state| {
+                state.edit.finish_save(42, state.edit.generation(), Err("failed".into()));
+            });
             assert!(session.dismiss_edit(), "an idle draft can close");
             assert!(!session.dismiss_edit(), "the following Back can navigate normally");
         });

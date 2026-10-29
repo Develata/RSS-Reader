@@ -1,3 +1,7 @@
+use super::{
+    draft_edits::Edits,
+    request_lifecycle::{SettingsLoadRequest, SettingsRequestLifecycle},
+};
 use std::future::Future;
 
 use dioxus::prelude::*;
@@ -23,6 +27,8 @@ use crate::{
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSession {
     theme: ThemeController,
+    theme_import_revision: Signal<u64>,
+    numeric_revisions: Signal<[u64; 4]>,
     preview_owner: u64,
     /// Explicit CSS preview, or the current stored CSS when none was requested on this page.
     /// Typing and restoring an editor draft never implicitly apply that draft.
@@ -31,7 +37,7 @@ pub(crate) struct SettingsPageSession {
     edits: Signal<Edits>,
     /// `stored` with the edits on top; what the form shows.
     draft: Signal<UserSettings>,
-    writes: Signal<Writes>,
+    requests: Signal<SettingsRequestLifecycle>,
     preset_choice: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
@@ -40,73 +46,78 @@ pub(crate) struct SettingsPageSession {
     shell: Option<AppShellState>,
 }
 
-/// The user's edits that are not stored yet.
-#[derive(Clone, Default, PartialEq)]
-struct Edits {
-    /// Sent by the save in flight: stored by its reply, or edits again if it fails.
-    submitted: Option<SettingsPatch>,
-    /// Made since (all of them while no save is in flight).
-    pending: SettingsPatch,
-}
-
-impl Edits {
-    fn over(&self, stored: &UserSettings) -> UserSettings {
-        let submitted = self.submitted.as_ref().map(|patch| patch.applied(stored));
-        self.pending.applied(submitted.as_ref().unwrap_or(stored))
-    }
-
-    fn edit_custom_css(&self) -> bool {
-        self.pending.custom_css.is_some()
-            || self.submitted.as_ref().is_some_and(|patch| patch.custom_css.is_some())
-    }
-
-    /// All of them: the ones a save in flight sent, then the ones made since (C4b item 4).
-    fn unsaved(&self) -> Option<SettingsPatch> {
-        let all = match &self.submitted {
-            Some(submitted) => submitted.clone().followed_by(self.pending.clone()),
-            None => self.pending.clone(),
-        };
-        (!all.is_empty()).then_some(all)
-    }
-}
-
-/// The page's writes (saves, pulls) as its loads see them.
-#[derive(Clone, Default, PartialEq)]
-struct Writes {
-    /// One write at a time: a pull replaces the stored settings a save in flight is measured
-    /// against, and a save would store over a pull it does not know of.
-    in_flight: bool,
-    /// Writes whose reply carried the stored settings. A load issued before one of them may
-    /// predate it, so its reply is discarded.
-    stored: u64,
-    /// A load answered while a write was in flight, with the app's count of applied settings when
-    /// it was issued and its read generation. It waits for the write: dropped if the write stores
-    /// settings or a later load was issued meanwhile (review C4B-B-R2-02), applied if not.
-    held_load: Option<(UserSettings, u64, u64)>,
-    /// Loads issued: only the latest one's reply applies, whatever order the replies come in
-    /// (C4b item 2; review C4B-B-01).
-    reads: u64,
-}
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct ThemeImportRequest(u64);
 
 impl SettingsPageSession {
+    /// Start at picker opening, before any await. Even a later cancellation supersedes old reads.
+    pub(crate) fn begin_theme_import(mut self) -> ThemeImportRequest {
+        self.theme_import_revision.with_mut(|revision| {
+            *revision = revision.wrapping_add(1);
+            ThemeImportRequest(*revision)
+        })
+    }
+
+    pub(crate) fn invalidate_theme_import(self) {
+        self.begin_theme_import();
+    }
+
+    pub(crate) fn is_theme_import_current(self, request: ThemeImportRequest) -> bool {
+        *self.theme_import_revision.peek() == request.0
+    }
+
+    /// Consume admission before validation, status publication, draft changes or persistence.
+    pub(crate) fn complete_theme_import(mut self, request: ThemeImportRequest) -> bool {
+        self.theme_import_revision.with_mut(|revision| {
+            if *revision != request.0 {
+                return false;
+            }
+            *revision = revision.wrapping_add(1);
+            true
+        })
+    }
+
+    pub(crate) fn set_preset_choice(mut self, value: impl Into<String>) {
+        self.invalidate_theme_import();
+        self.preset_choice.set(value.into());
+    }
+
+    pub(crate) fn numeric_revisions(self) -> [u64; 4] {
+        (self.numeric_revisions)()
+    }
+
+    /// Only fields supplied by stored settings retire parse feedback. Fields with
+    /// submitted/pending edits still overlay the stored value and keep their feedback.
+    fn note_numeric_projection(mut self) {
+        let edited = self.edits.peek().numeric_edits();
+        self.numeric_revisions.with_mut(|revisions| {
+            for (revision, edited) in revisions.iter_mut().zip(edited) {
+                if !edited {
+                    *revision = revision.wrapping_add(1);
+                }
+            }
+        });
+    }
+
     /// A draft kept before a reload or a sign-in becomes the pending edits, over the settings the
     /// page then reads; it is not saved by itself (C4b item 4). It leaves the storage only once
     /// the shell has it (review C4B-B-09).
     pub(crate) fn new(theme: ThemeController) -> Self {
         let stored = use_signal(|| theme.settings.peek().clone());
-        let edits =
-            use_signal(|| Edits { submitted: None, pending: drafts::peek().unwrap_or_default() });
-        let restored = !edits.peek().pending.is_empty();
+        let edits = use_signal(|| Edits::restored(drafts::peek().unwrap_or_default()));
+        let restored = !edits.peek().pending().is_empty();
         let draft = use_signal(|| edits.peek().over(&stored.peek()));
+        let requests = use_signal(SettingsRequestLifecycle::default);
+        let theme_import_revision = use_signal(|| 0);
+        let numeric_revisions = use_signal(|| [0; 4]);
         let preview_owner = use_hook(move || theme.begin_preview());
         let preview_css = use_signal(|| None);
         use_drop(move || theme.end_preview(preview_owner));
-        let writes = use_signal(Writes::default);
         let preset_choice = use_signal(|| detect_preset_key(&draft.peek().custom_css).to_string());
         let status = use_signal(|| {
             if restored {
                 let mut message = "已恢复重新加载前未保存的设置修改，尚未保存。".to_string();
-                if edits.peek().pending.custom_css.is_some() {
+                if edits.peek().pending().custom_css.is_some() {
                     message.push_str(" CSS 草稿已恢复，需重新预览。");
                 }
                 message
@@ -124,11 +135,13 @@ impl SettingsPageSession {
             stored,
             edits,
             draft,
-            writes,
+            requests,
             preset_choice,
             status,
             status_tone,
             shell,
+            theme_import_revision,
+            numeric_revisions,
         };
         // A restored draft is the shell's to keep from now on; then it leaves the storage.
         use_effect(move || {
@@ -155,15 +168,14 @@ impl SettingsPageSession {
 
     /// The one way the form changes the draft: the fields `change` sets become edits.
     pub(crate) fn edit(mut self, change: impl FnOnce(&mut UserSettings)) {
+        self.invalidate_theme_import();
         let mut next = self.draft.peek().clone();
         change(&mut next);
         let changed = SettingsPatch::between(&self.draft.peek(), &next);
         if changed.is_empty() {
             return;
         }
-        self.edits.with_mut(|edits| {
-            edits.pending = std::mem::take(&mut edits.pending).followed_by(changed);
-        });
+        self.edits.write().record(changed);
         self.draft.set(next);
         // A previous save result describes the previous draft, not these newer edits.
         self.set_status(String::new(), "info");
@@ -195,68 +207,45 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn has_unsaved_changes(self) -> bool {
-        let edits = self.edits.read();
-        !edits.pending.is_empty() || edits.submitted.is_some()
+        self.edits.read().has_unsaved_changes()
     }
 
     /// The edits a save would send.
     pub(crate) fn pending_edits(self) -> SettingsPatch {
-        self.edits.peek().pending.clone()
+        self.edits.peek().pending().clone()
     }
 
     /// Hands the pending edits to a save; call after [`Self::begin_write`] succeeded.
     pub(crate) fn submit_edits(mut self) -> SettingsPatch {
-        let submitted = {
-            let mut edits = self.edits.write();
-            let submitted = std::mem::take(&mut edits.pending);
-            edits.submitted = Some(submitted.clone());
-            submitted
-        };
+        let submitted = self.edits.write().submit();
         self.publish_draft();
         submitted
     }
 
     /// The save failed: what it sent is an edit again, under the ones made since.
     pub(crate) fn restore_submitted_edits(mut self) {
-        {
-            let mut edits = self.edits.write();
-            if let Some(submitted) = edits.submitted.take() {
-                edits.pending = submitted.followed_by(std::mem::take(&mut edits.pending));
-            }
-        }
+        self.edits.write().failed();
         self.publish_draft();
     }
 
     /// Starts a write whose reply may carry the stored settings (a save, a pull). Returns false,
     /// changing nothing, while another write is in flight.
     pub(crate) fn begin_write(mut self) -> bool {
-        if self.writes.peek().in_flight {
-            return false;
-        }
-        self.writes.write().in_flight = true;
-        true
+        self.requests.write().begin_write()
     }
 
     /// Ends the write started by [`Self::begin_write`], after its reply has been applied. A load
     /// answered meanwhile applies now unless the write stored settings.
     pub(crate) fn end_write(mut self) {
-        let held_load = {
-            let mut writes = self.writes.write();
-            writes.in_flight = false;
-            writes.held_load.take()
-        };
-        if let Some((settings, applied, read)) = held_load
-            && read == self.writes.peek().reads
-        {
-            self.apply_load(settings, applied);
+        let held_load = self.requests.write().end_write();
+        if let Some(loaded) = held_load {
+            self.apply_load(loaded.settings, loaded.applied);
         }
     }
 
     /// Records that a write stored settings: loads issued before it are stale.
     fn note_stored(mut self) {
-        let mut writes = self.writes.write();
-        writes.stored += 1;
-        writes.held_load = None;
+        self.requests.write().settings_stored();
     }
 
     pub(crate) fn preset_choice(self) -> Signal<String> {
@@ -294,24 +283,17 @@ impl SettingsPageSession {
         mut self,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
-        let (issued, read) = {
-            let mut writes = self.writes.write();
-            writes.reads = writes.reads.wrapping_add(1);
-            (writes.stored, writes.reads)
-        };
-        let applied = self.theme.stored_count();
+        let request = self.requests.write().begin_load(self.theme.stored_count());
         let loading = execute(SettingsCommand::Load);
         spawn(async move {
             let intents = loading.await;
-            let writes = self.writes.peek();
-            if writes.stored != issued || writes.reads != read {
+            if !self.requests.peek().accepts(request) {
                 return;
             }
-            drop(writes);
             apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
                 match intent {
                     SettingsPageIntent::SettingsLoaded(settings) => {
-                        self.receive_load(settings, applied, read)
+                        self.receive_load(request, settings)
                     }
                     status => self.dispatch(status),
                 }
@@ -319,11 +301,10 @@ impl SettingsPageSession {
         });
     }
 
-    fn receive_load(mut self, settings: UserSettings, applied: u64, read: u64) {
-        if self.writes.peek().in_flight {
-            self.writes.write().held_load = Some((settings, applied, read));
-        } else {
-            self.apply_load(settings, applied);
+    fn receive_load(mut self, request: SettingsLoadRequest, settings: UserSettings) {
+        let loaded = self.requests.write().receive_load(request, settings);
+        if let Some(loaded) = loaded {
+            self.apply_load(loaded.settings, loaded.applied);
         }
     }
 
@@ -364,7 +345,11 @@ impl SettingsPageSession {
 
     /// The page's view of the stored settings, with the edits on top.
     fn show_stored_settings(mut self, settings: UserSettings) {
+        self.note_numeric_projection();
         let draft = self.edits.peek().over(&settings);
+        if draft.custom_css != self.draft.peek().custom_css {
+            self.invalidate_theme_import();
+        }
         if !self.edits.peek().edit_custom_css() {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
             self.preview_css.set(None);
@@ -383,14 +368,18 @@ impl SettingsPageSession {
         submitted_preset: &str,
     ) -> bool {
         self.note_stored();
-        self.edits.write().submitted = None;
+        self.edits.write().saved();
         self.publish_draft();
+        self.note_numeric_projection();
         let draft = self.edits.peek().over(&settings);
+        if draft.custom_css != self.draft.peek().custom_css {
+            self.invalidate_theme_import();
+        }
         if self.preset_choice.peek().as_str() == submitted_preset {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
-        let has_unsaved_edits = !self.edits.peek().pending.is_empty();
-        if self.edits.peek().pending.custom_css.is_none() {
+        let has_unsaved_edits = !self.edits.peek().pending().is_empty();
+        if self.edits.peek().pending().custom_css.is_none() {
             self.preview_css.set(None);
         }
         self.draft.set(draft);
@@ -418,5 +407,111 @@ impl SettingsPageSession {
         if let Err(err) = open_repository_url() {
             self.set_status(format!("打开 GitHub 仓库失败：{err}"), "error");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn harness() -> Element {
+        let page = SettingsPageSession::new(crate::theme::use_theme_controller());
+        use_context_provider(|| page);
+        rsx! {}
+    }
+    fn setup() -> (VirtualDom, SettingsPageSession) {
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let page = dom.in_scope(ScopeId::APP, consume_context);
+        (dom, page)
+    }
+
+    #[test]
+    fn stored_projection_retires_only_unedited_numeric_fields_even_for_equal_values() {
+        let (dom, page) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            page.edit(|draft| draft.entries_page_size = 80);
+            let before = page.numeric_revisions();
+            page.apply_stored_settings(UserSettings::default());
+            let after = page.numeric_revisions();
+            assert_eq!(after[2], before[2], "edited page size stays over the stored value");
+            assert_eq!(after[0], before[0] + 1, "equal unedited values still retire feedback");
+            assert_eq!(page.draft().entries_page_size, 80);
+            page.apply_stored_settings(UserSettings {
+                refresh_interval_minutes: 90,
+                ..Default::default()
+            });
+            page.apply_stored_settings(UserSettings::default());
+            assert_eq!(
+                page.numeric_revisions()[0],
+                after[0] + 2,
+                "A-B-A cannot revive an old hint"
+            );
+        });
+    }
+
+    #[test]
+    fn saved_projection_keeps_later_field_edits_and_retires_acknowledged_fields() {
+        let (dom, page) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            page.edit(|draft| {
+                draft.entries_page_size = 0;
+                draft.refresh_interval_minutes = 90;
+            });
+            assert!(page.begin_write());
+            let submitted = page.submit_edits();
+            page.edit(|draft| draft.refresh_interval_minutes = 60);
+            let before = page.numeric_revisions();
+            let mut saved = submitted.applied(&UserSettings::default());
+            saved.entries_page_size = 100;
+            assert!(page.apply_saved_settings(saved, "none"));
+            page.end_write();
+            assert_eq!(page.draft().refresh_interval_minutes, 60);
+            assert_eq!(page.draft().entries_page_size, 100);
+            assert_eq!(
+                page.numeric_revisions()[0],
+                before[0],
+                "later edit still owns its feedback"
+            );
+            assert_eq!(
+                page.numeric_revisions()[2],
+                before[2] + 1,
+                "normalization retires the acknowledged field"
+            );
+        });
+    }
+
+    #[test]
+    fn failed_save_and_held_load_keep_submitted_edits_and_their_feedback() {
+        let (dom, page) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            page.edit(|draft| draft.entries_page_size = 80);
+            assert!(page.begin_write());
+            page.submit_edits();
+            let before = page.numeric_revisions();
+            let mut requests = page.requests;
+            let request = requests.write().begin_load(page.theme.stored_count());
+            page.receive_load(request, UserSettings::default());
+            page.restore_submitted_edits();
+            page.end_write();
+            assert_eq!(page.draft().entries_page_size, 80);
+            assert_eq!(page.numeric_revisions()[2], before[2]);
+            assert_eq!(page.pending_edits().entries_page_size, Some(80));
+        });
+    }
+
+    #[test]
+    fn stored_css_change_invalidates_an_older_file_read_without_discarding_field_edits() {
+        let (dom, page) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            page.edit(|draft| draft.entries_page_size = 80);
+            let request = page.begin_theme_import();
+            page.apply_stored_settings(UserSettings {
+                custom_css: "/* remote */".into(),
+                ..Default::default()
+            });
+            assert!(!page.complete_theme_import(request));
+            assert_eq!(page.draft().entries_page_size, 80);
+            assert_eq!(page.draft().custom_css, "/* remote */");
+        });
     }
 }

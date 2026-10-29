@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "buildSource": {
+    "head": "7345d98a116a0d4248203cd7b3fe075431c9c7c4",
+    "mergeHead": "0692c92465b25a059d083a977b513d9f8e088355",
+    "stagedTree": "d9c7c698cf02d69eca7cce55ec4dcdf84f5718ab",
+    "state": "uncommitted ordinary merge; product files verified unchanged before final commit"
+  },
+  "native": {
+    "status": "pass",
+    "exeSha256": "b67c4a016fb05ed531c011f36d7c7dea877451981a8a084f5b94ffccb3f39f72",
+    "scriptSha256": "95f5e04c9d924a291401cc894679ac893b4bbafaac05e8946d16483d0300f6f7",
+    "webViewVersion": "156.0.4314.50",
+    "fixture": {
+      "entries": 5000,
+      "visibleChecked": 50,
+      "feeds": 6
+    },
+    "checks": [
+      {
+        "name": "locked interpreter decoder exists",
+        "pass": true
+      },
+      {
+        "name": "startup preserves BOM before page edits",
+        "pass": true
+      },
+      {
+        "name": "ordinary text applies and preserves every field",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 1280",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 390",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 0",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 1",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 2",
+        "pass": true
+      },
+      {
+        "name": "actual BOM-prefixed Rust batches were decoded",
+        "pass": true
+      },
+      {
+        "name": "all BOM-prefixed tables are preserved",
+        "pass": true
+      },
+      {
+        "name": "remount and subsequent Save remain usable",
+        "pass": true
+      },
+      {
+        "name": "all 5000 flags and 6 subscriptions unchanged",
+        "pass": true
+      },
+      {
+        "name": "no page or console errors",
+        "pass": true
+      }
+    ],
+    "pageErrors": [],
+    "consoleErrors": [],
+    "postClose": {
+      "integrity": [
+        {
+          "integrity_check": "ok"
+        }
+      ],
+      "foreignKeys": [],
+      "entries": 5000,
+      "feeds": 6,
+      "walExists": true,
+      "walBytes": 0,
+      "standaloneMainFile": {
+        "integrity": "ok",
+        "settingsMatch": true,
+        "flagsMatch": true,
+        "feedsMatch": true,
+        "sha256": "a713f6499c166cfccf9d0da71c7d4c5bc900b05d26e0f12ee786ff58db512ec3"
+      }
+    },
+    "processClosedGracefully": true,
+    "fixtureStopped": true
+  },
+  "localVerification": {
+    "rustWorkspace": {
+      "passed": 1070,
+      "failed": 0,
+      "ignored": 4
+    },
+    "fmt": "passed",
+    "clippy": "passed",
+    "nativeBuild": "passed",
+    "webReleaseBuild": {
+      "status": "passed",
+      "dioxusCli": "0.7.9"
+    },
+    "browser": {
+      "directoryPageOrder": 26,
+      "workspace": 18,
+      "entries": 8,
+      "settings": 8
+    }
+  },
+  "artifacts": {
+    "nativeReport": {
+      "path": "target/pr43-integration-native/acceptance.json",
+      "sha256": "dab3c06764e3561772a35d35bdb2c2c70b1c1966775ec2c1326cbee43bdee0f2"
+    },
+    "postClose": {
+      "path": "target/pr43-integration-native/post-close.json",
+      "sha256": "2118e8fb96cefd90ab198ae3f978be0d3468b53c9e2347d0c5c77fbf9b2fd578"
+    },
+    "buildLog": "target/pr43-integration-native-build.log",
+    "webBuildLog": "target/pr43-integration-web-build.log",
+    "rustTestLog": "target/pr43-integration-tests.log"
+  },
+  "notCovered": [
+    "OS file picker",
+    "Real IME",
+    "Android device",
+    "macOS/Linux GUI",
+    "Release installer"
+  ]
+}

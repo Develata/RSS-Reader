@@ -378,3 +378,5 @@ CSS 可以控制显示，不应承担业务判断。
 - application 定义用例语义，infra 实现平台端口
 
 方向实现版。
+
+PR #40 的页面规则接入继续遵循上述 Backend 边界；Settings 使用逐字段补丁及 stored/submitted/pending 投影，Entries 补读沿用完整 Reread。详见[原生控件适配契约](./native-control-adapter-contracts.md)。

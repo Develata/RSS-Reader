@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-10-29T15:50:19Z",
+  "sourceCommit": "50af7c99c9c47f045df8ccd7cf39c5dbba6524ed",
+  "baseMainCommit": "8932a5ac317bfcb1af9b2d966e16ce3d989a9911",
+  "scope": "Windows native debug EXE, real WebView2/Rust/SQLite; isolated synthetic library; CLI/CDP automation",
+  "build": {
+    "command": "cargo build -p rssr-app --locked",
+    "env": {
+      "CARGO_BUILD_JOBS": "2"
+    },
+    "exitCode": 0,
+    "exeSha256": "1c56d40f1957a0d3bc591b6fd1967e502efe6b00f1675cd71c0c74971caaba12"
+  },
+  "acceptance": {
+    "command": "node scripts/browser/rssr_native_transport_acceptance.cjs --process-file target/native-pr40-retry-50af7c99/process.json --artifact-dir target/pr40-native-retry-50af7c99 --baseline false",
+    "scriptSha256": "95f5e04c9d924a291401cc894679ac893b4bbafaac05e8946d16483d0300f6f7",
+    "webViewVersion": "156.0.4314.50",
+    "status": "pass",
+    "fixture": {
+      "entries": 5000,
+      "visibleChecked": 50,
+      "feeds": 6
+    },
+    "checks": [
+      {
+        "name": "locked interpreter decoder exists",
+        "pass": true
+      },
+      {
+        "name": "startup preserves BOM before page edits",
+        "pass": true
+      },
+      {
+        "name": "ordinary text applies and preserves every field",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 1280",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 390",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 0",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 1",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 2",
+        "pass": true
+      },
+      {
+        "name": "actual BOM-prefixed Rust batches were decoded",
+        "pass": true
+      },
+      {
+        "name": "all BOM-prefixed tables are preserved",
+        "pass": true
+      },
+      {
+        "name": "remount and subsequent Save remain usable",
+        "pass": true
+      },
+      {
+        "name": "all 5000 flags and 6 subscriptions unchanged",
+        "pass": true
+      },
+      {
+        "name": "no page or console errors",
+        "pass": true
+      }
+    ],
+    "pageErrors": [],
+    "consoleErrors": []
+  },
+  "postClose": {
+    "sourceHead": "50af7c99c9c47f045df8ccd7cf39c5dbba6524ed",
+    "integrity": [
+      {
+        "integrity_check": "ok"
+      }
+    ],
+    "foreignKeys": [],
+    "entries": 5000,
+    "feeds": 6,
+    "exeSha256": "1c56d40f1957a0d3bc591b6fd1967e502efe6b00f1675cd71c0c74971caaba12",
+    "walExists": true,
+    "standaloneMainFile": {
+      "integrity": "ok",
+      "settingsMatch": true,
+      "flagsMatch": true,
+      "feedsMatch": true,
+      "sha256": "a4543d3ea86199abb5f6d25efc38c3d77831173f46e83a40eb2d34e2e0839070"
+    },
+    "walBytes": 0
+  },
+  "cleanup": {
+    "nativeProcessExitedGracefully": true,
+    "nativePid": 16392,
+    "loopbackFixtureStopped": true,
+    "listeningPortsAfterCleanup": [],
+    "ownedPorts": [
+      9277,
+      9278
+    ]
+  },
+  "localArtifacts": {
+    "buildLog": "target/pr40-native-retry-build.log",
+    "testLog": "target/pr40-native-retry-50af7c99.log",
+    "report": {
+      "path": "target/pr40-native-retry-50af7c99/acceptance.json",
+      "sha256": "4cc391b849721c37782f70e99272cc740d5d6cb1eb687c37795b49df010d2fa1"
+    },
+    "postClose": {
+      "path": "target/pr40-native-retry-50af7c99/post-close.json",
+      "sha256": "df5905529f118df00066a5a790990083d7ba55d1162306ddfa702050648fe601"
+    },
+    "standaloneDatabase": "target/pr40-native-retry-50af7c99/closed-main.sqlite3"
+  },
+  "notCovered": [
+    "Native OS file-picker interaction",
+    "Real OS IME interaction",
+    "Android device",
+    "macOS/Linux GUI",
+    "Release installer or package"
+  ]
+}

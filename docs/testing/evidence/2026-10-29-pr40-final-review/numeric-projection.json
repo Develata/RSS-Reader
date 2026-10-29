@@ -1,0 +1,27 @@
+{
+  "head": "6117a353e398a96c7bf1488df221d7e5ff01f924",
+  "status": "passed",
+  "checks": [
+    {
+      "width": 1536,
+      "pass": true,
+      "values": {
+        "refresh-interval": "1440",
+        "archive-after-months": "120",
+        "entries-page-size": "8",
+        "reader-font-scale": "1"
+      }
+    },
+    {
+      "width": 390,
+      "pass": true,
+      "values": {
+        "refresh-interval": "1440",
+        "archive-after-months": "120",
+        "entries-page-size": "8",
+        "reader-font-scale": "1"
+      }
+    }
+  ],
+  "pageErrors": []
+}

@@ -1,5 +1,9 @@
 //! Admission, execution and receipts for single-article and explicit batch writes.
-use super::super::{intent::EntriesPageIntent, write_feedback};
+use super::super::{
+    intent::EntriesPageIntent,
+    write_feedback,
+    write_lifecycle::{BulkWrite, EntryWrite, WriteEffect},
+};
 use super::EntriesPageSession;
 use crate::ui::{EntriesCommand, UiCommand, UiIntent, run_ui_command};
 use dioxus::prelude::*;
@@ -7,29 +11,16 @@ use std::future::Future;
 
 impl EntriesPageSession {
     pub(crate) fn apply_selection(self, action: rssr_domain::EntryBatchAction) {
-        if self.state.with_peek(|state| state.bulk_busy || !state.pending_entry_writes.is_empty()) {
-            return;
-        }
-        let entry_ids = self.state.peek().selected_entry_ids.iter().copied().collect::<Vec<_>>();
-        if entry_ids.is_empty() {
-            return;
-        }
-        let command = EntriesCommand::ApplySelection {
-            request: rssr_domain::EntryBatchRequest { entry_ids, action },
-        };
+        let request = self.state.with_peek(|state| {
+            BulkWrite::can_start(state).then(|| BulkWrite::selection(state, action)).flatten()
+        });
+        let Some(request) = request else { return };
+        let command = EntriesCommand::ApplySelection { request };
         self.dispatch(EntriesPageIntent::BeginBulk { writing: true });
-        let generation = self.state.peek().bulk_generation;
+        let request = self.state.with_peek(BulkWrite::capture_started);
         self.spawn_article_mutation(run_ui_command(UiCommand::Entries(command)), move |intents| {
-            if self.state.peek().bulk_generation != generation {
-                return;
-            }
-            for intent in intents {
-                let applied = matches!(&intent, EntriesPageIntent::SelectionApplied { .. });
-                self.dispatch(intent);
-                if applied {
-                    self.reread();
-                }
-            }
+            let effects = self.state.with_peek(|state| request.complete(state, intents));
+            self.apply_write_effects(effects);
         });
     }
 
@@ -64,29 +55,23 @@ impl EntriesPageSession {
         entry_id: i64,
         write: impl FnOnce() -> F + 'static,
     ) {
-        // Check live Rust state as well as disabling buttons: a second event
-        // can already be queued before the DOM has rendered the pending state.
-        if self
-            .state
-            .with_peek(|state| state.bulk_busy || state.pending_entry_writes.contains(&entry_id))
-        {
+        let Some(request) = self.state.with_peek(|state| EntryWrite::prepare(state, entry_id))
+        else {
             return;
-        }
-        self.dispatch(EntriesPageIntent::EntryWriteStarted(entry_id));
+        };
+        self.dispatch(request.started());
         self.spawn_article_mutation(async move { write().await }, move |intents| {
-            let mut read_changed = false;
-            for intent in intents {
-                read_changed |=
-                    matches!(&intent, EntriesPageIntent::PatchEntryFlags { is_read: Some(_), .. });
-                self.dispatch(intent);
-            }
-            self.dispatch(EntriesPageIntent::EntryWriteFinished(entry_id));
-            if read_changed {
-                // Recovery must keep filters chosen while preferences were
-                // unavailable and replace any in-flight settings read in full.
-                self.reread();
-            }
+            self.apply_write_effects(request.complete(intents));
         });
+    }
+
+    fn apply_write_effects(self, effects: impl Iterator<Item = WriteEffect>) {
+        for effect in effects {
+            match effect {
+                WriteEffect::Publish(intent) => self.dispatch(intent),
+                WriteEffect::Reread => self.reread(),
+            }
+        }
     }
 
     /// Accepted article writes belong to the app, like preference saves. Only

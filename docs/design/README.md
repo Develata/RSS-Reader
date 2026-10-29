@@ -27,3 +27,5 @@
 - [Penpot 历史草模](./reading-workspace-penpot-contract.md)：v4–v8 草模与旧连线，不替代当前画板。
 
 新增或修改设计时应写清：已经实施的行为、尚未实施的方案、实际验证范围。不要只修改本索引中的状态而遗漏正文中的旧结论。
+
+- [原生控件适配契约](./native-control-adapter-contracts.md)：主线逐字段保存与页面/宿主生命周期的接入约束。

@@ -18,12 +18,8 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     let entries_page_size_facade = facade.clone();
     let font_scale_facade = facade.clone();
     let mut invalid = use_signal(InvalidNumericFields::default);
-    // 置位时记下当时的草稿值；渲染时只有仍然相等才显示提示。草稿被外部整体替换
-    // （从 WebDAV 拉取配置、恢复设置）后，值不再匹配，提示自动失效。
-    let refresh_value = draft.refresh_interval_minutes;
-    let archive_value = draft.archive_after_months;
-    let page_size_value = draft.entries_page_size;
-    let font_scale_value = draft.reader_font_scale;
+    let [refresh_revision, archive_revision, page_size_revision, font_scale_revision] =
+        facade.numeric_revisions();
 
     rsx! {
         div { "data-layout": "settings-card-section", "data-section": "reading-preferences",
@@ -104,11 +100,15 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                             next.refresh_interval_minutes = minutes;
                                         });
                                 }
-                                Err(_) => invalid.write().refresh_interval = Some(refresh_value),
+                                Err(_) => {
+                                    refresh_facade.note_draft_edit();
+                                    invalid.write().refresh_interval =
+                                        Some(refresh_facade.numeric_revisions()[0]);
+                                }
                             }
                         }
                     }
-                    if invalid().refresh_interval == Some(refresh_value) {
+                    if invalid().refresh_interval == Some(refresh_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
@@ -133,11 +133,15 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                             next.archive_after_months = months;
                                         });
                                 }
-                                Err(_) => invalid.write().archive_after_months = Some(archive_value),
+                                Err(_) => {
+                                    archive_facade.note_draft_edit();
+                                    invalid.write().archive_after_months =
+                                        Some(archive_facade.numeric_revisions()[1]);
+                                }
                             }
                         }
                     }
-                    if invalid().archive_after_months == Some(archive_value) {
+                    if invalid().archive_after_months == Some(archive_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
@@ -163,12 +167,14 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                         });
                                 }
                                 Err(_) => {
-                                    invalid.write().entries_page_size = Some(page_size_value);
+                                    entries_page_size_facade.note_draft_edit();
+                                    invalid.write().entries_page_size =
+                                        Some(entries_page_size_facade.numeric_revisions()[2]);
                                 }
                             }
                         }
                     }
-                    if invalid().entries_page_size == Some(page_size_value) {
+                    if invalid().entries_page_size == Some(page_size_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                     p { "data-slot": "page-intro",
@@ -197,12 +203,14 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                         });
                                 }
                                 Err(_) => {
-                                    invalid.write().reader_font_scale = Some(font_scale_value);
+                                    font_scale_facade.note_draft_edit();
+                                    invalid.write().reader_font_scale =
+                                        Some(font_scale_facade.numeric_revisions()[3]);
                                 }
                             }
                         }
                     }
-                    if invalid().reader_font_scale == Some(font_scale_value) {
+                    if invalid().reader_font_scale == Some(font_scale_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
@@ -211,25 +219,17 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     }
 }
 
-/// 哪些数值输入框的内容当前无法解析，以及**置位时草稿里的值**。
-///
-/// 这几个框此前是 `if let Ok(..)` 没有 `else`：清空或输入非数字时草稿悄悄保留旧值，
-/// 界面显示的却是用户刚输入的内容，保存写回的是旧值且全程无提示。这里只补提示，
-/// 不改变「解析失败就不写入草稿」的既有行为。
-///
-/// 记的是值而不是一个布尔，是为了让提示能自己失效：草稿被整体替换后
-/// （`SettingsPageSession::apply_stored_settings` / `apply_saved_settings`，对应「从 WebDAV
-/// 拉取配置」与「回填未继续编辑的保存结果」），这里存的值与新草稿不再相等，提示自动不再显示。
-/// 用布尔的话，提示会残留在一个已经被换成合法值的输入框下面，说着「当前输入不是有效数字」。
-///
-/// 这样做不需要 `use_effect`：判定发生在渲染期的比较里，不往信号里写东西，
-/// 因此也不会给每次按键多加一次渲染。
-#[derive(Clone, Copy, PartialEq, Default)]
+/// Each parse error belongs to a field's projection. Stored settings retire it
+/// only when that field has no pending/submitted edit, even for equal values.
+/// An A -> B -> A projection cannot revive it. Parse failures retain the last
+/// parsed value and do not create a SettingsPatch, matching the main form contract.
+/// Rendering only compares revisions; it neither writes signals nor emits input.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 struct InvalidNumericFields {
-    refresh_interval: Option<u32>,
-    archive_after_months: Option<u32>,
-    entries_page_size: Option<u32>,
-    reader_font_scale: Option<f32>,
+    refresh_interval: Option<u64>,
+    archive_after_months: Option<u64>,
+    entries_page_size: Option<u64>,
+    reader_font_scale: Option<u64>,
 }
 
 /// 只在输入无法解析时出现，复用 `page-intro` 槽位，不引入新的样式面。

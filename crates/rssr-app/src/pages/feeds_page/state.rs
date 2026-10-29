@@ -1,12 +1,9 @@
+use super::edit_state::FeedEditState;
 use rssr_domain::FeedSummary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FeedsPageState {
-    pub(crate) edit_feed_id: Option<i64>,
-    pub(crate) edit_generation: u64,
-    pub(crate) edit_details: Option<rssr_domain::FeedEditDetails>,
-    pub(crate) edit_busy: bool,
-    pub(crate) edit_error: Option<String>,
+    pub(super) edit: FeedEditState,
     pub(crate) unread_count: u64,
     pub(crate) archived_count: u64,
     pub(crate) feed_candidates: Option<(url::Url, Vec<rssr_application::FeedDiscoveryCandidate>)>,
@@ -34,11 +31,7 @@ pub(crate) struct FeedsPageState {
 impl FeedsPageState {
     pub(crate) fn new() -> Self {
         Self {
-            edit_feed_id: None,
-            edit_generation: 0,
-            edit_details: None,
-            edit_busy: false,
-            edit_error: None,
+            edit: FeedEditState::new(),
             unread_count: 0,
             archived_count: 0,
             feed_candidates: None,

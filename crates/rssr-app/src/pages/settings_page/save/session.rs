@@ -1,15 +1,15 @@
 use std::future::Future;
 
 use dioxus::prelude::*;
-use rssr_domain::DEFAULT_ENTRIES_PAGE_SIZE;
 
 use super::state::SettingsPageSaveState;
 use crate::{
     pages::settings_page::{
-        intent::SettingsPageIntent, session::SettingsPageSession, themes::validate_custom_css,
+        save_policy::{SaveCompletion, normalize_submission, saved_status_message, validate_patch},
+        session::SettingsPageSession,
     },
     status::{set_status_error, set_status_info},
-    ui::{SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, run_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, run_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -50,14 +50,8 @@ impl SettingsPageSaveSession {
         }
         // Only the edited fields are sent, so a change saved elsewhere meanwhile (an import,
         // another device) is not overwritten; the CSS is checked only when it is edited.
-        if let Some(custom_css) = &self.page.pending_edits().custom_css
-            && let Err(err) = validate_custom_css(custom_css)
-        {
-            set_status_error(
-                self.page.status_signal(),
-                self.page.status_tone_signal(),
-                format!("自定义 CSS 格式无效：{err}"),
-            );
+        if let Err(err) = validate_patch(&self.page.pending_edits()) {
+            set_status_error(self.page.status_signal(), self.page.status_tone_signal(), err);
             return;
         }
 
@@ -76,43 +70,22 @@ impl SettingsPageSaveSession {
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
         let submitted_preset = self.page.preset_choice().peek().clone();
-        let mut patch = self.page.submit_edits();
-        if patch.entries_page_size == Some(0) {
-            patch.entries_page_size = Some(DEFAULT_ENTRIES_PAGE_SIZE);
-            success_message.push_str(&format!(
-                " 文章页每页数量输入为 0，已回退为默认值 {DEFAULT_ENTRIES_PAGE_SIZE}。"
-            ));
-        }
+        let patch = normalize_submission(self.page.submit_edits(), &mut success_message);
         let saving = execute(SettingsCommand::UpdateSettings { patch, success_message });
         spawn(async move {
             let intents = saving.await;
             state.with_mut(|state| state.pending_save = false);
-            let mut saved_settings = None;
-            let mut status_message = String::new();
-            let mut failure_tone = "error";
-            apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
-                match intent {
-                    SettingsPageIntent::SettingsLoaded(settings) => {
-                        saved_settings = Some(settings);
-                    }
-                    SettingsPageIntent::SetStatus { message, .. } => {
-                        status_message = message;
-                    }
-                    SettingsPageIntent::Failed(failure) => {
-                        status_message = failure.message();
-                        failure_tone = failure.tone();
-                    }
+            match SaveCompletion::collect(
+                intents.into_iter().filter_map(UiIntent::into_settings_page_intent),
+            ) {
+                SaveCompletion::Saved { settings, message } => {
+                    let unsaved = self.page.apply_saved_settings(settings, &submitted_preset);
+                    set_status_info(status, status_tone, saved_status_message(message, unsaved));
                 }
-            });
-            if let Some(saved_settings) = saved_settings {
-                if self.page.apply_saved_settings(saved_settings, &submitted_preset) {
-                    status_message.push_str(" 保存期间的新修改仍保留在草稿中，尚未保存。");
+                SaveCompletion::Failed { message, tone } => {
+                    self.page.restore_submitted_edits();
+                    crate::status::set_status(status, status_tone, message, tone);
                 }
-                set_status_info(status, status_tone, status_message);
-            } else {
-                self.page.restore_submitted_edits();
-                status_message.push_str(" 草稿已保留，可修改后重试。");
-                crate::status::set_status(status, status_tone, status_message, failure_tone);
             }
             self.page.end_write();
         });
@@ -126,10 +99,11 @@ mod tests {
     use dioxus::core::current_scope_id;
 
     use super::*;
+    use crate::pages::settings_page::intent::SettingsPageIntent;
     use crate::theme::ThemeController;
     use crate::ui::AppShellState;
     use rssr_application::SettingsPatch;
-    use rssr_domain::{ListDensity, ThemeMode, UserSettings};
+    use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
     fn harness() -> Element {

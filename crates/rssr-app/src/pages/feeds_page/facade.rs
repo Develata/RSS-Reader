@@ -13,16 +13,19 @@ impl FeedsPageFacade {
         self.session.dispatch_intent(super::intent::FeedsPageIntent::EditRequested(id));
     }
     pub(crate) fn edit_open(&self) -> bool {
-        self.snapshot.edit_feed_id.is_some()
+        self.snapshot.edit.feed_id().is_some()
     }
     pub(crate) fn edit_details(&self) -> Option<&rssr_domain::FeedEditDetails> {
-        self.snapshot.edit_details.as_ref()
+        self.snapshot.edit.details()
     }
     pub(crate) fn edit_busy(&self) -> bool {
-        self.snapshot.edit_busy
+        self.snapshot.edit.is_busy()
+    }
+    pub(crate) fn edit_saving(&self) -> bool {
+        self.snapshot.edit.is_saving()
     }
     pub(crate) fn edit_error(&self) -> Option<&str> {
-        self.snapshot.edit_error.as_deref()
+        self.snapshot.edit.error()
     }
     pub(crate) fn edit_close(&self) {
         self.session.dispatch_intent(super::intent::FeedsPageIntent::EditClosed);
