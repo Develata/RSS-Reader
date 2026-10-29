@@ -72,6 +72,8 @@ CLI：`rssr-cli mark-read --all --search Rust --read-filter unread --starred-fil
 
 配置交换支持 JSON 配置包、OPML 和 WebDAV 上传 / 下载。它用于迁移订阅和设置，不同步文章库、已读或收藏。CLI 对应命令见 `cargo run --locked -p rssr-cli -- --help`；刷新需明确指定 `refresh --all` 或 `refresh --feed-id <id>`，两者不能同时指定。`export-config`、`export-opml`、`show-settings` 的数据写入 stdout，诊断写入 stderr，可直接重定向到文件。
 
+设置尚在载入时可以继续编辑；下载配置时，也会保留确认下载之后的新修改。页面当前应用的主题仍以已保存设置为准，保留的新草稿需要再次保存。保存与下载同一时间只执行一个，遇到忙碌提示请等完成后重试；下载仍需重新确认。确认下载会取消此前尚未完成的主题文件导入结果。
+
 需要登录的 WebDAV 服务可在设置页 Endpoint 中填 `https://用户名:密码@dav.example.com/base/`。客户端会把凭据从请求 URL 中剥离，改用 HTTP Basic；Endpoint 只保存在当前设置会话，不进入本地配置包或导出的数据。用户名或密码含 `@`、`:` 等保留字符时，按 URL 规则百分号编码。避免在截图或共享屏幕时暴露当前输入框中的凭据。
 
 ## 数据备份

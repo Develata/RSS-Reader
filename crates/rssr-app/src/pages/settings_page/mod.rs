@@ -3,6 +3,7 @@ mod browser;
 mod facade;
 pub(crate) mod intent;
 mod preferences;
+mod request_lifecycle;
 mod save;
 mod save_policy;
 mod session;
@@ -14,7 +15,7 @@ use dioxus::prelude::*;
 use self::{
     appearance::AppearanceSettingsCard,
     facade::SettingsPageFacade,
-    save::{SettingsPageSaveSession, SettingsPageSaveState},
+    save::SettingsPageSaveSession,
     session::SettingsPageSession,
     sync::{SettingsPageSyncSession, SettingsPageSyncState, WebDavSettingsCard},
 };
@@ -30,8 +31,7 @@ pub fn SettingsPage() -> Element {
 
     let theme = use_context::<ThemeController>();
     let session = SettingsPageSession::new(theme);
-    let save_state = use_signal(SettingsPageSaveState::new);
-    let save_session = SettingsPageSaveSession::new(save_state, session);
+    let save_session = SettingsPageSaveSession::new(session);
     let sync_state = use_signal(SettingsPageSyncState::new);
     let sync_session = SettingsPageSyncSession::new(sync_state, session);
     let facade = SettingsPageFacade::new(

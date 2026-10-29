@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const http = require('node:http');
+const crypto = require('node:crypto');
 const { chromium } = require('playwright');
 const fixture = require('./directory_fixture.cjs');
 const { installStorageHelpers } = require('./storage_helpers.cjs');
@@ -25,12 +26,17 @@ async function eventually(read, expected, label) {
   const output = path.resolve(options['artifact-dir'] || 'target/settings-sync-acceptance');
   const native = !!options.cdp;
   const origin = 'http://127.0.0.1:9277';
-  const report = { native, status: 'running', results: [], requests: [], pageErrors: [], consoleErrors: [], expectedConsoleErrors: [] };
+  const report = { native, scenario: options.scenario || 'sync', baseline: options.baseline === 'true', status: 'running', results: [], requests: [], pageErrors: [], consoleErrors: [], expectedConsoleErrors: [] };
   let browser, page, database, server, remote, release;
   let responseMode = 'success', gate = Promise.resolve();
   try {
     await fs.mkdir(output, { recursive: true });
     await fs.writeFile(path.join(output, 'acceptance.json'), JSON.stringify(report, null, 2));
+    assert.ok(['sync', 'lifecycle'].includes(report.scenario));
+    if (report.scenario === 'lifecycle') assert.equal(native, false, 'controlled lifecycle fixture runs only in isolated Web');
+    report.scriptSha256 = crypto.createHash('sha256').update(await fs.readFile(__filename)).digest('hex');
+    if (report.scenario === 'lifecycle') report.scenarioSha256 = crypto.createHash('sha256').update(await fs.readFile(path.join(__dirname, 'settings_load_scenarios.cjs'))).digest('hex');
+    report.publicRoot = native ? null : path.resolve(process.env.PUBLIC_DIR || 'target/dx/rssr-app/release/web/public');
     database = native ? new (require('node:sqlite').DatabaseSync)(path.resolve(options.database), { readOnly: true }) : null;
     browser = native ? await chromium.connectOverCDP(options.cdp) : await chromium.launch({ channel: 'chrome', headless: true });
     const context = native ? browser.contexts()[0] : await browser.newContext();
@@ -128,6 +134,20 @@ async function eventually(read, expected, label) {
       assert.equal(await page.locator(field('webdav-endpoint')).inputValue(), '');
       assert.equal(await page.locator(field('webdav-remote-path')).inputValue(), 'config/rss-reader.json');
       await screenshot(`sync-${width}`);
+      if (report.scenario === 'lifecycle') {
+        const cases = await require('./settings_load_scenarios.cjs')({
+          page, baseline: report.baseline, origin, settings, waitStatus, eventually, screenshot, width,
+          requests: report.requests,
+          setRemote: value => { remote = value; }, getRemote: () => remote,
+          setMode: value => { responseMode = value; },
+          holdDownload: () => { gate = new Promise(resolve => { release = resolve; }); },
+          releaseDownload: () => { release?.(); gate = Promise.resolve(); },
+        });
+        assert.deepEqual(await flags(), originalFlags, 'all article flags preserved');
+        assert.deepEqual(await feeds(), originalFeeds, 'all feed identities and URLs preserved');
+        report.results.push({ width, pass: true, cases, articleCount: originalFlags.length, feedCount: originalFeeds.length });
+        console.log('PASS settings-lifecycle-' + width); continue;
+      }
       await page.locator(field('webdav-endpoint')).fill(origin + '/dav/');
       await page.locator(field('webdav-remote-path')).fill('config.json');
       await confirmOnly(); await screenshot(`confirmation-${width}`);

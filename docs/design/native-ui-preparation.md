@@ -17,6 +17,7 @@
 | `pages/entries_page/preferences_policy.rs` | 捕获与当前偏好就绪检查、任务开始前的选择一致性检查 | effect 触发、保存任务执行、错误发布；应用服务负责串行比较与持久化 |
 | `pages/reader_page/result_lifecycle.rs` | 文章 ID 与加载代次共同确定结果归属、整批迟到结果过滤、接纳结果保序移动 | 同步派发 BeginLoading、页面任务作用域、命令执行和 intent 发布；既有 reducer 持有加载代次 |
 | `pages/settings_page/save_policy.rs` | 保存快照的 CSS 校验/零页大小回退、最后结果归并、整份草稿与主题选择回填判定、完成提示 | 同步 pending gate、提交快照捕获、页面任务作用域、命令执行、草稿/主题/提示 signal 发布 |
+| `pages/settings_page/request_lifecycle.rs` | 初次加载身份、草稿/预设编辑代次、保存与下载共用的写入准入 | effect 派发加载、页面任务、结果投影、草稿与已保存主题的分别发布；不存另一份设置 |
 | `pages/settings_page/sync/state.rs` | 下载的再次确认、输入/上传取消确认、提交时的端点与路径快照 | session 显示确认提示、执行原页面任务、按序投影 Settings 结果；host/infra 校验目标并执行 I/O |
 | `pages/feeds_page/request_policy.rs` | 快照查询代次分配与结果准入、刷新命令归属、单来源刷新提示时长与清除身份 | 原查询 signal、同步命令构造、页面任务作用域、按序发布结果、实际等待；Shell 持有全局刷新 |
 | `pages/feeds_page/edit_state.rs` | 编辑身份与代次、加载结果准入、草稿变更、保存 gate、关闭与失败重试 | reducer 串接命令及页面提示/reload，session 执行任务；dialog 负责焦点和原生取消事件 |
@@ -56,17 +57,19 @@
 - `save_policy.rs` 是页面内的纯规则，不持有 signal、任务、持久化句柄或另一份长期草稿。CSS 校验仍调用 domain 的唯一实现；其余数值校验继续由 application 执行。只有页大小 0 在提交副本中回退为默认值，原草稿先保留。
 - session 必须先同步检查公共 pending gate，再捕获草稿和预设；通过准备后置 pending，并在 `spawn` 之前构造保存命令。按钮禁用不能替代该入口；保存期间没有自动队列，后续修改需要再次明确保存。
 - 返回后先清除 pending，再投影和归并结果：最后一个 `SettingsLoaded` 与最后一个状态消息分别生效。有设置结果即按成功处理，不以状态 tone 推断成败；没有设置结果（包括空结果）保留草稿并提示重试。
-- 当前整份草稿仍等于提交快照时，才用保存结果替换；不逐字段合并。改动后又改回原值仍视为相等，不引入编辑代次。当前草稿已等于保存结果时不提示未保存。
+- 当前整份草稿仍等于提交快照时，才用保存结果替换；不逐字段合并。改动后又改回原值仍视为相等，保存回填不使用加载/下载的编辑代次。当前草稿已等于保存结果时不提示未保存。
 - 预设选择与草稿分开判断：只有选择仍等于提交时的选择才回填，检测依据是替换后的有效草稿 CSS。仅选择新预设而未应用，不单独计入未保存编辑；用户的新选择必须保留。
-- 发布顺序继续为草稿、预设、已保存的全局主题、完成提示。页面销毁仍由 Dioxus 取消自己的任务，不承诺回滚已提交持久化。加载设置、WebDAV 同步、主题文件 I/O 与宿主能力不属于本次提取。
+- 发布顺序继续为草稿、预设、已保存的全局主题、完成提示。页面销毁仍由 Dioxus 取消自己的任务，不承诺回滚已提交持久化。可变 pending 状态仅在页面 `request_lifecycle` 中持有；`SettingsPageSaveState` 是供 facade 渲染的只读快照。
 
 ## Settings 加载、同步与主题文件的边界
 
-- 初次加载继续由页面 effect 派发 `SettingsCommand::Load`；runtime 从 settings capability 取得结果，`SettingsPageSession` 发布预设、草稿和全局主题。这里没有跨页面持久状态，也没有必要再拆一层加载策略。
+- 初次加载继续由页面 effect 派发 `SettingsCommand::Load`；runtime 从 settings capability 取得结果。只接纳当前读取身份一次；实际保存或确认后的下载准入会永久使旧读取失效，包括旧错误，写入失败也不会恢复旧读取。写入期间不再发起初次读取。
+- 初次加载只回填进入本页以来未编辑的草稿/预设；下载则以第二次确认、命令发出时为界，允许替换此前的输入，保留此后的编辑。两种编辑代次分别比较，同值事件、改回原值、无法解析的数字输入也属于编辑。整份草稿保留，不逐字段合并；数字输入仍沿用最后有效设置值与原有错误提示，不写入虚构值。
+- 接纳的加载/下载结果仍更新全局已保存主题；草稿保留且与结果不同时，提示尚未保存。预设仅在没有后续选择时，根据有效草稿的 CSS 识别。当前结果缺少设置值时只投影其状态，不回填草稿。加载/下载成功按“预设 → 草稿 → 已保存主题 → 提示”发布。
 - `sync/state.rs` 是端点、路径和下载确认的唯一状态来源。`prepare_pull` 首次返回 `None` 要求显示确认，再次调用返回 `PullConfig` 并消耗确认；每次实际下载都重新确认。修改任一输入（包括同值事件）或准备上传都会取消已有确认。
-- `prepare_push` / `prepare_pull` 在同一次状态借用内清除确认并克隆当前两个字符串；session 释放借用后才启动任务。值不裁剪、不预校验、不落盘；后来改输入不改变已构造的命令。没有新增 busy gate、取消标记或自动重试。
-- 同步结果仍走既有 Settings intent 投影：导入成功先发布加载的设置，再显示提示；缺失远端仅提示，失败显示错误。页面任务作用域保持原样，离页不承诺回滚已提交的持久化。
-- 当前初次加载及下载成功会回填整份草稿，与外观保存的“保留后续编辑”策略不同。这是此次源码盘点确认的现状，本次没有更改加载/同步/保存之间的竞态语义；若要保护同步期间的新草稿，应另行定义结果归属并验证交错行为。
+- `prepare_push` / `prepare_pull` 在同一次状态借用内清除确认并克隆当前两个字符串；session 释放借用后才启动任务。值不裁剪、不预校验、不落盘；后来改输入不改变已构造的命令。
+- 保存与实际下载共用一个页面内写入 gate。下载会写入本地配置，不能只按请求先后丢弃其回复；同页正在保存/下载时，另一写入直接提示稍后重试，不构造命令、不排队。被阻止的下载清除旧确认，重试须再次确认；确认本身不占写入 gate。成功、404、错误和空结果都释放 gate。
+- 下载准入也使此前的主题文件读取失效；下载期间新发起的主题导入可以成为后续草稿，保存仍受公共 gate 约束。上传保持既有端点快照与提示行为，不占本地写入 gate。页面任务作用域保持原样，离页不承诺回滚已发生的持久化；gate 不提供跨页面、跨标签页或跨进程的事务串行化。
 - 主题文件仍分三层：`theme_file_io.rs` / Android export 适配系统文件或浏览器下载，`theme_io.rs` 组织成功/取消/失败反馈，`theme_apply.rs` 校验 CSS 并进入现有保存流程。预设识别已有纯 Rust 测试；不为统一接口另建 controller、crate 或文件状态镜像。Android 导入目前仍提示手动粘贴，未接入系统选择器。
 - 主题文件的取消、编码、失败与离页契约见下节；不继续细拆已有的简单纯规则。
 
@@ -80,7 +83,7 @@
 - 原生导入/导出继续归属页面任务，私有 Future 注入点仅用于检验返回/取消契约。离页取消等待，不承诺关闭操作系统对话框，也不回滚已经发生的文件或配置写入；Android 系统保存器仍自行完成回调。
 - `SettingsPageSession` 只持有一个主题导入代次；在打开选择器时同步分配身份。新导入即使取消或失败，也永久取代旧读取。`theme_io.rs` 在校验 CSS、发布提示、修改草稿或保存之前统一检查并消耗身份；过期的成功、失败和取消均不产生页面副作用。
 - 用户修改设置草稿、选择预设、应用/清空主题或显式保存时，使在途导入失效；同值事件和改回原值也不能恢复旧身份。Web 隐藏 input 只暂存本次选择器身份，不持有另一份设置；桌面任务在开始轮询选择器前也检查身份。
-- 加载或保存结果实际替换草稿/预设时同样使导入失效；回填完全相同的值、仅更新提示、以及既有保存保留后续编辑时，不取消新导入。这不改变加载/同步/保存之间原有的结果回填规则。
+- 加载或保存结果实际替换草稿/预设时同样使导入失效；回填完全相同的值、仅更新提示、以及保存保留后续编辑时，不取消新导入。是否回填由上节的加载/下载与保存规则决定。
 - 不新增文件操作 busy 状态，也不取消已接纳的设置保存。若上一份设置正在保存，新文件可成为后续草稿，继续由公共保存 gate 提示尚未提交，并要求显式保存。离页仍由页面任务作用域释放等待。
 
 ## Feeds 查询与刷新提示规则的使用约束
@@ -148,6 +151,7 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - Settings 保存：`scripts/browser/rssr_settings_save_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 指定构建包和既有离线 fixture，在 1536/390 视口验证校验失败、零值回退、CSS/主题保存与重载；另以真实 Web Locks 延迟写入、以 Storage 写失败验证后续草稿和显式重试。`--mode write|reopen --cdp <endpoint> --database <isolated-db> --artifact-dir <path> --expect <write/acceptance.json>` 用于独立 Windows 进程的正常保存与重开，只读 SQLite 对照完整设置和 5000 篇文章标记。原生进程由调用方管理，重开前须真正结束旧进程。旧 fixture 的归档阈值 0 在隔离数据中准备为合法的 120；不改用户数据库。详见 [Settings 保存提取交接](../handoffs/2026-10-28-settings-save-policy.md)。
 - Windows Settings 验收从新启动的 Entries 页开始；任何导航、编辑或 fixture 设置准备前，先只读核对数据库的 5000 个连续 ID/固定标题，再对照当前页面已挂载文章的 ID/标题。错误目标直接记为 `status: failed`，不得先修正归档阈值后才检查目标。这个检查不能替代调用方的独立进程、复制数据库和独立 profile 要求；负向复现见 [Settings review 交接](../handoffs/2026-10-28-settings-save-review.md)。
 - Settings 配置交换：`scripts/browser/rssr_settings_sync_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 与离线 fixture，覆盖 1536/390 视口的确认/修改目标/上传清除确认、参数快照、成功导入、404、无效配置和重新确认后重试。自管 `127.0.0.1:9277` WebDAV fixture 保留原订阅集合，仅修改配置中的主题/合法归档阈值；比对全体文章标记及订阅 ID/URL。Web 由 Playwright 转发到回环服务，不覆盖真实站点的 CORS/网络权限；Windows 传 `--cdp <endpoint> --database <isolated-db>`，先校验 5000 篇数据库和当前页面身份及回环来源 URL，再开始操作。调用方负责独立进程/profile/复制库，见 [Settings 同步边界交接](../handoffs/2026-10-28-settings-sync-boundary.md)。启动失败回归可复用 `rssr_feeds_lifecycle_startup_test.cjs <artifact-dir> settings-sync`。
+- Settings 回填交错：同一运行器追加 `--scenario lifecycle`，仅用于隔离 Web fixture。以 Web Lock 的结果延迟和回环下载延迟，覆盖初次加载/下载期间的编辑、改回原值、预设、无效数字、与保存互斥、重复下载、前后主题文件导入及失败后重试。基线额外传 `--baseline true` 断言旧缺陷，候选不得带该参数；源码/产物身份和平台边界见 [Settings 回填交接](../handoffs/2026-10-29-settings-load-ownership.md)。
 - 主题文件：`scripts/browser/rssr_theme_files_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 与隔离 fixture，覆盖 1536/390 视口的有效/空/无效 CSS、UTF-8/BOM/CRLF、同名重选、取消、真实下载字节、错误事件、导出失败清理、离页、持久化失败重试及全部文章标记。`--baseline true` 仅用于记录旧版本的已知缺陷，不能当作候选通过；默认模式严格要求修复后的行为。Rust 的文件适配测试使用真实临时文件，页面取消/返回使用 Dioxus 可控 Future，不替代系统选择器实机验收。见 [主题文件交接](../handoffs/2026-10-28-theme-file-contracts.md)。
 - 主题导入归属：同一运行器追加 `--scenario ownership`，覆盖新旧文件乱序、旧读取失败/无效 CSS、草稿改回原值、外观/预设编辑、清空、同值保存、新选择器取消和新文件校验失败；真实 Web Lock 延迟保存，确认已开始的保存仍完成且保留后来导入的草稿。旧基线与候选使用相同脚本，候选不得传 `--baseline true`；证据和未覆盖的原生 GUI 边界见 [主题导入归属交接](../handoffs/2026-10-28-theme-import-ownership.md)。
 - Feeds 查询与提示：`scripts/browser/rssr_feeds_lifecycle_acceptance.cjs --artifact-dir <path>` 使用 `PUBLIC_DIR` 构建包和离线 fixture，在 1536/390 视口验证成功/错误提示消退、旧计时器保留删除确认、全局刷新 busy、添加/删除后的统计重取以及全体文章标记保持。Windows 模式传 `--cdp <endpoint> --database <isolated-db> --feed-origin http://127.0.0.1:<port>`，调用方须提供独立进程、profile 和 5000 篇复制 fixture，并预先将复制库中的来源 URL 指向该空闲端口；脚本先只读核对数据库、当前 Entries 页及 URL，再启动自己管理的回环 RSS 服务。乱序快照和离页取消由 Dioxus 可控 Future 测试覆盖；源码/产物身份与平台边界见 [Feeds 查询与提示交接](../handoffs/2026-10-28-feeds-request-lifecycle.md)。

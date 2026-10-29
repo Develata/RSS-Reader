@@ -91,7 +91,7 @@ mod tests {
     use super::*;
     use crate::{
         pages::settings_page::{
-            save::{SettingsPageSaveSession, SettingsPageSaveState},
+            save::SettingsPageSaveSession,
             session::SettingsPageSession,
             sync::{SettingsPageSyncSession, SettingsPageSyncState},
         },
@@ -109,8 +109,7 @@ mod tests {
             }),
         };
         let page = SettingsPageSession::new(theme);
-        let save_state = use_signal(SettingsPageSaveState::new);
-        let save = SettingsPageSaveSession::new(save_state, page);
+        let save = SettingsPageSaveSession::new(page);
         let sync_state = use_signal(SettingsPageSyncState::new);
         let sync = SettingsPageSyncSession::new(sync_state, page);
         use_context_provider(|| {

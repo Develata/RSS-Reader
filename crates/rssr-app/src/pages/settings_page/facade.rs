@@ -35,6 +35,10 @@ impl SettingsPageFacade {
         self.page.update_draft(update);
     }
 
+    pub(crate) fn note_draft_edit(&self) {
+        self.page.note_draft_edit();
+    }
+
     pub(crate) fn begin_theme_import(&self) -> ThemeImportRequest {
         self.page.begin_theme_import()
     }

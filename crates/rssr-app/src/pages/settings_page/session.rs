@@ -1,14 +1,18 @@
 use dioxus::prelude::*;
 use rssr_domain::UserSettings;
+use std::future::Future;
 
 use super::{
-    browser::open_repository_url, intent::SettingsPageIntent, save_policy::saved_draft_update,
+    browser::open_repository_url,
+    intent::SettingsPageIntent,
+    request_lifecycle::{EditingRevision, SettingsRequestLifecycle, SettingsWrite, WriteRequest},
+    save_policy::saved_draft_update,
     themes::detect_preset_key,
 };
 use crate::{
     status::{set_status_error, set_status_info},
     theme::ThemeController,
-    ui::{SettingsCommand, UiCommand, UiIntent, spawn_projected_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, execute_ui_command},
 };
 
 #[derive(Clone, Copy, PartialEq)]
@@ -22,6 +26,7 @@ pub(crate) struct SettingsPageSession {
     status: Signal<String>,
     status_tone: Signal<String>,
     theme_import_revision: Signal<u64>,
+    requests: Signal<SettingsRequestLifecycle>,
 }
 
 impl SettingsPageSession {
@@ -32,8 +37,9 @@ impl SettingsPageSession {
         let status = use_signal(String::new);
         let status_tone = use_signal(|| "info".to_string());
         let theme_import_revision = use_signal(|| 0);
+        let requests = use_signal(SettingsRequestLifecycle::default);
 
-        Self { theme, draft, preset_choice, status, status_tone, theme_import_revision }
+        Self { theme, draft, preset_choice, status, status_tone, theme_import_revision, requests }
     }
 
     /// Start at picker opening, before any await. Even a later cancellation supersedes old reads.
@@ -64,7 +70,7 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn update_draft(mut self, update: impl FnOnce(&mut UserSettings)) {
-        self.invalidate_theme_import();
+        self.note_draft_edit();
         let mut next = (self.draft)();
         update(&mut next);
         self.draft.set(next);
@@ -72,7 +78,13 @@ impl SettingsPageSession {
 
     pub(crate) fn set_preset_choice(mut self, value: impl Into<String>) {
         self.invalidate_theme_import();
+        self.requests.with_mut(SettingsRequestLifecycle::edit_preset);
         self.preset_choice.set(value.into());
+    }
+
+    pub(crate) fn note_draft_edit(mut self) {
+        self.invalidate_theme_import();
+        self.requests.with_mut(SettingsRequestLifecycle::edit_draft);
     }
 
     pub(crate) fn draft(self) -> Signal<UserSettings> {
@@ -100,24 +112,99 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.spawn_ui_command(UiCommand::Settings(SettingsCommand::Load));
+        self.load_with(|command| execute_ui_command(UiCommand::Settings(command)));
     }
 
-    pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
-        match intent {
-            SettingsPageIntent::SettingsLoaded(settings) => self.apply_loaded_settings(settings),
-            SettingsPageIntent::SetStatus { message, tone } => self.set_status(message, tone),
+    fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
+        mut self,
+        execute: impl FnOnce(SettingsCommand) -> F,
+    ) {
+        let Some(request) = self.requests.with_mut(SettingsRequestLifecycle::begin_load) else {
+            return;
+        };
+        let loading = execute(SettingsCommand::Load);
+        spawn(async move {
+            let intents = loading.await;
+            if self.requests.with_mut(|state| state.complete_load(request)) {
+                // Initial loading never discards an edit made since this page was mounted,
+                // including one made before its load effect got to run.
+                self.apply_load_result(intents, EditingRevision::default());
+            }
+        });
+    }
+
+    pub(super) fn pending_write(self) -> Option<SettingsWrite> {
+        (self.requests)().pending()
+    }
+
+    pub(super) fn reject_pending_write(self) -> bool {
+        let Some(pending) = self.requests.peek().pending() else {
+            return false;
+        };
+        self.set_status(
+            match pending {
+                SettingsWrite::Save => {
+                    "上一份设置仍在保存；新修改已保留在草稿中，完成后请再次操作。"
+                }
+                SettingsWrite::Download => "配置仍在下载；新修改已保留在草稿中，完成后请再次操作。",
+            },
+            "info",
+        );
+        true
+    }
+
+    pub(super) fn begin_write(mut self, kind: SettingsWrite) -> Option<WriteRequest> {
+        self.requests.with_mut(|state| state.begin_write(kind))
+    }
+
+    pub(super) fn complete_write(mut self, request: WriteRequest) -> bool {
+        self.requests.with_mut(|state| state.complete_write(request))
+    }
+
+    pub(super) fn apply_load_result(self, intents: Vec<UiIntent>, editing: EditingRevision) {
+        let mut settings = None;
+        let mut status = None;
+        for intent in intents.into_iter().filter_map(UiIntent::into_settings_page_intent) {
+            match intent {
+                SettingsPageIntent::SettingsLoaded(value) => settings = Some(value),
+                SettingsPageIntent::SetStatus { message, tone } => status = Some((message, tone)),
+            }
+        }
+        let unsaved = settings.is_some_and(|value| self.apply_loaded_settings(value, editing));
+        if unsaved {
+            let (mut message, tone) =
+                status.unwrap_or_else(|| ("设置已载入。".into(), "info".into()));
+            message.push_str(" 加载期间的修改仍保留在草稿中，尚未保存。");
+            self.set_status(message, tone);
+        } else if let Some((message, tone)) = status {
+            self.set_status(message, tone);
         }
     }
 
-    pub(crate) fn apply_loaded_settings(mut self, settings: UserSettings) {
-        let preset = detect_preset_key(&settings.custom_css);
-        if *self.draft.peek() != settings || *self.preset_choice.peek() != preset {
+    fn apply_loaded_settings(mut self, settings: UserSettings, editing: EditingRevision) -> bool {
+        let current = self.requests.peek().editing();
+        let replace_draft = current.draft == editing.draft;
+        let preset = (current.preset == editing.preset).then(|| {
+            if replace_draft {
+                detect_preset_key(&settings.custom_css)
+            } else {
+                detect_preset_key(&self.draft.peek().custom_css)
+            }
+        });
+        if (replace_draft && *self.draft.peek() != settings)
+            || preset.is_some_and(|value| *self.preset_choice.peek() != value)
+        {
             self.invalidate_theme_import();
         }
-        self.preset_choice.set(preset.to_string());
-        self.draft.set(settings.clone());
+        if let Some(preset) = preset {
+            self.preset_choice.set(preset.to_string());
+        }
+        if replace_draft {
+            self.draft.set(settings.clone());
+        }
+        let unsaved = *self.draft.peek() != settings;
         self.theme.settings.set(settings);
+        unsaved
     }
 
     /// Persisted settings and editable input are different snapshots while a save is pending.
@@ -167,17 +254,12 @@ impl SettingsPageSession {
             self.set_status(format!("打开 GitHub 仓库失败：{err}"), "error");
         }
     }
-
-    fn spawn_ui_command(self, command: UiCommand) {
-        spawn_projected_ui_command(command, UiIntent::into_settings_page_intent, move |intent| {
-            self.dispatch(intent);
-        });
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::oneshot;
 
     fn harness() -> Element {
         let theme = ThemeController { settings: use_signal(UserSettings::default) };
@@ -191,6 +273,140 @@ mod tests {
         dom.rebuild_in_place();
         let session = dom.in_scope(ScopeId::APP, consume_context);
         (dom, session)
+    }
+
+    fn start_load(session: SettingsPageSession) -> oneshot::Sender<Vec<UiIntent>> {
+        let (sender, receiver) = oneshot::channel();
+        session.load_with(|command| {
+            assert!(matches!(command, SettingsCommand::Load));
+            async move { receiver.await.unwrap() }
+        });
+        sender
+    }
+
+    fn loaded(css: &str) -> Vec<UiIntent> {
+        vec![UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(UserSettings {
+            custom_css: css.into(),
+            ..Default::default()
+        }))]
+    }
+
+    #[test]
+    fn initial_load_preserves_edits_before_or_after_start_including_same_value_events() {
+        for before_start in [false, true] {
+            for edit_back in [false, true] {
+                let (mut dom, session) = setup();
+                let edit = || {
+                    session.update_draft(|draft| draft.custom_css = "/* later */".into());
+                    if edit_back {
+                        session.update_draft(|draft| draft.custom_css.clear());
+                    }
+                    session.set_preset_choice("newsprint");
+                    session.set_preset_choice("none");
+                };
+                let sender = dom.in_scope(ScopeId::APP, || {
+                    if before_start {
+                        edit();
+                    }
+                    let sender = start_load(session);
+                    if !before_start {
+                        edit();
+                    }
+                    sender
+                });
+                sender.send(loaded("/* persisted */")).unwrap();
+                dom.render_immediate_to_vec();
+                dom.in_scope(ScopeId::APP, || {
+                    assert_eq!(
+                        session.draft.peek().custom_css,
+                        if edit_back { "" } else { "/* later */" }
+                    );
+                    assert_eq!(*session.preset_choice.peek(), "none");
+                    assert_eq!(session.theme.settings.peek().custom_css, "/* persisted */");
+                    assert!(session.status().contains("尚未保存"));
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn unparsed_edit_preserves_last_valid_draft_without_blocking_loaded_theme() {
+        let (mut dom, session) = setup();
+        let sender = dom.in_scope(ScopeId::APP, || {
+            let sender = start_load(session);
+            session.note_draft_edit();
+            sender
+        });
+        sender.send(loaded("/* persisted */")).unwrap();
+        dom.render_immediate_to_vec();
+        assert_eq!(*session.draft.peek(), UserSettings::default());
+        assert_eq!(session.theme.settings.peek().custom_css, "/* persisted */");
+    }
+
+    #[test]
+    fn latest_load_accepts_persisted_values_and_rejects_old_success_and_error() {
+        for fail in [false, true] {
+            let (mut dom, session) = setup();
+            let (old, new) =
+                dom.in_scope(ScopeId::APP, || (start_load(session), start_load(session)));
+            new.send(loaded("/* latest */")).unwrap();
+            dom.render_immediate_to_vec();
+            old.send(if fail {
+                vec![UiIntent::SetStatus { message: "old error".into(), tone: "error".into() }]
+            } else {
+                loaded("/* obsolete */")
+            })
+            .unwrap();
+            dom.render_immediate_to_vec();
+            assert_eq!(session.draft.peek().custom_css, "/* latest */");
+            assert_eq!(*session.preset_choice.peek(), "custom");
+            assert_eq!(session.theme.settings.peek().custom_css, "/* latest */");
+            assert!(session.status.peek().is_empty());
+        }
+    }
+
+    #[test]
+    fn admitted_write_supersedes_initial_load_even_after_failure_or_no_result() {
+        for kind in [SettingsWrite::Save, SettingsWrite::Download] {
+            let (mut dom, session) = setup();
+            let sender = dom.in_scope(ScopeId::APP, || {
+                let sender = start_load(session);
+                let write = session.begin_write(kind).unwrap();
+                session.load_with(|_| -> std::future::Ready<Vec<UiIntent>> {
+                    panic!("initial read cannot start during a settings write")
+                });
+                assert!(session.complete_write(write));
+                session.set_status("write failed; draft kept", "error");
+                sender
+            });
+            sender.send(loaded("/* obsolete */")).unwrap();
+            dom.render_immediate_to_vec();
+            assert_eq!(*session.draft.peek(), UserSettings::default());
+            assert_eq!(*session.theme.settings.peek(), UserSettings::default());
+            assert_eq!(*session.status.peek(), "write failed; draft kept");
+        }
+    }
+
+    #[test]
+    fn current_load_error_keeps_edits_and_disposal_drops_the_pending_read() {
+        let (mut dom, session) = setup();
+        let sender = dom.in_scope(ScopeId::APP, || {
+            let sender = start_load(session);
+            session.update_draft(|draft| draft.custom_css = "/* draft */".into());
+            sender
+        });
+        sender
+            .send(vec![UiIntent::SetStatus { message: "load failed".into(), tone: "error".into() }])
+            .unwrap();
+        dom.render_immediate_to_vec();
+        assert_eq!(session.draft.peek().custom_css, "/* draft */");
+        assert_eq!(*session.status.peek(), "load failed");
+        assert_eq!(*session.status_tone.peek(), "error");
+        let sender = dom.in_scope(ScopeId::APP, || start_load(session));
+        dom.render_immediate_to_vec();
+        assert!(!sender.is_closed());
+        drop(dom);
+        assert!(sender.is_closed());
     }
 
     #[test]
@@ -231,16 +447,17 @@ mod tests {
             let request = session.begin_theme_import();
             session.set_status("feedback only", "info");
             assert!(session.is_theme_import_current(request));
-            session.apply_loaded_settings(UserSettings::default());
+            session.apply_loaded_settings(UserSettings::default(), EditingRevision::default());
             assert!(session.is_theme_import_current(request));
             let changed = UserSettings { custom_css: "/* loaded */".into(), ..Default::default() };
-            session.apply_loaded_settings(changed.clone());
+            session.apply_loaded_settings(changed.clone(), EditingRevision::default());
             assert!(!session.complete_theme_import(request));
 
             // A loaded preset reset also changes the active editing context.
             session.set_preset_choice("newsprint");
             let request = session.begin_theme_import();
-            session.apply_loaded_settings(changed);
+            let editing = session.requests.peek().editing();
+            session.apply_loaded_settings(changed, editing);
             assert!(!session.complete_theme_import(request));
         });
     }

@@ -3,6 +3,7 @@ use std::future::Future;
 use super::state::SettingsPageSaveState;
 use crate::{
     pages::settings_page::{
+        request_lifecycle::SettingsWrite,
         save_policy::{SaveCompletion, prepare_save, saved_status_message},
         session::SettingsPageSession,
     },
@@ -13,17 +14,18 @@ use dioxus::prelude::*;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSaveSession {
-    state: Signal<SettingsPageSaveState>,
     page: SettingsPageSession,
 }
 
 impl SettingsPageSaveSession {
-    pub(crate) fn new(state: Signal<SettingsPageSaveState>, page: SettingsPageSession) -> Self {
-        Self { state, page }
+    pub(crate) fn new(page: SettingsPageSession) -> Self {
+        Self { page }
     }
 
     pub(crate) fn snapshot(self) -> SettingsPageSaveState {
-        (self.state)()
+        SettingsPageSaveState {
+            pending_save: self.page.pending_write() == Some(SettingsWrite::Save),
+        }
     }
 
     pub(crate) fn save(self) {
@@ -42,9 +44,7 @@ impl SettingsPageSaveSession {
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
         // Every entry point, including theme preset buttons, passes this synchronous gate.
-        if self.state.peek().pending_save {
-            self.page
-                .set_status("上一份设置仍在保存；新修改已保留在草稿中，完成后请再次保存。", "info");
+        if self.page.reject_pending_write() {
             return;
         }
         let submitted_draft = self.page.draft().peek().clone();
@@ -61,8 +61,9 @@ impl SettingsPageSaveSession {
             }
         };
 
-        let mut state = self.state;
-        state.with_mut(|state| state.pending_save = true);
+        let Some(request) = self.page.begin_write(SettingsWrite::Save) else {
+            return;
+        };
 
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
@@ -72,7 +73,9 @@ impl SettingsPageSaveSession {
         });
         spawn(async move {
             let intents = saving.await;
-            state.with_mut(|state| state.pending_save = false);
+            if !self.page.complete_write(request) {
+                return;
+            }
             match SaveCompletion::collect(
                 intents.into_iter().filter_map(UiIntent::into_settings_page_intent),
             ) {
@@ -108,8 +111,7 @@ mod tests {
     fn harness() -> Element {
         let theme = ThemeController { settings: use_signal(UserSettings::default) };
         let page = SettingsPageSession::new(theme);
-        let state = use_signal(SettingsPageSaveState::new);
-        use_context_provider(|| SettingsPageSaveSession::new(state, page));
+        use_context_provider(|| SettingsPageSaveSession::new(page));
         use_context_provider(|| theme);
         rsx! {}
     }
@@ -343,5 +345,27 @@ mod tests {
         assert!(!sender.is_closed(), "save is still pending in this page scope");
         drop(dom);
         assert!(sender.is_closed(), "page disposal cancels its task, not an external write");
+    }
+
+    #[test]
+    fn pending_download_rejects_save_before_validation_and_allows_explicit_retry() {
+        let (mut dom, session, theme) = setup();
+        let sender = dom.in_scope(ScopeId::APP, || {
+            let download = session.page.begin_write(SettingsWrite::Download).unwrap();
+            session.page.update_draft(|draft| draft.custom_css = "}".into());
+            session.save_with("save".into(), |_| -> std::future::Ready<Vec<UiIntent>> {
+                panic!("busy save must not construct a command")
+            });
+            assert!(session.page.status().starts_with("配置仍在下载"));
+            assert!(!session.snapshot().pending_save);
+            assert_eq!(session.page.pending_write(), Some(SettingsWrite::Download));
+            assert!(session.page.complete_write(download));
+            session.page.update_draft(|draft| draft.custom_css = "/* retry */".into());
+            start_save(session)
+        });
+        sender.send(true).unwrap();
+        dom.render_immediate_to_vec();
+        assert_eq!(theme.settings.peek().custom_css, "/* retry */");
+        assert!(!session.snapshot().pending_save);
     }
 }

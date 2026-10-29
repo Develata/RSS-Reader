@@ -104,7 +104,10 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                             next.refresh_interval_minutes = minutes;
                                         });
                                 }
-                                Err(_) => invalid.write().refresh_interval = Some(refresh_value),
+                                Err(_) => {
+                                    refresh_facade.note_draft_edit();
+                                    invalid.write().refresh_interval = Some(refresh_value);
+                                }
                             }
                         }
                     }
@@ -133,7 +136,10 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                             next.archive_after_months = months;
                                         });
                                 }
-                                Err(_) => invalid.write().archive_after_months = Some(archive_value),
+                                Err(_) => {
+                                    archive_facade.note_draft_edit();
+                                    invalid.write().archive_after_months = Some(archive_value);
+                                }
                             }
                         }
                     }
@@ -163,6 +169,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                         });
                                 }
                                 Err(_) => {
+                                    entries_page_size_facade.note_draft_edit();
                                     invalid.write().entries_page_size = Some(page_size_value);
                                 }
                             }
@@ -197,6 +204,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                         });
                                 }
                                 Err(_) => {
+                                    font_scale_facade.note_draft_edit();
                                     invalid.write().reader_font_scale = Some(font_scale_value);
                                 }
                             }
