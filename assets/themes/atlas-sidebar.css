@@ -35,7 +35,7 @@
   --shadow-card: 0 10px 24px rgba(39, 52, 71, 0.04);
 
   /* 按钮 */
-  --button-bg: linear-gradient(135deg, #c65c49 0%, #9b3f31 100%);
+  --button-bg: linear-gradient(135deg, #b04a38 0%, #9b3f31 100%);
   --button-fg: #fff8f4;
   --button-radius: 16px;
   --button-shadow:
@@ -46,7 +46,7 @@
   --button-secondary-shadow:
     0 10px 18px -16px rgba(36, 48, 66, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --button-danger-bg: linear-gradient(135deg, #c74a42 0%, #9f2d28 100%);
+  --button-danger-bg: linear-gradient(135deg, #b83c36 0%, #9f2d28 100%);
   --button-danger-outline-bg: rgba(255, 243, 239, 0.96);
   --button-danger-outline-fg: #9a392f;
   --button-danger-outline-border: rgba(155, 63, 49, 0.16);
@@ -253,8 +253,7 @@ body:has(.theme-dark) {
   grid-column: 2;
 }
 
-[data-layout="stats-grid"],
-[data-page="settings"] [data-layout="settings-grid"] {
+[data-layout="stats-grid"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -264,7 +263,6 @@ body:has(.theme-dark) {
 [data-layout="feed-card"],
 [data-layout="entry-card"],
 [data-layout="exchange-card"],
-[data-layout="settings-card"],
 [data-layout="theme-card"] {
   box-shadow: var(--shadow-card);
 }

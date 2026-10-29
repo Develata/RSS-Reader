@@ -16,8 +16,17 @@ fn midnight_ledger_theme_css() -> &'static str {
 
 /// 历史版本的内置主题 CSS。用户设置里只持久化 CSS 文本本身，
 /// 主题被改版后旧文本必须仍能识别回对应预设，否则会退化显示为「自定义主题」，
-/// 且「移除这套主题」不再命中。新改版一次就在这里追加一条冻结副本。
+/// 且当前主题的识别与已选状态不再匹配。新改版一次就在这里追加一条冻结副本。
 const LEGACY_PRESET_CSS: &[(&str, &str)] = &[
+    ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v3.css")),
+    (
+        "amethyst-glass",
+        include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v3.css"),
+    ),
+    (
+        "midnight-ledger",
+        include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v2.css"),
+    ),
     ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v2.css")),
     ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v1.css")),
     ("newsprint", include_str!("../../../../../../assets/themes/legacy/newsprint-v1.css")),

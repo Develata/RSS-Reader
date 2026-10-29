@@ -60,6 +60,7 @@ pub(crate) enum FeedsPageIntent {
         feed_id: i64,
         feed_title: String,
     },
+    CancelRemoveFeed(i64),
     ExportConfigRequested,
     ImportConfigRequested,
     ExportOpmlRequested,

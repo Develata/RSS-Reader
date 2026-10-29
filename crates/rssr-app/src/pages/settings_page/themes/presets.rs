@@ -2,98 +2,52 @@ use dioxus::prelude::*;
 
 use crate::pages::settings_page::facade::SettingsPageFacade;
 
-use super::{theme_apply::apply_custom_css_from_raw, theme_preset::builtin_theme_presets};
+use super::theme_preset::builtin_theme_presets;
 
 #[component]
 pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
-    let preset_choice = facade.preset_choice();
-    let atlas_facade = facade.clone();
-    let newsprint_facade = facade.clone();
-    let amethyst_facade = facade.clone();
-    let midnight_facade = facade.clone();
-    let clear_facade = facade.clone();
-    let apply_selected_facade = facade.clone();
+    let default_facade = facade.clone();
+    let default_active = facade.is_theme_preset_active("none");
+    let default_state = facade.theme_card_state("none");
+    let default_variant = facade.theme_apply_button_variant("none");
+    let default_label =
+        if default_active { "当前已选：默认主题" } else { "恢复默认主题" };
 
     rsx! {
         div {
             "data-layout": "theme-presets",
             "data-section": "settings-theme-presets",
             div { "data-slot": "settings-card-section-header",
-                h3 { "data-slot": "settings-card-section-title", "内置主题预设" }
+                h3 { "data-slot": "settings-card-section-title", "主题" }
+                p { "data-slot": "page-intro", "选择后预览，点击保存设置以保留。" }
             }
-            div { class: "inline-actions", "data-layout": "theme-preset-selector",
-                select {
-                    id: "settings-preset-theme",
-                    name: "preset_theme",
-                    class: "select-input inline-actions__item",
-                    "data-field": "preset-theme-select",
-                    value: "{preset_choice}",
-                    onchange: move |event| facade.set_preset_choice(event.value()),
-                    option { value: "none", "无预设" }
-                    option { value: "custom", "自定义主题" }
-                    option { value: "atlas-sidebar", "Atlas Sidebar" }
-                    option { value: "newsprint", "Newsprint" }
-                    option { value: "amethyst-glass", "Amethyst Glass（实验）" }
-                    option { value: "midnight-ledger", "Midnight Ledger" }
-                }
-                button {
-                    class: "button inline-actions__item",
-                    "data-variant": "secondary",
-                    "data-action": "apply-selected-theme",
-                    onclick: move |_| apply_selected_facade.apply_selected_theme(),
-                    "应用所选主题"
-                }
-            }
-            div { "data-layout": "theme-preset-quick-actions",
-                button {
-                    class: "button",
-                    "data-variant": "secondary",
-                    "data-action": "apply-theme-preset",
-                    "data-theme-preset": "atlas-sidebar",
-                    onclick: move |_| atlas_facade.apply_builtin_theme("atlas-sidebar"),
-                    "应用 Atlas Sidebar"
-                }
-                button {
-                    class: "button",
-                    "data-variant": "secondary",
-                    "data-action": "apply-theme-preset",
-                    "data-theme-preset": "newsprint",
-                    onclick: move |_| newsprint_facade.apply_builtin_theme("newsprint"),
-                    "应用 Newsprint"
-                }
-                button {
-                    class: "button",
-                    "data-variant": "secondary",
-                    "data-action": "apply-theme-preset",
-                    "data-theme-preset": "amethyst-glass",
-                    onclick: move |_| amethyst_facade.apply_builtin_theme("amethyst-glass"),
-                    "应用 Amethyst Glass（实验）"
-                }
-                button {
-                    class: "button",
-                    "data-variant": "secondary",
-                    "data-action": "apply-theme-preset",
-                    "data-theme-preset": "midnight-ledger",
-                    onclick: move |_| { midnight_facade.apply_builtin_theme("midnight-ledger") },
-                    "应用 Midnight Ledger"
-                }
-                button {
-                    class: "button",
-                    "data-variant": "danger-outline",
-                    "data-action": "clear-custom-css",
-                    onclick: move |_| clear_facade.clear_custom_css("已清空自定义 CSS。"),
-                    "清空 CSS"
-                }
+            if facade.preset_choice() == "custom" {
+                p { "data-slot": "page-intro", "当前草稿使用自定义 CSS，可在高级设置中编辑。" }
             }
             div { "data-layout": "theme-gallery",
+                article {
+                    "data-layout": "theme-card",
+                    "data-state": default_state,
+                    "data-theme-preset": "none",
+                    h4 { "data-slot": "theme-card-title", "默认主题" }
+                    p { "data-slot": "page-intro", "使用上方选择的浅色、深色或系统外观。" }
+                    button {
+                        class: "button",
+                        "data-variant": default_variant,
+                        "data-action": "clear-custom-css",
+                        aria_pressed: default_active,
+                        aria_label: default_label,
+                        onclick: move |_| default_facade.clear_custom_css("正在预览默认主题。"),
+                        if default_active { "当前已选" } else { "恢复默认" }
+                    }
+                }
                 for preset in builtin_theme_presets() {
                     {
                         let apply_card_facade = facade.clone();
-                        let remove_card_facade = facade.clone();
                         let preset_key = preset.key.to_string();
-                        let remove_preset_key = preset_key.clone();
                         let preset_name = preset.name;
                         let preset_swatches = preset.swatches;
+                        let button_label = facade.theme_apply_button_label(preset.key);
                         rsx! {
                             article {
                                 key: "{preset.key}",
@@ -101,12 +55,9 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                 "data-state": "{facade.theme_card_state(preset.key)}",
                                 "data-theme-preset": "{preset.key}",
                                 h4 { "data-slot": "theme-card-title", "{preset_name}" }
-                                div { "data-slot": "theme-card-swatches",
+                                div { "data-slot": "theme-card-swatches", aria_hidden: "true",
                                     for swatch in preset_swatches {
-                                        span {
-                                            "data-slot": "theme-card-swatch",
-                                            style: "background:{swatch}",
-                                        }
+                                        span { "data-slot": "theme-card-swatch", style: "background:{swatch}" }
                                     }
                                 }
                                 button {
@@ -114,22 +65,10 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
                                     "data-variant": "{facade.theme_apply_button_variant(preset.key)}",
                                     "data-action": "apply-theme-preset",
                                     "data-theme-preset": "{preset.key}",
-                                    onclick: move |_| {
-                                        apply_custom_css_from_raw(
-                                            &apply_card_facade,
-                                            super::theme_preset::preset_css(preset_key.as_str()).to_string(),
-                                            format!("已从主题卡片应用：{}。", preset_name),
-                                        );
-                                    },
-                                    "{facade.theme_apply_button_label(preset.key)}"
-                                }
-                                button {
-                                    class: "button",
-                                    "data-variant": "danger-outline",
-                                    "data-action": "remove-theme-preset",
-                                    "data-theme-preset": "{preset.key}",
-                                    onclick: move |_| remove_card_facade.remove_theme_preset(remove_preset_key.as_str(), preset_name),
-                                    "移除这套主题"
+                                    aria_pressed: facade.is_theme_preset_active(preset.key),
+                                    aria_label: "{button_label}：{preset_name}",
+                                    onclick: move |_| apply_card_facade.apply_builtin_theme(&preset_key),
+                                    "{button_label}"
                                 }
                             }
                         }

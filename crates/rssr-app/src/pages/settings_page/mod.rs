@@ -14,7 +14,7 @@ mod themes;
 use dioxus::prelude::*;
 
 use self::{
-    appearance::AppearanceSettingsCard,
+    appearance::{AppearanceSettingsCard, SettingsSaveRegion},
     facade::SettingsPageFacade,
     save::{SettingsPageSaveSession, SettingsPageSaveState},
     session::SettingsPageSession,
@@ -22,7 +22,6 @@ use self::{
 };
 use crate::{
     app::AppNav,
-    components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::use_mobile_back_navigation,
     theme::ThemeController,
     ui::{AppShellState, use_reactive_task},
@@ -84,11 +83,11 @@ pub fn SettingsPage() -> Element {
                         }
                     }
                 }
-                StatusBanner { message: facade.status_message(), tone: facade.status_tone(), announce: true }
                 div { "data-layout": "settings-grid",
                     AppearanceSettingsCard { facade: facade.clone() }
-                    WebDavSettingsCard { facade }
+                    WebDavSettingsCard { facade: facade.clone() }
                 }
+                SettingsSaveRegion { facade }
             }
         }
     }

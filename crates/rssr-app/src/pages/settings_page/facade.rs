@@ -91,31 +91,30 @@ impl SettingsPageFacade {
         self.page.set_status(message, tone);
     }
 
-    pub(crate) fn apply_selected_theme(&self) {
-        self.invalidate_theme_import();
-        let choice = self.preset_choice();
-        if choice == "none" {
-            self.clear_custom_css("已清空自定义 CSS。");
-            return;
-        }
-        if choice == "custom" {
-            self.set_status("当前是自定义主题，请直接编辑 CSS 或从文件导入。", "info");
-            return;
-        }
-        self.apply_builtin_theme(choice.as_str());
-    }
-
     pub(crate) fn apply_builtin_theme(&self, preset_key: &str) {
-        self.set_custom_css(preset_css(preset_key).to_string());
-        self.save_with_message(format!("已应用示例主题：{}。", preset_display_name(preset_key)));
+        self.preview_custom_css(
+            preset_css(preset_key).to_string(),
+            format!("正在预览 {}。", preset_display_name(preset_key)),
+        );
     }
 
     pub(crate) fn clear_custom_css(&self, success_message: impl Into<String>) {
-        self.update_draft(|next| {
-            next.custom_css.clear();
-        });
-        self.set_preset_choice("none");
-        self.save_with_message(success_message.into());
+        self.preview_custom_css(String::new(), success_message);
+    }
+
+    pub(crate) fn preview_custom_css(&self, raw: String, message: impl Into<String>) {
+        self.invalidate_theme_import();
+        if let Err(err) = super::themes::validate_custom_css(&raw) {
+            self.set_status(format!("自定义 CSS 格式无效：{err}"), "error");
+            return;
+        }
+        self.set_custom_css(raw.clone());
+        self.page.preview_custom_css(raw);
+        let mut message = message.into();
+        if self.has_unsaved_changes() {
+            message.push_str(" 尚未保存。");
+        }
+        self.set_status(message, "info");
     }
 
     pub(crate) fn is_theme_preset_active(&self, preset_key: &str) -> bool {
@@ -131,15 +130,7 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn theme_apply_button_label(&self, preset_key: &str) -> &'static str {
-        if self.is_theme_preset_active(preset_key) { "当前已选" } else { "应用这套主题" }
-    }
-
-    pub(crate) fn remove_theme_preset(&self, preset_key: &str, preset_name: &str) {
-        if !self.is_theme_preset_active(preset_key) {
-            self.set_status(format!("当前并未启用主题：{}。", preset_name), "info");
-            return;
-        }
-        self.clear_custom_css(format!("已移除主题：{}。", preset_name));
+        if self.is_theme_preset_active(preset_key) { "当前已选" } else { "预览主题" }
     }
 
     pub(crate) fn open_repository(&self) {
@@ -151,9 +142,8 @@ impl SettingsPageFacade {
         self.save.save();
     }
 
-    pub(crate) fn save_with_message(&self, success_message: impl Into<String>) {
-        self.invalidate_theme_import();
-        self.save.save_with_message(success_message);
+    pub(crate) fn has_unsaved_changes(&self) -> bool {
+        self.page.has_unsaved_changes()
     }
 
     pub(crate) fn is_save_pending(&self) -> bool {

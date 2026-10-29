@@ -15,6 +15,8 @@ pub(crate) struct FeedsPageState {
     pub(crate) opml_text: String,
     pub(crate) pending_config_import: bool,
     pub(crate) pending_delete_feed: Option<i64>,
+    /// A confirmed delete cannot be cancelled or submitted a second time.
+    pub(crate) removing_feed: Option<i64>,
     pub(crate) feeds: Vec<FeedSummary>,
     pub(crate) feed_count: u64,
     pub(crate) entry_count: u64,
@@ -40,6 +42,7 @@ impl FeedsPageState {
             opml_text: String::new(),
             pending_config_import: false,
             pending_delete_feed: None,
+            removing_feed: None,
             feeds: Vec::new(),
             feed_count: 0,
             entry_count: 0,

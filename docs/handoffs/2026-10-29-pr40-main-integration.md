@@ -3,7 +3,7 @@
 - 日期：2026-10-29
 - 作者 / Agent：Codex
 - 分支：本地 `codex/pr40-main-integration`；推送目标 `codex/native-ui-preparation-20261029`
-- 当前产品 HEAD：`67a9596fe47f2daea1288915b1719e8c26bcb34f`；CI 验收同步修正与本记录同一提交，见 PR #40 分支历史
+- 当前提交基线：`e16df3660bdc03beb7fe8c4878035e6cd1f9ab70`；合入 main `8932a5ac` 的普通 merge 与本记录同一提交，见 PR #40 分支历史
 - 相关 commit：`a7107b8b`（PR `58157a1a` + main `6a201d5a`）；`72e0516b`（普通合并 main `9b17a4d5`，只有交接元数据变化）；`67a9596f`（Settings 私有状态转换封装）
 - 相关 tag / release：无
 - 状态：`validated`（本地自动化范围；远端检查记录在 PR #40 的当前 head/run 回执中）
@@ -93,6 +93,20 @@
 - 回归前提：在第一笔写入仍被拦截时，明确断言服务器已返回初始 all/time，且最终写入尚无回执，验证旧轮询条件存在提前成立的窗口。
 - 验证：`node --check scripts/browser/rssr_workspace_acceptance.cjs`、`git diff --check` 通过；Entries 生命周期 8/8 通过，无页面或意外控制台异常，证据在 `target/preference-fix-entries.log` 和 `target/pr40-ci-preference-fix-entries/acceptance.json`。`node scripts/browser/rssr_workspace_acceptance.cjs` 完整工作区 18/18 通过，无页面异常，日志为 `target/preference-fix-workspace.log`，隔离服务器证据在 `target/pr40-ci-preference-fix-workspace/`。
 - 此次只改验收脚本和本记录，沿用 `67a9596f` 对应的同源码 Web/server 构建；Rust 产品代码未变。推送后重新核对新 head 的自动 PR CI，结果以 PR 描述的固定 head/run 回执为准。
+
+## 继续整合 PR #42 后的 main
+
+- `e16df366` 自动 [CI 40881410041](https://github.com/Develata/RSS-Reader/actions/runs/40881410041) 与 [Pages 40881410023](https://github.com/Develata/RSS-Reader/actions/runs/40881410023) 已全绿，37 成功 / 1 预期跳过。下载的阅读工作区 artifact `12900278982` SHA-256 为 `d570c89062a59debf6a6ea024db3d04de64493b99533063b63364e799d76a17f`，其中 workspace 18、Entries 8、Settings 8 场景均通过。本地归档为 `target/pr40-e16df366-reading-workspace.zip`。
+- 收尾时 main 从 `9b17a4d5` 前进到 `8932a5ac`（PR #42），产生新的 Settings 冲突；上述 CI 只代表旧主线整合，不作为这次整合后的结果。
+- 保留 PR #42 全部主题预览、统一显式保存、离页清理、删除确认、移动端操作、视觉样式和既有测试。主题文件读回后先消费导入身份，再走主线 preview_custom_css；导入、卡片和恢复默认均不触发保存。预览尝试先失效旧文件，即使 CSS 校验失败也不允许旧结果覆盖后来操作。
+- `Edits::has_unsaved_changes` 提供纯读取，不让 session 重新访问私有 submitted/pending 字段；其余补丁与读写生命周期封装保留，未增加跨层依赖。
+- 新增 2 项真实 Dioxus 会话测试：成功文件导入只预览且不保存其他字段、后来有效/无效预览都永久淘汰迟到文件。main 的预览保存及离页测试保留，Settings 合计 66 项通过。
+- 新增 Web 验收适配主线保存反馈位置和折叠 CSS 区域，并断言导入 0 次 PATCH、导出草稿字节、显式保存后才落库及旧文件回执不复活。设计契约和用户说明同步删除“导入自动保存”的旧表述。
+- 最终本地验证：`cargo test -p rssr-app --locked settings_page` 66/66；`cargo test --workspace --locked` 1067 通过、0 失败、4 既有忽略；`cargo clippy --workspace --all-targets --locked -- -D warnings`、fmt 检查通过；`cargo build -p rssr-web --locked` 和 Dioxus Web release 构建通过。证据为 `target/pr42-settings-tests.log`、`pr42-workspace-tests.log`、`pr42-clippy.log`、`pr42-server-build.log`、`pr42-web-build.log`。
+- 同构建浏览器验收：`rssr_native_preparation_acceptance.cjs` 8/8、`rssr_workspace_acceptance.cjs` 18/18、`rssr_entries_lifecycle_acceptance.cjs` 8/8；页面异常均为零，Settings/Entries 无意外控制台错误。证据为 `target/pr42-web-settings/`、`pr42-web-workspace/`、`pr42-web-entries/` 和对应 `pr42-browser-*.log`。
+- 主线验收：`node scripts/browser/rssr_server_acceptance.mjs --only settings-preview-explicit-save,build-mismatch-keeps-edits,draft-storage-unavailable,restored-draft-then-sign-in`（配合匹配产物、隔离 server 8121、headless Chrome CDP 19341）4/4 通过，无意外控制台异常，证据 `target/pr42-main-settings-acceptance/assertions.json`。所有专用服务器/浏览器均按运行器清理。
+- 原生传输脚本也更新折叠 CSS 区、已退役选择器和显式保存步骤，`node --check` 通过；未执行原生复跑。此前自动审批限制仍适用，不用语法检查或旧 13 项结果代替当前原生运行。
+- 这次普通合并不改写历史；提交并 push 后，必须核对新 head 的自动 CI，最终固定 head/run 回执写入 PR 描述。
 
 ## 风险与后续事项
 

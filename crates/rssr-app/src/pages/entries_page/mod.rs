@@ -156,6 +156,20 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
                                     message: facade.empty_entries_message(),
                                     tone: "info".to_string()
                                 }
+                                if facade.has_active_filters() {
+                                    button {
+                                        class: "button", "data-variant": "secondary",
+                                        "data-action": "clear-entry-filters", r#type: "button",
+                                        onclick: {
+                                            let facade = facade.clone();
+                                            move |_| {
+                                                facade.clear_filters();
+                                                browser_interactions::focus_filter_control();
+                                            }
+                                        },
+                                        "清除筛选"
+                                    }
+                                }
                             }
                         }
                     } else if facade.visible_entries_is_empty() {

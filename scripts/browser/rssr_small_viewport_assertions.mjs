@@ -298,17 +298,17 @@ async function checkSettings(client) {
     client,
     `(() => {
       const buttons = [...document.querySelectorAll(
-        '[data-action="apply-custom-css"], [data-action="apply-selected-theme"], [data-action="apply-theme-preset"]'
+        '[data-action="apply-custom-css"], [data-action="apply-theme-preset"]'
       )].filter((button) => button.getClientRects().length > 0);
       const texts = buttons.map((button) => button.textContent.trim());
       return {
         texts,
-        invalid: texts.filter((text) => !text.startsWith('应用') && text !== '当前已选'),
+        invalid: texts.filter((text) => !text.startsWith('预览') && text !== '当前已选'),
         oldText: document.body.innerText.includes('载入所选主题') || document.body.innerText.includes('使用这套主题'),
       };
     })()`,
   );
-  assertThat('theme application actions use application semantics', verbs.texts.length > 0 && verbs.invalid.length === 0, verbs);
+  assertThat('theme actions describe preview before explicit save', verbs.texts.length > 0 && verbs.invalid.length === 0, verbs);
   assertThat('obsolete theme verbs are absent', !verbs.oldText, verbs);
   await captureArtifact(client, 'settings');
 }
@@ -552,7 +552,7 @@ async function checkPrimaryWorkflow(client) {
   const summary=await evaluate(client,`document.querySelector('[data-slot="entry-filter-summary-text"]').textContent`);
   assertThat('always visible filter summary explains every active condition',['no matching title','仅已读','仅收藏','来源：'].every(part=>summary.includes(part)),summary);
   await tap('.entries-view-options summary');
-  await tap('[data-action="clear-entry-filters"]');
+  await tap('.entries-view-options [data-action="clear-entry-filters"]');
   await selectorExists(client, '[data-slot="entry-card-title"]');
   await waitUntil('the reset preferences stored by the server', 10000, async () => {
     const state = await storedWorkspace();

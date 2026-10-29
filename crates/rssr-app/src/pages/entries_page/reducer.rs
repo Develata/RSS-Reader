@@ -386,7 +386,7 @@ mod tests {
     use super::reduce_entries_page_intent;
     use crate::pages::entries_page::{
         intent::EntriesPageIntent,
-        state::{EntriesPageState, FIRST_PAGE_NUMBER},
+        state::{EntriesPageState, EntryGroupingMode, FIRST_PAGE_NUMBER},
     };
 
     fn entry(id: i64, is_read: bool) -> EntrySummary {
@@ -505,6 +505,28 @@ mod tests {
         );
 
         assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
+    }
+
+    #[test]
+    fn clear_filters_resets_selection_and_page_but_preserves_browsing_preferences() {
+        let mut state = EntriesPageState::new();
+        state.read_filter = ReadFilter::UnreadOnly;
+        state.starred_filter = StarredFilter::StarredOnly;
+        state.selected_feed_urls = vec!["https://example.com/feed".to_string()];
+        state.selected_entry_ids = Arc::new([1].into());
+        state.current_page = 4;
+        state.show_archived = true;
+        state.grouping_mode = EntryGroupingMode::Time;
+
+        reduce_entries_page_intent(&mut state, EntriesPageIntent::ClearFilters);
+
+        assert_eq!(state.read_filter, ReadFilter::All);
+        assert_eq!(state.starred_filter, StarredFilter::All);
+        assert!(state.selected_feed_urls.is_empty());
+        assert!(state.selected_entry_ids.is_empty());
+        assert_eq!(state.current_page, FIRST_PAGE_NUMBER);
+        assert!(state.show_archived, "clear filters does not change the archive visibility option");
+        assert_eq!(state.grouping_mode, EntryGroupingMode::Time);
     }
 
     #[test]

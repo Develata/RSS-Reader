@@ -328,8 +328,7 @@
 .app-shell[data-density="compact"] [data-layout="stat-card"],
 .app-shell[data-density="compact"] [data-layout="feed-card"],
 .app-shell[data-density="compact"] [data-layout="entry-card"],
-.app-shell[data-density="compact"] [data-layout="exchange-card"],
-.app-shell[data-density="compact"] [data-layout="settings-card"] {
+.app-shell[data-density="compact"] [data-layout="exchange-card"] {
   padding: 14px;
   border-radius: var(--radius-card-sm);
 }

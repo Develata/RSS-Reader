@@ -43,7 +43,7 @@ pub(super) fn complete_css_import(
         Ok(Some(raw)) => super::theme_apply::apply_custom_css_from_raw(
             facade,
             raw,
-            "已从文件载入并应用自定义 CSS。",
+            "已从文件载入并预览自定义 CSS。",
         ),
         Ok(None) => facade.set_status("已取消载入 CSS 文件。", "info"),
         Err(err) => facade.set_status(format!("载入 CSS 文件失败：{err}"), "error"),
@@ -192,6 +192,57 @@ mod tests {
             assert_eq!(facade.status_message(), "已取消载入 CSS 文件。");
             assert_eq!(facade.status_tone(), "info");
         });
+    }
+
+    #[test]
+    fn current_file_import_previews_without_saving_other_edits() {
+        let (mut dom, facade, theme) = setup();
+        let (sender, receiver) = oneshot::channel();
+        dom.in_scope(ScopeId::APP, || {
+            facade.update_draft(|draft| draft.entries_page_size = 80);
+            import_css_file_with(&facade, async move { receiver.await.unwrap() });
+        });
+        dom.render_immediate_to_vec();
+        sender.send(Ok(Some("/* imported */".into()))).unwrap();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(facade.custom_css(), "/* imported */");
+            assert_eq!(facade.draft().entries_page_size, 80);
+            assert_eq!(theme.appearance().custom_css, "/* imported */");
+            assert_eq!(theme.settings.peek().custom_css, "/* persisted */");
+            assert_eq!(
+                theme.settings.peek().entries_page_size,
+                UserSettings::default().entries_page_size
+            );
+            assert!(facade.has_unsaved_changes());
+            assert!(!facade.is_save_pending());
+            assert_eq!(facade.status_message(), "已从文件载入并预览自定义 CSS。 尚未保存。");
+        });
+    }
+
+    #[test]
+    fn later_preview_attempt_retires_held_file_even_when_the_preview_is_invalid() {
+        for css in ["/* latest preview */", "body {"] {
+            let (mut dom, facade, theme) = setup();
+            let (sender, receiver) = oneshot::channel();
+            dom.in_scope(ScopeId::APP, || {
+                import_css_file_with(&facade, async move { receiver.await.unwrap() });
+            });
+            dom.render_immediate_to_vec();
+            let (draft, appearance, status) = dom.in_scope(ScopeId::APP, || {
+                facade.preview_custom_css(css.into(), "manual preview");
+                (facade.custom_css(), theme.appearance().custom_css, facade.status_message())
+            });
+            sender.send(Ok(Some("/* obsolete file */".into()))).unwrap();
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(facade.custom_css(), draft);
+                assert_eq!(theme.appearance().custom_css, appearance);
+                assert_eq!(facade.status_message(), status);
+                assert_eq!(theme.settings.peek().custom_css, "/* persisted */");
+                assert!(!facade.is_save_pending());
+            });
+        }
     }
 
     #[test]

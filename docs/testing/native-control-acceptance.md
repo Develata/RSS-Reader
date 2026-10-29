@@ -1,6 +1,6 @@
 # 原生控件前置验收
 
-核对日期：2026-10-29。本文件对应 PR #40 与 main 9b17a4d5 的整合，当前契约见[控件适配契约](../design/native-control-adapter-contracts.md)。此前各批证据保留在[历史交接](../handoffs/README.md)，不能替代整合后源码的验收。
+核对日期：2026-10-29。本文件对应 PR #40 与 main 8932a5ac 的整合，当前契约见[控件适配契约](../design/native-control-adapter-contracts.md)。此前各批证据保留在[历史交接](../handoffs/README.md)，不能替代整合后源码的验收。
 
 ## 当前入口
 
@@ -10,7 +10,7 @@
 | 静态检查 | cargo fmt --all --check；cargo clippy --workspace --all-targets --locked -- -D warnings | 编译、格式与 lint |
 | 正式 Web | dx build --platform web --package rssr-app --locked --release --debug-symbols false | 当前 HTTP Backend 包；不使用 pages-demo |
 | Entries/来源编辑/阅读 | rssr_entries_lifecycle_acceptance.cjs、rssr_workspace_acceptance.cjs，以及主线 rssr_server_acceptance.mjs | 真实服务器、单库、离页回执、失败恢复、偏好顺序、目录与返回 |
-| Settings/主题接入 | node scripts/browser/rssr_native_preparation_acceptance.cjs | 1536/390 两视口，PATCH 字段边界、保存与后续编辑、下载回填、字段提示、UTF-8/导出、迟到文件 |
+| Settings/主题接入 | node scripts/browser/rssr_native_preparation_acceptance.cjs | 1536/390 两视口，PATCH 字段边界、保存与后续编辑、下载回填、字段提示、导入仅预览与显式保存、UTF-8/导出、迟到文件 |
 | 原生字符串表 | rssr_native_transport_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> | 实际 Windows EXE/WebView2、单库与传输；不操作 OS 选择器 |
 | Android | cargo check -p rssr-app --target aarch64-linux-android --locked 及 PR android-smoke | 编译/CI smoke；真实系统返回、选择器、IME 和辅助技术须另验 |
 

@@ -231,6 +231,10 @@ impl FeedsPageSession {
     pub(crate) fn remove_feed(self, feed_id: i64, feed_title: String) {
         self.dispatch_intent(FeedsPageIntent::RemoveFeedRequested { feed_id, feed_title });
     }
+
+    pub(crate) fn cancel_remove_feed(self, feed_id: i64) {
+        self.dispatch_intent(FeedsPageIntent::CancelRemoveFeed(feed_id));
+    }
 }
 
 #[cfg(test)]

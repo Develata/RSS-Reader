@@ -100,6 +100,7 @@ async function eventually(read, expected, label) {
     for (const entry of visible) assert.equal(entry.title, catalog[entry.id - 1]?.title);
     report.fixture = { entries: catalog.length, visibleChecked: visible.length, feeds: originalFeeds.length };
     await page.locator('[data-nav="settings"]').click();
+    await page.locator('[data-layout="theme-advanced"] summary').click();
     await page.locator(field('custom-css')).waitFor();
     const original = settings();
     assert.ok(original.archive_after_months >= 1, 'prepare a legal archive threshold before this probe');
@@ -130,13 +131,17 @@ async function eventually(read, expected, label) {
       'theme-mode': original.theme, 'list-density': original.list_density, 'startup-view': original.startup_view,
       'refresh-interval': String(original.refresh_interval_minutes), 'archive-after-months': String(original.archive_after_months),
       'entries-page-size': String(original.entries_page_size), 'reader-font-scale': String(original.reader_font_scale),
-      'custom-css': normalize(css), 'preset-theme-select': 'custom',
+      'custom-css': normalize(css),
       'webdav-endpoint': '', 'webdav-remote-path': 'config/rss-reader.json',
     });
     const apply = async raw => {
       const css = normalize(raw);
+      const beforePreview = settings();
       await page.locator(field('custom-css')).fill(raw);
       await page.locator(action('apply-custom-css')).click();
+      await eventually(() => page.locator('#user-custom-css').textContent(), css, 'explicit preview');
+      assert.deepEqual(settings(), beforePreview, 'preview does not store settings');
+      await page.locator(action('save-settings')).click();
       await eventually(settings, { ...original, custom_css: css }, 'exact SQLite settings');
       return css;
     };
@@ -148,6 +153,7 @@ async function eventually(read, expected, label) {
     await page.locator('[data-nav="feeds"]').click();
     await page.locator('[data-page="feeds"]').waitFor();
     await page.locator('[data-nav="settings"]').click();
+    await page.locator('[data-layout="theme-advanced"] summary').click();
     await eventually(fields, expectedFields(plain), 'page reload before comparison');
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
@@ -182,6 +188,7 @@ async function eventually(read, expected, label) {
       await page.locator('[data-nav="feeds"]').click();
       await page.locator('[data-page="feeds"]').waitFor();
       await page.locator('[data-nav="settings"]').click();
+      await page.locator('[data-layout="theme-advanced"] summary').click();
       await eventually(fields, expectedFields(saved.custom_css), 'saved state after page remount');
       await page.locator(action('save-settings')).click();
       await page.waitForFunction(() => document.querySelector('[data-page="settings"] [data-layout="status-banner"]')?.textContent.includes('设置已保存。'));

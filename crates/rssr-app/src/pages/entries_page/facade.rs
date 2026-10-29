@@ -78,7 +78,7 @@ impl EntriesPageFacade {
         self.session.feed_id().is_none() && !self.snapshot.selected_feed_urls.is_empty()
     }
 
-    fn has_active_filters(&self) -> bool {
+    pub(crate) fn has_active_filters(&self) -> bool {
         !self.entry_search().trim().is_empty()
             || self.read_filter() != ReadFilter::All
             || self.starred_filter() != StarredFilter::All

@@ -55,7 +55,7 @@
   --radius-control: 14px;
 
   /* 按钮：胶囊形 */
-  --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  --button-bg: linear-gradient(135deg, #7848cf 0%, #6d28d9 100%);
   --button-fg: #ffffff;
   --button-radius: 999px;
   --button-shadow:
@@ -66,7 +66,7 @@
   --button-secondary-shadow:
     0 8px 18px -10px rgba(31, 38, 135, 0.18),
     inset 0 1px 1px rgba(255, 255, 255, 0.42);
-  --button-danger-bg: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  --button-danger-bg: linear-gradient(135deg, #c12e3b 0%, #b91c1c 100%);
   --button-danger-outline-bg: rgba(255, 245, 248, 0.82);
   --button-danger-outline-fg: #9a2744;
   --button-danger-outline-border: rgba(154, 39, 68, 0.16);
@@ -121,7 +121,7 @@
   --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.5);
   --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  --button-bg: linear-gradient(135deg, #7848cf 0%, #6d28d9 100%);
   --button-fg: #ffffff;
   --button-shadow:
     0 10px 22px -7px rgba(0, 0, 0, 0.5),
@@ -182,7 +182,7 @@
     --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.5);
     --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-    --button-bg: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    --button-bg: linear-gradient(135deg, #7848cf 0%, #6d28d9 100%);
     --button-fg: #ffffff;
     --button-shadow:
       0 10px 22px -7px rgba(0, 0, 0, 0.5),
@@ -272,7 +272,7 @@ body:has(.theme-dark)::before {
 }
 
 [data-nav]:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   color: var(--accent-strong);
 }
 
@@ -292,7 +292,6 @@ body:has(.theme-dark)::before {
 [data-layout="feed-card"],
 [data-layout="entry-card"],
 [data-layout="exchange-card"],
-[data-layout="settings-card"],
 [data-layout="theme-card"] {
   border-color: var(--glass-card-border);
   box-shadow: var(--shadow-card);
@@ -304,7 +303,7 @@ body:has(.theme-dark)::before {
 
 [data-layout="feed-card"]:hover,
 [data-layout="entry-card"]:hover {
-  transform: translateY(-3px);
+  transform: translateY(-1px);
   box-shadow: var(--glass-card-hover-shadow);
   border-color: var(--glass-card-border-hover);
 }
@@ -355,7 +354,7 @@ body:has(.theme-dark)::before {
 }
 
 .button:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   filter: brightness(1.04);
 }
 

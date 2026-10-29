@@ -16,6 +16,10 @@ impl Edits {
         Self { submitted: None, pending }
     }
 
+    pub(super) fn has_unsaved_changes(&self) -> bool {
+        !self.pending.is_empty() || self.submitted.is_some()
+    }
+
     pub(super) fn pending(&self) -> &SettingsPatch {
         &self.pending
     }

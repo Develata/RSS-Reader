@@ -6,9 +6,7 @@ use crate::pages::feeds_page::facade::FeedsPageFacade;
 pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
     let input_facade = facade.clone();
     let add_facade = facade.clone();
-    let refresh_facade = facade.clone();
     let cancel_facade = facade.clone();
-    let refreshing = facade.is_refreshing();
 
     rsx! {
         div { "data-layout": "feed-workbench-single",
@@ -62,16 +60,6 @@ pub(crate) fn FeedComposeSection(facade: FeedsPageFacade) -> Element {
                         disabled: facade.is_adding_feed(),
                         "aria-busy": facade.is_adding_feed(),
                         if facade.is_adding_feed() { "正在添加…" } else { "添加订阅" }
-                    }
-                    button {
-                        class: "button",
-                        "data-variant": "secondary",
-                        "data-action": "refresh-all",
-                        r#type: "button",
-                        disabled: refreshing,
-                        aria_busy: refreshing,
-                        onclick: move |_| refresh_facade.refresh_all(),
-                        if refreshing { "正在刷新…" } else { "刷新全部" }
                     }
                 }
             }

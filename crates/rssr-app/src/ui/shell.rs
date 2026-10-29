@@ -387,6 +387,12 @@ impl AppNavShell {
     pub(crate) fn submit_search(&self) {
         self.shell.submit_search(self.navigator);
     }
+    pub(crate) fn home_label(&self) -> &'static str {
+        match resolve_home_action(&self.route) {
+            HomeAction::Navigate => "Read / 首页",
+            HomeAction::ManualRefresh => "Read / 刷新全部订阅",
+        }
+    }
     pub(crate) fn activate_home(&self) {
         match resolve_home_action(&self.route) {
             HomeAction::Navigate => {
