@@ -53,7 +53,7 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 | `data-action="entry-page-previous"` / `entry-page-next` | 既有 Entries reducer 更新并限制页号，保持筛选和分组，滚至新页起点 |
 | `data-action="open-reader-image"` / `close-reader-image` | `ImageViewerState::Closed / Open`，复用已渲染图片地址；Esc、背景或 Android back 同样关闭 |
 
-手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新继续使用现有 host 调度；host capability 内的共享 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
+手动刷新在 App scope 中运行，同步取得 in-flight 状态，连续 R、下拉和订阅页“刷新全部”不会重复创建批次。页面卸载不取消该任务。完成或部分失败后 revision 只让列表与订阅快照重取；Reader 正文不订阅刷新 revision。自动刷新由 `rssr_infra::local_backend` 的循环调度；其中共享的 `RefreshFlight` 让自动与手动的重叠请求等待同一轮结果，不改变阅读页加载语义。进行中任务被取消时，等待者收到错误，下一次请求可以重试；不缓存已完成的刷新结果。
 
 订阅探测与刷新在 infra 共用 8 MiB 响应限制，按解压后的流及转码后的 UTF-8 文本检查，超限走既有失败反馈并保留文章。SQLite 与 Web 的 `EntryContent.updated_at` 只在正文记录（含哈希）变化时更新；订阅刷新时间与文章索引更新时间仍正常更新。Web 仅在正文记录变化时发布正文片，逐订阅完整提交及新增数语义保持不变。没有新增 UI 命令或 `data-*` 接口。
 
@@ -64,6 +64,8 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 归档截止时间在查询范围、归档设置或刷新代次改变时计算，普通重绘沿用同一时间参数；勾选、目录展开／收起和同一结果集内翻页不触发列表重查。查询期间若已读、收藏或批量写入成功，查询结果视为可能过期：丢弃旧成功／失败并确保按当前范围重新查询，不能覆盖已保存的标记或重新插入已不匹配的文章。没有并发查询时，单条标记仍直接更新当前列表。
 
 首次列表查询还需等待设置、工作区偏好和来源映射全部就绪，避免先按默认分页或筛选显示，再跳到保存的设置。页面内 `Pending / Loaded / Unavailable` 区分等待、成功和读取失败：失败后允许读取文章并保留错误提示，但不保存回退偏好覆盖原值；后续刷新可重试。Bootstrap 不订阅自身的完成状态，避免成功后重复查询来源；独立的 bootstrap generation 丢弃其旧成功和旧失败结果，不与列表查询互相失效。
+
+单篇已读和批量操作后的补充读取走完整的 `Reread`：保留偏好读取失败期间用户选择的筛选，也不丢掉被其替换的在途设置读取。恢复读取本身不保存这些筛选。记住刚打开的订阅属于 App 写入，快速返回不会取消；迟到失败沿用全局提示。
 
 下拉刷新仅在全局文章页、页面已到顶部且向下拖动至少 80 CSS px 后松手触发；松手时须已无剩余触点，并按最终坐标重验距离和方向，不能沿用上一次移动的 armed 状态。横向、多指、文本选择、表单操作均排除；任一嵌套滚动祖先仍能消费当前移动方向时也排除，所有祖先都已到顶部时允许向下拉。没有可用触点坐标的事件取消手势，不保留 armed。被动 DOM bridge 只传当前坐标、页面是否到顶、控件/选区事实及嵌套滚动的双方向余量；`pull_refresh/gesture.rs` 独立管理起点、上一触点、排除条件、阈值、取消与释放，不依赖 Dioxus。嵌套消费按相邻触点方向判断，刷新距离按起点判断；松手也重验这两种距离。界面只订阅 idle / pulling / armed 阶段，刷新反馈复用 shell 的 refreshing / finished / error。没有字母 R 快捷键，也没有全局 `touch preventDefault`。
 
@@ -79,7 +81,7 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 
 返回列表的文章可有 `data-return-highlight="true"`，约 2 秒后移除；这是定位提示，不代表已读。`data-position-key` / `data-position-page` / `data-position-ready` / `data-position-entry` 是内部桥接字段，不作为用户主题接口。Web 页面刷新或应用结束清除位置，位置不参与配置交换。
 
-位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读区内无修饰键的左右方向键切文、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
+位置采集发生在操作边界：DOM 捕获阶段的控件点击、阅读页上无修饰键的 J / K 与左右方向键切文（输入框与可编辑区域内、图片查看器打开时除外）、表单提交与浏览器 `popstate`。搜索框光标移动、带修饰键及输入法组词期间的按键不采集位置，阅读快捷键同样放行组词输入。Web host 在 Dioxus 启动前安装 `popstate` 转发，通过内部 `rssr-history-leave` 事件在旧正文卸载前采集。连续滚动不监听位置、不扫描正文；每次进入页面的首次滚轮／触摸／滚动按键输入只发送轻量取消事实。Rust 只保存 `capture`，不会以取消或布局探测覆盖已存锚点。桥接消息带序号，旧响应不能覆盖更新的输入或导航事实。Android 系统返回通过内部 `rssr-capture-position` 事件先取得快照，最多等待 500ms，失败仍继续返回；等待期间合并重复返回并在路由已变化时放弃旧返回请求。这些事件与消息序号均为内部 host bridge 协议，不是主题或 application/domain 契约。
 
 `data-nav="entries"` 仍用于纯导航的“返回全部文章”链接；R 使用 `data-action="activate-home"`，不能把它当作纯导航选择器。旧 `show-top-nav` / `hide-top-nav`、`app-nav-brand-name`、`reader-toolbar` 已移除。旧 `nav_hidden` / `rssr-nav-hidden` 偏好仍被忽略，搜索词仍持久化；文章筛选折叠偏好已退役，筛选栏常驻。`app-nav-shell` 的 `data-state` 为 `normal` / `search` / `collapsed`。
 
@@ -96,8 +98,10 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 - `select-entry`、`select-current-page`：Rust reducer 只接受当前页 ID。`data-selected` 与 `data-read` 分别表示勾选和阅读状态；master 的 `aria-checked` 可为 `mixed`。16px 方框配 44px 点击区域，键盘焦点单独可见。
 - `mark-selected-read`、`archive-selected` → `EntriesCommand::ApplySelection` → `EntriesListService::apply_entry_batch`；在点击时冻结显式 ID，存储层原子更新。没有选择时禁用，执行中禁止修改勾选。旧 UI 筛选全量预览按钮已退役；CLI 和旧 host 预览接口仍保留。
 - 单篇已读／收藏写入期间，该行两种状态操作暂时禁用；当前文章工作区有单篇写入待完成时，批量操作也暂时禁用。批量操作期间禁止发起单篇写入。Rust session 同步检查忙碌状态，拒绝已排队的重复事件；成功或失败均恢复操作，其他行在单篇写入期间仍可使用。
+- 已接受的单篇／批量文章写入由 App 持有，切页不取消。回执只更新发起操作的页面；该页已卸载时由全局提示报告结果，并重新读取当前页面。结果未知不自动重试。写入后的补充查询仍属于原页面，离页即取消；关闭整个 App 结束客户端等待。
 - `group-by-source` / `group-by-time` 是单选按钮组；状态筛选四个 icon button 以 `aria-pressed` 表达选择，再次点击取消该条件。
 - 工作区偏好任务执行前先核对页面当前选择，丢弃已经过时的捕获值；比较与写入在共享 `EntriesWorkspaceService` 中串行完成。快速开启再关闭筛选、切换分组时，后一请求须等前一次保存结束后再判断是否有变化；前一次保存失败也释放等待，避免“恢复全部”被误判为无需保存。
+- 偏好保存与来源 URL 编辑共享 App 内的写入顺序；新文章页的初始读取／重新读取先等待此前写入完成，再读取偏好基线，避免将编辑前的来源地址再次保存。读取期间不占用写入锁，已有请求代次机制仍负责丢弃迟到结果。
 - 来源分组按 `feed_id` 区分身份，自定义名称仅用于显示。目录来源锚点、列表分组标识不依赖名称，同名来源和名称含不同标点的来源不会被合并或产生锚点冲突。目录继续使用完整查询结果的分组投影；全选仍只作用于当前页。
 - `open-source-filter` / `apply-source-filter`：取消、Esc、点外侧只关闭草稿；应用后清空文章选择，空来源集合不允许提交。页面里的“全部”偏好仍用空 URL 列表表达。
 - 来源弹窗的全选框同时提供未选／部分／全选状态；Rust 计算 `aria-checked`，DOM 仅同步原生复选框的 `indeterminate` 属性。部分选中时点击或空格选中全部，再次操作取消全部。
@@ -105,7 +109,7 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 - `open-directory` / `close-directory`：目录可以收起，≤1000px 默认收起为入口。目录浏览和同页定位保留选择；换页、筛选、搜索或切换视图清空选择。原有目录 Rust 状态与分组 memo 分离，选择不重建分组树。
 - 目录隐藏时卸载导航树，关闭的来源／月份只保留父级控制；完整目录投影、当前路径与手动展开状态仍由 Rust 保存。重新显示时，手动浏览恢复原目录滚动位置，跟随模式对齐当前位置。DOM adapter 只测量实际可见性与滚动位置，沿用 epoch／revision 提交确认后执行恢复；隐藏状态的尺寸变化不能清除手动浏览位置。目录显隐与展开不派发文章查询、不改变勾选。
 - 大文章分支按视口挂载可变高度行，完整目录引用仍保留；未挂载文章的定位、目标页和键盘访问均使用原身份。窗口移动不更改展开/跟随或勾选规则，焦点行保持稳定；隐藏后恢复手动目录位置。实现边界与测量限制见 `native-ui-preparation.md`。
-- `edit-feed` / `save-feed-edit` 仅在 Subscribe；`FeedsCommand` 经 runtime 调用 `FeedService`，Rust 管理加载、草稿、校验和忙碌状态。native dialog 只负责焦点／模态，DOM 测量负责定位。
+- `edit-feed` / `save-feed-edit` 仅在 Subscribe；`FeedsCommand` 经 runtime 调用 `Backend` / `FeedEditService`，Rust 管理加载、草稿、校验和忙碌状态。native dialog 只负责焦点／模态，DOM 测量负责定位。
 - 来源编辑的异步结果由 `feed_id + edit_generation` 校验，关闭后重新打开同一来源也不会接纳上次访问的迟到结果。打开编辑取消旧的删除／覆盖导入确认；加载中可以关闭，保存中阻止重复提交以及关闭按钮／Esc／Android 返回的弹窗关闭操作。
 - 编辑身份、草稿和 gate 由页面内 `FeedEditState` 统一管理，原来的状态与校验语义不变。原生 dialog 的 `cancel` 与键盘 Esc 都经 Rust 关闭入口，覆盖保存按钮禁用后焦点移到 body 的情形，避免仅关闭原生弹窗而保存仍在进行。
 - 来源筛选和来源编辑中，输入法组词期间的 Esc 不关闭弹窗、不丢弃草稿；同时阻止 native dialog 的默认关闭，避免 Rust 状态仍打开而原生弹窗已关闭。组词结束后的 Esc 沿用取消逻辑，名称／URL 与来源勾选草稿都不自动保存。
@@ -114,9 +118,9 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 Android 外壳通过 `OnBackPressedDispatcher` 将系统返回经 JNI 放入有界输入队列，Rust 页面在自身 UI 任务中执行上述 dismiss / history / fallback 规则。页面卸载仅注销自己的监听代次，不能清掉新页面的监听；积压的重复输入合并。返回前捕获的忙碌标记使用跨线程共享的原子状态，因为 WebView 点击回调与 Dioxus 异步任务可能在不同线程执行；完成、超时或取消都释放标记，不能让下一次返回永久失效。WebView 不消费片段历史，Java 线程不读写 Dioxus 状态。根页无可返回目标时只把任务移入后台，不通过销毁 Activity 模拟返回。
 - `stats-grid` 中 `data-stat=feeds|entries|unread|archived` 是全局统计；归档计数为手动与自动归档的并集，不重复计数。
 
-SQLite migration `0008_reading_workspace.sql` 只增加 `entries.is_archived` 与 `feeds.custom_title`；BrowserStore 对相同字段使用 serde 默认值读取旧数据。批量写入走单条 SQL 或单个 FLAGS 提交。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖；导入不覆盖已有的远端原名，新导入来源在抓取前不伪造远端原名。重新导入后仍可用“使用原名”恢复已有远端名称。
+`library.sqlite3` 的增量迁移 `0002_manual_archive.sql` 增加 `entries.is_archived`；`custom_title` 使用 v0.2 基线既有字段。已发布基线与根目录 v0.1 历史迁移保持原样。原生、正式 Web 与 Pages 共用 SQL 事务；批量写入仅处理已验证的显式 ID，单次提交失败整批回滚。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖；导入不覆盖已有的远端原名，新导入来源在抓取前不伪造远端原名。重新导入后仍可用“使用原名”恢复已有远端名称。
 
-新增 host 路由 `entries/apply_batch`、`feeds/edit_details`、`feeds/update` 供同版本 Web server 使用。未拆 crate、未变更 Reader 布局或扩大配置同步范围。
+新增同版本 HTTP 路由 `POST /api/v1/entries/batch`、`GET /api/v1/feeds/{feed_id}`、`PATCH /api/v1/feeds/{feed_id}`，沿用认证、CSRF、build ID、请求体上限与统一错误处理。`LocalBackend` 和 `HttpBackend` 实现同一接口；未新增 crate 或扩大配置同步范围。
 
 ### 订阅相关
 
@@ -131,17 +135,19 @@ SQLite migration `0008_reading_workspace.sql` 只增加 `entries.is_archived` �
 
 Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以 disabled / `aria-busy` 提示；输入仍可编辑，成功仅清空未变化的已提交地址，失败释放 pending 并保留输入。`LoadSnapshot` 以页面内 query generation 丢弃旧查询的成功和错误，避免刷新、添加与删除交错时旧统计覆盖新结果。两者均属于共享 Rust 页面交互，不改变 application 用例或增加平台分支。
 
-单来源刷新在整批结果发布后捕获当前提示，普通提示约 3 秒、错误提示约 6 秒后清除；只有提示 revision 和正文都仍匹配时才生效，旧计时器不能清掉后来出现的删除确认。快照身份在命令构造前同步更新，过期结果整批丢弃，包括状态提示和重载请求；编辑及写入结果不受后来快照查询影响。查询与单来源刷新继续属于页面作用域，“刷新全部”继续属于 App 作用域。
+单来源刷新在整批结果发布后捕获当前提示，普通提示约 3 秒、错误或结果未知提示约 6 秒后清除；只有提示 revision 和正文都仍匹配时才生效，旧计时器不能清掉后来出现的删除确认。快照身份在命令构造前同步更新，过期结果整批丢弃，包括状态提示和重载请求；编辑及写入结果不受后来快照查询影响。快照查询属于页面作用域；单来源刷新、添加、配置导入、来源保存与“刷新全部”保持主线 App 作用域及离页回执。
 
 ### 阅读相关
 
 四个主要页面的主标题为 `h1`，应用自身的小节标题按层级递进；Reader 正文中的来源 HTML 保留内容标题语义，不作为应用导航层级改写。字号由稳定的 `data-slot` 样式控制。
 
-`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / 左右方向键说明和可见焦点。快捷键仍限定在阅读区，带修饰键或输入法组合中的事件放行。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
+`data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / J / K / 左右方向键说明和可见焦点。快捷键监听整个阅读页，不要求焦点在阅读区（`hooks/reader_shortcuts.js`）；输入框与可编辑区域内、带修饰键、输入法组合中、自动重复以及图片查看器打开时的事件放行。底栏固定在视口底部，渲染在阅读页之外，以免主题的 `backdrop-filter` 困住 fixed 定位。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
 
 动态操作结果使用持续挂载的 `StatusBanner` live region：`role="status"`、`aria-live="polite"`、`aria-atomic="true"`。空消息区域保留在可访问树中但不占布局空间；加载/成功/错误更新文本时不抢焦点。静态空列表或归档说明不参与播报。颜色状态继续使用 `data-state="info|success|error"`，不把错误色自动映射成打断式通知。
 
-Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region 呈现，正文不因成功提示重排；错误仍为可见状态条。上一 / 下一未读按钮及方向快捷键只选择未读目标，无目标时按钮禁用并提供 title 说明；同订阅文章导航沿用独立按钮，不作为未读操作的回退。
+Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region 呈现，正文不因成功提示重排；错误仍为可见状态条。标记命令携带目标值（`SetRead` / `SetStarred`），结果区分已改变、本来就是与文章不存在；文章不存在时以错误色调的可见状态条提示。上一 / 下一未读按钮及方向快捷键只选择未读目标，无目标时按钮禁用并提供 title 说明；同订阅文章导航沿用独立按钮，不作为未读操作的回退。
+
+用户触发的已读／收藏写入由 App 持有，返回列表不会取消。回执仍校验原来的 `entry_id + load_generation`；原访问结束后仅显示全局结果并触发当前页面重新读取，不把旧结果写入新访问。关闭 App 结束客户端等待，未知结果不自动重试。正文读取与自动图片本地化仍随阅读页结束。
 
 - 标记已读 / 未读
 - 切换收藏
@@ -168,17 +174,15 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 
 所有外观保存入口共用同步 pending gate。一次保存针对点击时的草稿快照；期间的新编辑继续留在草稿中，完成提示明确其尚未保存。失败不会恢复旧值覆盖草稿。该策略属于页面 session，不改变 settings application 用例。
 
-具体判定集中在 `settings_page/save_policy.rs`：保存完成仅在当前整份草稿仍等于提交快照时回填保存值，预设选择另行比较并保留后续选择；最后设置结果和最后消息分别生效。session 负责入口防重复、任务与发布顺序，规则不直接执行持久化。
+保存按主线 SettingsPatch 逐字段提交，只有编辑过的 CSS 参与界面语法校验；存储、已提交编辑和后来编辑按 stored → submitted → pending 投影。save_policy.rs 负责补丁准备及回执汇总，session 保留主线门禁、失败恢复和任务作用域。保存成功清除 submitted，后续 pending 继续保留；失败把 submitted 合并回 pending 下方。
 
-WebDAV 下载每次都需要再次确认；修改端点/路径或上传配置会取消已有确认。`settings_page/sync/state.rs` 同步准备命令并捕获提交时的目标，session 执行后按原顺序发布结果；后来改输入不改变已经发出的请求。端点仅在当前页面会话内保存，参数校验与网络访问仍由 host/infra 负责。
+初次加载和下载只更新 stored，不覆盖尚未保存的逐字段编辑。读取受最新代次与成功写入版本约束；写入期间的读取回执暂存，成功写入丢弃，失败且没有更新读取时再应用。跨刷新/登录的草稿恢复沿用主线。
 
-初次加载保留进入本页以来的编辑；下载保留确认发出请求后的编辑。草稿与预设分别按编辑代次判定，改回原值也不会恢复回填资格；未修改时正常接纳。全局已保存主题仍反映当前接纳的存储结果，保留的草稿与其不同时提示尚未保存。保存自身继续采用上述提交快照的值比较规则。
-
-实际保存与下载共用页面内写入 gate；忙碌时保留草稿并要求明确重试，不构造第二个写入命令或自动排队。被阻止的下载须重新确认。任何已准入写入都会使旧初次加载的成功和错误失效；确认下载也使此前的主题文件读取失效。404 或失败释放 gate，不回滚已发生的底层写入。这不是跨页面或跨进程的事务约束。
+保存与实际下载共用同步 gate；下载确认及目标捕获保持主线规则，保存中被拒绝的下载保留确认。上传和下载属于 App，离页仍完成回执并触发重新读取，更新实际存储主题。数值解析提示按字段投影代次退休，未被存储结果供应的编辑字段保留提示。
 
 主题文件导入先检查 UTF-8，再校验 CSS 并进入公共保存入口；读取失败、编码错误和无效 CSS 不覆盖草稿，保存失败则保留导入草稿供重试。导出使用点击时输入框中的内容，不提交设置。Web 取消选择保持现有提示，桌面取消显示取消提示；离页取消页面等待，Web 同时中止未完成的文件读取。系统选择器的结束与已发生的写入仍由宿主负责。
 
-主题导入在打开选择器时取得页面身份；后来的导入、设置草稿编辑、预设选择、应用/清空或显式保存会使旧读取失效，取消新选择器也不会恢复旧请求。失效结果不改草稿、不提交设置、不覆盖提示。加载/保存回填实际改变草稿或预设时也会使旧导入失效，完全相同的回填和单纯状态提示不会。已开始的保存仍按公共 pending gate 完成；期间导入的新草稿保留，需再次明确保存。
+主题导入在打开选择器时取得页面身份；后来的导入、设置草稿编辑、预设选择、应用/清空或显式保存会使旧读取失效，取消新选择器也不会恢复旧请求。失效结果不改草稿、不提交设置、不覆盖提示。加载/保存回填实际改变 CSS 时也会使旧导入失效，完全相同的回填和单纯状态提示不会。已开始的保存仍按公共 pending gate 完成；期间导入的新草稿保留，需再次明确保存。
 
 ### 配置交换相关
 
@@ -199,16 +203,19 @@ WebDAV 下载每次都需要再次确认；修改端点/路径或上传配置会
 
 - `rssr-cli list-feeds`
 - `rssr-cli add-feed <url>`
-- `rssr-cli remove-feed <feed-id>`
+- `rssr-cli remove-feed <feed-id> [--keep-entries]`
 - `rssr-cli refresh --all`
 - `rssr-cli refresh --feed-id <id>`
 
 `refresh` 必须且只能指定其中一个目标；参数无效时在打开本地数据库前退出。
 
+`remove-feed` 默认连同该订阅的文章一起删除；`--keep-entries` 只删订阅、保留已抓取的文章。
+
 ### 配置交换相关
 
 - `rssr-cli export-config [--output <path>]`
-- `rssr-cli import-config <file>`
+- 文章页的来源筛选：没有所选来源表示全部订阅；所选来源都已删除时结果为空并提示，批量已读不会扩大到全部订阅。按订阅打开文章页时单独记住“上次打开的订阅”。
+- `rssr-cli import-config <file>`（读取当前配置指纹后立即替换；界面的导入则携带订阅页快照的指纹，配置在载入后被改过时拒绝并重新载入）
 - `rssr-cli export-opml [--output <path>]`
 - `rssr-cli import-opml <file>`
 - `rssr-cli push-webdav <endpoint> <remote-path>`
@@ -228,7 +235,7 @@ WebDAV 下载每次都需要再次确认；修改端点/路径或上传配置会
 - `rssr-cli mark-read --all [筛选参数]` 或 `--feed-id <id>`（可重复）；默认只预览，加 `--yes` 执行。
 - 筛选参数为 `--search`、`--read-filter all|unread|read`、`--starred-filter all|starred|unstarred`、`--archive-filter active|all|archived`。
 - `add-feed <url>` 同样接受网站首页；多个候选列出 URL 后非零退出。`--skip-refresh` 仍验证订阅，只跳过文章入库。
-- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。
+- `save-settings` 的参数以 `--help` 为准；当前 CLI 没有设置文章每页数量的参数。只提交给出的参数（设置补丁），未给出的字段保持资料库中的值；合并、校验与保存在同一次写入中完成。自定义 CSS 的三个参数同时给出时，文件优先于 `--custom-css`，再优先于 `--clear-custom-css`。
 - 当前参数定义与执行入口均在 `crates/rssr-cli/src/main.rs`，不存在独立 `args.rs`。
 
 ## 页面级接口
@@ -550,12 +557,4 @@ CLI 保留按筛选全范围的预览／确认用例，存储锁或事务内重�
 
 ## 刷新实际新增计数
 
-RefreshStorePort.commit 返回 RefreshCommitOutcome.inserted_count；Updated.entry_count 保留解析条目数语义，新增 inserted_count 由存储实际插入结果提供，RefreshAllSummary 累加成功 Updated。批次 commit 的计数只有 end_batch 成功后才可发布；结束落盘失败沿用原逻辑把结果改为失败。SQLite索引/正文分库的既有部分失败边界不变。
-
-Web adapter 的每个 `commit` 在返回前完成持久化，批次 hooks 与 SQLite 一样为空操作；不再以共享的未提交内存状态延迟整轮写回。刷新只保存 core，以及存在正文更新时的 content；标记只保存 flags。一个订阅的索引与正文通过一次提交记录发布，写入失败不会计入成功新增数，已有成功订阅不回滚。
-
-所有 Web repository 通过 `BrowserStore` 协调同源标签页：Web Lock 内读取最新版本、应用操作、暂存变化片段，最后发布 `rssr-web-commit-v1`。每片使用固定两个槽位，版本未变化时复用内存，正常标记操作不重新解析或序列化正文。锁只覆盖本地事务，不覆盖 HTTP；排队超过 5 秒报错，调用者取消后不会补写排队操作。锁内序列化是保持读取版本到提交之间互斥的必要边界，不能套用旧的“锁外写盘”建议拆开事务。
-
-该协议属于 browser adapter，不改变 application/domain trait、命令、SQLite schema 或 `data-*` 接口。现有四片 JSON 的内容结构不变，但活跃存储键由提交记录的版本确定；外部工具不能再假定原键总是最新。初次打开验证并接入旧数据，损坏或不可访问时保留原值并报错。升级需重新加载旧标签页；当前没有跨标签主动重载 UI 的事件通道。
-
-host 的 RefreshAllExecutionOutcome 透传 inserted_count / total_count / failed_count，RefreshFeedExecutionOutcome 透传 inserted_count。shell区分成功、部分失败、全失败。成功3秒、错误6秒；单订阅页反馈通过 revision 与消息匹配避免旧定时器清除新结果。自动刷新静默、阅读页图标规则、RefreshFlight、批次收尾及稳定 data-* 接口均不变。
+`RefreshStorePort.commit` 返回实际新增计数。刷新响应的校验、文章索引、正文和抓取诊断在共用 SQL 事务中提交；失败回滚，迟到响应按 generation 和刷新票据拒绝。正式 Web 使用服务器资料库，Pages 使用同一 SQL 的私有内存库；浏览器不保存文章分片或跨标签页提交记录。网络请求不占用数据库事务。当前边界以 `v0.2-architecture.md` 与 `crates/rssr-infra/src/store/AGENTS.md` 为准。

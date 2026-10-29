@@ -65,7 +65,7 @@ async function eventually(read, expected, label) {
       `$owner = (Get-NetTCPConnection -LocalPort ${Number(cdp.port)} -State Listen | Select-Object -First 1).OwningProcess; $chain = @(); for ($i = 0; $i -lt 12 -and $owner; $i++) { $p = Get-CimInstance Win32_Process -Filter "ProcessId = $owner"; if (!$p) { break }; $chain += [int]$p.ProcessId; $owner = $p.ParentProcessId }; ConvertTo-Json -InputObject $chain -Compress`
     ], { encoding: 'utf8', windowsHide: true }).trim());
     assert.ok(ancestry.includes(identity.pid), 'CDP owner descends from the isolated app');
-    const databasePath = await fs.realpath(path.join(run, 'RSS-Reader/rss-reader.db'));
+    const databasePath = await fs.realpath(path.join(run, 'RSS-Reader/library.sqlite3'));
     assert.ok(databasePath.toLowerCase().startsWith(run.toLowerCase() + path.sep), 'copied database');
     Object.assign(report, {
       identity,

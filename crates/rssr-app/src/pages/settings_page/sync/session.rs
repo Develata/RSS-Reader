@@ -1,26 +1,30 @@
-use dioxus::prelude::*;
 use std::future::Future;
 
-use super::state::SettingsPageSyncState;
-use crate::ui::{
-    SettingsCommand, UiCommand, UiIntent, execute_ui_command, spawn_projected_ui_command,
-};
-use crate::{
-    pages::settings_page::{
-        intent::SettingsPageIntent, request_lifecycle::SettingsWrite, session::SettingsPageSession,
-    },
-    status::set_status_info,
-};
+use dioxus::prelude::*;
 
+use super::state::SettingsPageSyncState;
+use crate::pages::settings_page::intent::SettingsPageIntent;
+use crate::ui::{AppShellState, SettingsCommand, UiCommand, UiIntent, run_ui_command};
+use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
+
+/// WebDAV upload and download: jobs of the app (C4b item 3). They run in the shell's task, so
+/// leaving the page does not stop the wait; their results reach this page instance only, while it
+/// is open, else the shell shows them; the settings a download stored apply either way, and its
+/// end re-reads every page.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSyncSession {
     state: Signal<SettingsPageSyncState>,
     page: SettingsPageSession,
+    shell: AppShellState,
 }
 
 impl SettingsPageSyncSession {
-    pub(crate) fn new(state: Signal<SettingsPageSyncState>, page: SettingsPageSession) -> Self {
-        Self { state, page }
+    pub(crate) fn new(
+        state: Signal<SettingsPageSyncState>,
+        page: SettingsPageSession,
+        shell: AppShellState,
+    ) -> Self {
+        Self { state, page, shell }
     }
 
     pub(crate) fn snapshot(self) -> SettingsPageSyncState {
@@ -35,224 +39,223 @@ impl SettingsPageSyncSession {
         self.state.with_mut(|state| state.set_remote_path(remote_path));
     }
 
-    pub(crate) fn push(mut self) {
-        let command = self.state.with_mut(SettingsPageSyncState::prepare_push);
-        spawn_projected_ui_command(
-            UiCommand::Settings(command),
-            UiIntent::into_settings_page_intent,
-            move |intent| {
-                if let SettingsPageIntent::SetStatus { message, tone } = intent {
-                    self.page.set_status(message, tone);
-                }
-            },
-        );
+    pub(crate) fn push(self) {
+        self.push_with(run_ui_command);
+    }
+
+    pub(super) fn push_with<F: Future<Output = Vec<UiIntent>> + 'static>(
+        mut self,
+        execute: impl FnOnce(UiCommand) -> F,
+    ) {
+        let snapshot = self.snapshot();
+        self.state.with_mut(|state| state.clear_pending_remote_pull());
+        let pushing = execute(UiCommand::Settings(SettingsCommand::PushConfig {
+            endpoint: snapshot.endpoint,
+            remote_path: snapshot.remote_path,
+        }));
+        self.shell.spawn_in_shell(async move {
+            let intents = pushing.await;
+            self.finish(intents, false);
+        });
     }
 
     pub(crate) fn pull(self) {
-        self.pull_with(|command| execute_ui_command(UiCommand::Settings(command)));
+        self.pull_with(run_ui_command);
     }
 
-    fn pull_with<F: Future<Output = Vec<UiIntent>> + 'static>(
+    pub(super) fn pull_with<F: Future<Output = Vec<UiIntent>> + 'static>(
         mut self,
-        execute: impl FnOnce(SettingsCommand) -> F,
+        execute: impl FnOnce(UiCommand) -> F,
     ) {
-        if self.page.reject_pending_write() {
-            // A blocked destructive action must require fresh confirmation on retry.
-            self.state.with_mut(|state| state.pending_remote_pull = false);
-            return;
-        }
-        let command = self.state.with_mut(SettingsPageSyncState::prepare_pull);
-        let Some(command) = command else {
+        let confirmation_required = {
+            let mut confirmation_required = false;
+            self.state.with_mut(|state| {
+                confirmation_required = state.request_remote_pull_confirmation();
+            });
+            confirmation_required
+        };
+
+        if confirmation_required {
             set_status_info(
                 self.page.status_signal(),
                 self.page.status_tone_signal(),
                 "从 WebDAV 下载配置会覆盖当前订阅集合，并清理缺失订阅的本地文章；再次点击才会执行。",
             );
             return;
-        };
-        let Some(request) = self.page.begin_write(SettingsWrite::Download) else {
+        }
+
+        // A pull replaces the stored settings: it waits for a save in flight, like a save waits
+        // for it (the confirmation stays, so the next click pulls).
+        if !self.page.begin_write() {
+            set_status_info(
+                self.page.status_signal(),
+                self.page.status_tone_signal(),
+                "设置仍在保存，完成后再从 WebDAV 下载配置。",
+            );
             return;
-        };
+        }
         self.page.invalidate_theme_import();
-        let downloading = execute(command);
-        spawn(async move {
-            let intents = downloading.await;
-            if self.page.complete_write(request) {
-                self.page.apply_load_result(intents, request.editing);
-            }
+        let snapshot = self.snapshot();
+        self.state.with_mut(|state| state.clear_pending_remote_pull());
+        let pulling = execute(UiCommand::Settings(SettingsCommand::PullConfig {
+            endpoint: snapshot.endpoint,
+            remote_path: snapshot.remote_path,
+        }));
+        self.shell.spawn_in_shell(async move {
+            let intents = pulling.await;
+            self.finish(intents, true);
         });
+    }
+
+    /// A job's end: the page re-reads; the results go to this page instance while it is open,
+    /// else the settings a download stored still apply and the shell shows the status.
+    fn finish(self, intents: Vec<UiIntent>, pull: bool) {
+        self.shell.reread_now();
+        let intents = intents.into_iter().filter_map(UiIntent::into_settings_page_intent);
+        if self.page.is_open() {
+            for intent in intents {
+                self.page.dispatch(intent);
+            }
+            if pull {
+                self.page.end_write();
+            }
+            return;
+        }
+        let mut notice = None;
+        for intent in intents {
+            match intent {
+                SettingsPageIntent::SettingsLoaded(settings) => self.page.store_theme(settings),
+                SettingsPageIntent::SetStatus { message, tone } => notice = Some((message, tone)),
+                SettingsPageIntent::Failed(failure) => {
+                    notice = Some((failure.message(), failure.tone().to_string()))
+                }
+            }
+        }
+        if let Some((message, tone)) = notice {
+            self.shell.report_job(message, tone);
+        }
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
-    use super::*;
-    use crate::theme::ThemeController;
-    use rssr_domain::UserSettings;
+    use dioxus::core::current_scope_id;
+    use rssr_domain::{ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
-    fn harness() -> Element {
-        let theme = ThemeController { settings: use_signal(UserSettings::default) };
+    use super::*;
+    use crate::theme::{ThemeController, use_theme_controller};
+    use crate::ui::use_app_shell_state;
+
+    #[derive(Clone, Copy)]
+    struct Probe {
+        show_page: Signal<bool>,
+        page: Signal<Option<(SettingsPageSyncSession, ScopeId)>>,
+    }
+
+    fn app() -> Element {
+        let shell = use_app_shell_state();
+        let theme = use_theme_controller();
+        let show_page = use_signal(|| true);
+        let page = use_signal(|| None);
+        use_context_provider(|| shell);
+        use_context_provider(|| theme);
+        use_context_provider(|| Probe { show_page, page });
+        rsx! {
+            if show_page() {
+                SyncProbe {}
+            }
+        }
+    }
+
+    #[component]
+    fn SyncProbe() -> Element {
+        let theme = use_context::<ThemeController>();
+        let shell = use_context::<AppShellState>();
+        let mut probe = use_context::<Probe>();
         let page = SettingsPageSession::new(theme);
         let state = use_signal(SettingsPageSyncState::new);
-        use_context_provider(|| SettingsPageSyncSession::new(state, page));
-        use_context_provider(|| theme);
+        use_hook(|| {
+            let session = SettingsPageSyncSession::new(state, page, shell);
+            probe.page.set(Some((session, current_scope_id())));
+        });
         rsx! {}
     }
 
-    fn setup() -> (VirtualDom, SettingsPageSyncSession, ThemeController) {
-        let mut dom = VirtualDom::new(harness);
-        dom.rebuild_in_place();
-        let (session, theme) =
-            dom.in_scope(ScopeId::APP, || (consume_context(), consume_context()));
-        (dom, session, theme)
-    }
-
-    fn no_command(_: SettingsCommand) -> std::future::Ready<Vec<UiIntent>> {
-        panic!("confirmation or busy rejection must not construct a command")
-    }
-
-    fn start_pull(session: SettingsPageSyncSession) -> oneshot::Sender<Vec<UiIntent>> {
-        let (sender, receiver) = oneshot::channel();
-        session.pull_with(no_command);
-        session.pull_with(|command| {
-            assert!(matches!(command, SettingsCommand::PullConfig { .. }));
-            assert_eq!(session.page.pending_write(), Some(SettingsWrite::Download));
-            assert!(!session.snapshot().pending_remote_pull);
-            async move { receiver.await.unwrap() }
-        });
-        sender
-    }
-
-    fn imported() -> Vec<UiIntent> {
+    fn pulled(theme: ThemeMode) -> Vec<UiIntent> {
         vec![
             UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(UserSettings {
-                custom_css: "/* downloaded */".into(),
-                ..Default::default()
+                theme,
+                ..UserSettings::default()
             })),
-            UiIntent::SetStatus { message: "downloaded".into(), tone: "info".into() },
+            UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
+                message: "已从 WebDAV 下载并导入配置。".into(),
+                tone: "info".into(),
+            }),
         ]
     }
 
-    #[test]
-    fn confirmed_download_replaces_existing_draft_but_keeps_later_edits_and_preset_events() {
-        for later_edit in [false, true] {
-            let (mut dom, session, theme) = setup();
-            let sender = dom.in_scope(ScopeId::APP, || {
-                session.page.update_draft(|draft| draft.custom_css = "/* existing */".into());
-                let sender = start_pull(session);
-                if later_edit {
-                    session.page.update_draft(|draft| draft.custom_css = "/* temporary */".into());
-                    session.page.update_draft(|draft| draft.custom_css = "/* existing */".into());
-                }
-                session.page.set_preset_choice("newsprint");
-                session.page.set_preset_choice("none");
-                sender
-            });
-            sender.send(imported()).unwrap();
-            dom.render_immediate_to_vec();
-            dom.in_scope(ScopeId::APP, || {
-                assert_eq!(
-                    session.page.draft().peek().custom_css,
-                    if later_edit { "/* existing */" } else { "/* downloaded */" }
-                );
-                assert_eq!(*session.page.preset_choice().peek(), "none");
-                assert_eq!(theme.settings.peek().custom_css, "/* downloaded */");
-                assert_eq!(session.page.status().contains("尚未保存"), later_edit);
-                assert_eq!(session.page.pending_write(), None);
-            });
-        }
+    /// Starts a confirmed download whose answer comes from `receiver`.
+    fn start_pull(sync: SettingsPageSyncSession, receiver: oneshot::Receiver<Vec<UiIntent>>) {
+        sync.pull_with(|_| -> std::future::Ready<Vec<UiIntent>> {
+            panic!("the first click asks to confirm")
+        });
+        sync.pull_with(move |command| {
+            assert!(matches!(command, UiCommand::Settings(SettingsCommand::PullConfig { .. })));
+            async move { receiver.await.expect("the download's answer") }
+        });
     }
 
-    #[test]
-    fn download_captures_confirmed_target_and_busy_clicks_cannot_queue_another_write() {
-        let (mut dom, session, _) = setup();
+    /// A download ending after the page was left still applies the settings it stored, shows its
+    /// result as the shell's notice and re-reads every page (C4b item 3).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_download_ending_after_the_page_was_left_still_applies() {
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        let (probe, shell, theme) = dom.in_scope(ScopeId::APP, || {
+            (consume_context::<Probe>(), consume_context::<AppShellState>(), consume_context())
+        });
+        let theme: ThemeController = theme;
+        let (sync, scope) = probe.page.peek().expect("settings page");
         let (sender, receiver) = oneshot::channel();
-        dom.in_scope(ScopeId::APP, || {
-            session.set_endpoint("https://dav.example/selected/".into());
-            session.set_remote_path("selected.json".into());
-            session.pull_with(no_command);
-            session.pull_with(|command| {
-                let SettingsCommand::PullConfig { endpoint, remote_path } = command else {
-                    panic!("pull")
-                };
-                assert_eq!(endpoint, "https://dav.example/selected/");
-                assert_eq!(remote_path, "selected.json");
-                async move { receiver.await.unwrap() }
-            });
-            session.set_endpoint("https://dav.example/later/".into());
-            session.pull_with(no_command);
-            session.pull_with(no_command);
-            assert!(!session.snapshot().pending_remote_pull);
-            assert!(session.page.status().starts_with("配置仍在下载"));
-        });
-        sender.send(imported()).unwrap();
+        dom.in_scope(scope, || start_pull(sync, receiver));
+        dom.render_immediate_to_vec();
+
+        let mut show_page = probe.show_page;
+        dom.in_scope(ScopeId::APP, || show_page.set(false));
+        dom.render_immediate_to_vec();
+        assert!(!sync.page.is_open());
+
+        sender.send(pulled(ThemeMode::Dark)).expect("answer");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(session.snapshot().endpoint, "https://dav.example/later/");
-            assert_eq!(session.page.pending_write(), None);
-            session.pull_with(no_command);
-            assert!(session.snapshot().pending_remote_pull, "retry needs a new confirmation");
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            let notice = shell.job_notice().map(|notice| (notice.message, notice.tone));
+            assert_eq!(notice, Some(("已从 WebDAV 下载并导入配置。".into(), "info".into())));
+            assert_eq!(shell.library_revision(), 1);
         });
     }
 
+    /// With the page open, the download's results are the page's: its stored settings, its
+    /// status, and the write it held ends (the next one may start).
     #[test]
-    fn pending_save_rejects_download_and_consumes_old_confirmation() {
-        let (dom, session, _) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            session.pull_with(no_command);
-            let save = session.page.begin_write(SettingsWrite::Save).unwrap();
-            session.pull_with(no_command);
-            assert!(!session.snapshot().pending_remote_pull);
-            assert!(session.page.status().starts_with("上一份设置仍在保存"));
-            assert!(session.page.complete_write(save));
-            session.pull_with(no_command);
-            assert!(session.snapshot().pending_remote_pull);
+    fn a_download_ending_on_its_page_is_the_pages() {
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        let (probe, shell) = dom.in_scope(ScopeId::APP, || {
+            (consume_context::<Probe>(), consume_context::<AppShellState>())
         });
-    }
-
-    #[test]
-    fn confirmed_download_supersedes_old_file_reads_but_allows_a_later_picker() {
-        let (dom, session, _) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            let old_file = session.page.begin_theme_import();
-            let _sender = start_pull(session);
-            assert!(!session.page.complete_theme_import(old_file));
-            let later_file = session.page.begin_theme_import();
-            assert!(session.page.is_theme_import_current(later_file));
-        });
-    }
-
-    #[test]
-    fn missing_failed_and_empty_download_results_release_the_gate_without_replacing_drafts() {
-        for result in [
-            vec![],
-            vec![UiIntent::SetStatus { message: "not found".into(), tone: "info".into() }],
-            vec![UiIntent::SetStatus { message: "download failed".into(), tone: "error".into() }],
-        ] {
-            let (mut dom, session, theme) = setup();
-            let sender = dom.in_scope(ScopeId::APP, || {
-                let sender = start_pull(session);
-                session.page.update_draft(|draft| draft.custom_css = "/* later */".into());
-                sender
-            });
-            sender.send(result).unwrap();
-            dom.render_immediate_to_vec();
-            dom.in_scope(ScopeId::APP, || {
-                assert_eq!(session.page.draft().peek().custom_css, "/* later */");
-                assert_eq!(*theme.settings.peek(), UserSettings::default());
-                assert!(session.page.begin_write(SettingsWrite::Save).is_some());
-            });
-        }
-    }
-
-    #[test]
-    fn disposing_the_page_drops_its_pending_download_future() {
-        let (mut dom, session, _) = setup();
-        let sender = dom.in_scope(ScopeId::APP, || start_pull(session));
+        let (sync, scope) = probe.page.peek().expect("settings page");
+        let (sender, receiver) = oneshot::channel();
+        dom.in_scope(scope, || start_pull(sync, receiver));
         dom.render_immediate_to_vec();
-        assert!(!sender.is_closed());
-        drop(dom);
-        assert!(sender.is_closed());
+        sender.send(pulled(ThemeMode::Dark)).expect("answer");
+        dom.render_immediate_to_vec();
+        dom.in_scope(scope, || {
+            assert_eq!(sync.page.status(), "已从 WebDAV 下载并导入配置。");
+            assert_eq!(sync.page.draft().theme, ThemeMode::Dark);
+            assert!(sync.page.begin_write(), "the download's write ended");
+        });
+        dom.in_scope(ScopeId::APP, || assert_eq!(shell.job_notice(), None));
     }
 }

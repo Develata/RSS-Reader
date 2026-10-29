@@ -1,41 +1,78 @@
-//! 桌面与 Android 的宿主：在默认数据目录上打开 [`rssr_host::native::NativeHost`]，进程内共享一份。
 use std::sync::Arc;
 
-use anyhow::Context;
-use rssr_application::AppUseCases;
+use rssr_api::Backend;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::UserSettings;
-use rssr_host::{HostCapabilities, native::NativeHost};
-use rssr_infra::db::sqlite_native::NativeSqliteBackend;
+use rssr_infra::{
+    local_backend::{LocalBackend, NativeHost, native_local_backend},
+    store::{LibraryStore, local::open_local_library},
+};
 use tokio::sync::OnceCell;
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
+/// A failure to open the library, as a domain error first so its kind (busy, storage, …)
+/// survives into the backend error the UI shows (B2-D5).
+fn open_failure(error: rssr_infra::store::StoreError) -> anyhow::Error {
+    anyhow::Error::new(rssr_domain::DomainError::from(error)).context("打开本地资料库失败")
+}
+
+/// This process's backend: the use cases over the local library.
 pub struct AppServices {
-    host: Arc<NativeHost>,
+    backend: Arc<LocalBackend<NativeHost>>,
+    /// The library under the backend, closed as the desktop app exits.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
+    store: LibraryStore,
+}
+
+/// Closes this process's library, if it was opened, and waits for its connections to close (the
+/// last one checkpoints the log into the main file). The desktop app calls it as its event loop
+/// ends; the process exits right after, without dropping anything. Android has no such moment:
+/// the system ends the process.
+#[cfg(not(target_os = "android"))]
+pub fn close_local_library() {
+    if let Some(services) = APP_SERVICES.get()
+        && let Err(error) = services.store.close_blocking()
+    {
+        tracing::warn!(%error, "关闭资料库失败");
+    }
 }
 
 impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
             .get_or_try_init(|| async {
-                let backend = NativeSqliteBackend::from_default_location()
-                    .context("确定本地数据库位置失败")?;
-                Ok(Arc::new(Self { host: NativeHost::open(backend).await? }))
+                let opened = open_local_library().await.map_err(open_failure)?;
+                tracing::info!(library = %opened.path.display(), "本地资料库已打开");
+                if let Some(imported) = &opened.imported {
+                    tracing::info!(?imported, "已从 v0.1 数据导入资料库");
+                }
+                Ok(Self::over(opened.store))
             })
             .await
             .map(Arc::clone)
     }
 
-    pub fn default_settings() -> UserSettings {
-        UserSettings::default()
+    /// The services over an opened library; [`Self::shared`] builds the process-wide one over the
+    /// local library.
+    pub(crate) fn over(store: LibraryStore) -> Arc<Self> {
+        Arc::new(Self { backend: Arc::new(native_local_backend(store.clone())), store })
     }
 
-    pub(crate) fn use_cases(&self) -> AppUseCases {
-        self.host.use_cases()
+    pub(crate) fn backend(&self) -> Arc<dyn Backend> {
+        self.backend.clone()
     }
+}
 
-    pub(crate) fn host_capabilities(self: &Arc<Self>) -> HostCapabilities {
-        self.host.host_capabilities()
+#[cfg(test)]
+mod open_failure_tests {
+    use rssr_api::{BackendError, ErrorCode};
+    use rssr_infra::store::StoreError;
+
+    #[test]
+    fn opening_failures_keep_their_kind() {
+        let busy: BackendError = super::open_failure(StoreError::ConnectionTimeout).into();
+        assert_eq!(busy.code, ErrorCode::Unavailable);
+        let corrupt: BackendError = super::open_failure(StoreError::NotALibrary).into();
+        assert_eq!(corrupt.code, ErrorCode::Storage);
     }
 }

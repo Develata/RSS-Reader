@@ -1,0 +1,25 @@
+name: Setup WASM C toolchain
+description: Resolve the installed Clang and its matching LLVM archiver, then verify wasm32 support
+runs:
+  using: composite
+  steps:
+    - name: Verify the WASM compiler and archiver
+      shell: bash
+      run: |
+        # Ubuntu can install only llvm-ar-N, with no unversioned llvm-ar on PATH.
+        # Resolve Clang's symlink and use the archiver from the same installation.
+        compiler="$(readlink -f "$(command -v clang)")"
+        archiver="$(dirname "$compiler")/llvm-ar"
+        test -x "$compiler"
+        test -x "$archiver"
+        "$compiler" --version
+        "$archiver" --version
+        probe="$(mktemp -d "$RUNNER_TEMP/rssr-wasm-cc.XXXXXX")"
+        printf 'int rssr_wasm_probe(void) { return 42; }\n' > "$probe/probe.c"
+        "$compiler" --target=wasm32-unknown-unknown -c "$probe/probe.c" -o "$probe/probe.o"
+        "$archiver" rcs "$probe/libprobe.a" "$probe/probe.o"
+        "$archiver" t "$probe/libprobe.a"
+        {
+          echo "CC_wasm32_unknown_unknown=$compiler"
+          echo "AR_wasm32_unknown_unknown=$archiver"
+        } >> "$GITHUB_ENV"

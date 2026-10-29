@@ -1,4 +1,8 @@
-use std::sync::{Arc, atomic::AtomicBool};
+//! The Web page's backend, chosen once at start: the formal Web build talks to the server that
+//! served the page (`HttpBackend` over `/api/v1`, phase C, C4a); the Pages demo keeps its library
+//! in memory and runs the same SQL repositories in the page (`LocalBackend`).
+
+use std::sync::Arc;
 
 /// Register before Dioxus history so the old DOM still exists on browser back/forward.
 pub(crate) fn install_history_capture() {
@@ -11,291 +15,104 @@ pub(crate) fn install_history_capture() {
     }
 }
 
-#[path = "web/exchange.rs"]
-mod exchange;
-#[path = "web/refresh.rs"]
-mod refresh;
-
-use anyhow::Context;
-use rssr_application::{
-    AddSubscriptionInput, AddSubscriptionLifecycleInput, AppUseCases, ClockPort, RefreshAllInput,
-    RefreshAllOutcome, RefreshFeedOutcome, RefreshFeedResult, RemoteConfigPullOutcome,
-    RemoteConfigPushOutcome,
-};
+use rssr_api::Backend;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
-use rssr_domain::UserSettings;
-use rssr_infra::application_adapters::browser::{
-    adapters::BrowserRemoteConfigStore, now_utc, state::BrowserStore,
-};
-use rssr_infra::composition::compose_browser_use_cases;
-use time::OffsetDateTime;
 use tokio::sync::OnceCell;
-
-use self::{
-    exchange::{
-        pull_remote_config as pull_exchange_remote, push_remote_config as push_exchange_remote,
-    },
-    refresh::ensure_auto_refresh_started as start_auto_refresh,
-};
-use rssr_host::{
-    AddSubscriptionOutcome, AutoRefreshPort, HostCapabilities, ReaderAssetLocalizationOutcome,
-    ReaderAssetPort, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome, RefreshPort,
-    RemoteConfigPort,
-};
 
 static APP_SERVICES: OnceCell<Arc<AppServices>> = OnceCell::const_new();
 
+/// This page's backend.
 pub struct AppServices {
-    client: reqwest::Client,
-    use_cases: AppUseCases,
-    auto_refresh_started: AtomicBool,
-    refresh_flight: rssr_host::RefreshFlight,
-}
-
-#[derive(Clone)]
-struct AutoRefreshCapability {
-    host: Arc<AppServices>,
-}
-
-#[derive(Clone)]
-struct RefreshCapability {
-    host: Arc<AppServices>,
-}
-
-#[derive(Clone)]
-struct ReaderAssetCapability;
-
-#[derive(Clone)]
-struct RemoteConfigCapability {
-    host: Arc<AppServices>,
-}
-
-#[derive(Clone)]
-struct BrowserClock;
-
-impl ClockPort for BrowserClock {
-    fn now_utc(&self) -> OffsetDateTime {
-        now_utc()
-    }
+    backend: Arc<dyn Backend + Send + Sync>,
 }
 
 impl AppServices {
     pub async fn shared() -> anyhow::Result<Arc<Self>> {
         APP_SERVICES
-            .get_or_try_init(|| async {
-                #[cfg(feature = "pages-demo")]
-                let state =
-                    BrowserStore::open_with_initial_state(crate::demo::initial_state()?).await?;
-                #[cfg(not(feature = "pages-demo"))]
-                let state = BrowserStore::open().await?;
-                let client = reqwest::Client::new();
-                let use_cases =
-                    compose_browser_use_cases(state, client.clone(), Arc::new(BrowserClock));
-                Ok(Arc::new(Self {
-                    client,
-                    use_cases,
-                    auto_refresh_started: AtomicBool::new(false),
-                    refresh_flight: rssr_host::RefreshFlight::default(),
-                }))
-            })
+            .get_or_try_init(|| async { Ok(Arc::new(Self { backend: open_backend().await? })) })
             .await
             .map(Arc::clone)
     }
 
-    pub fn default_settings() -> UserSettings {
-        UserSettings::default()
-    }
-
-    pub(crate) fn use_cases(&self) -> AppUseCases {
-        self.use_cases.clone()
-    }
-
-    pub(crate) fn host_capabilities(self: &Arc<Self>) -> HostCapabilities {
-        HostCapabilities {
-            auto_refresh: Arc::new(AutoRefreshCapability { host: Arc::clone(self) }),
-            refresh: Arc::new(RefreshCapability { host: Arc::clone(self) }),
-            reader_assets: Arc::new(ReaderAssetCapability),
-            remote_config: Arc::new(RemoteConfigCapability { host: Arc::clone(self) }),
-        }
+    pub(crate) fn backend(&self) -> Arc<dyn Backend> {
+        self.backend.clone()
     }
 }
 
-impl AutoRefreshPort for AutoRefreshCapability {
-    fn ensure_started(&self) {
-        if !crate::demo::ENABLED {
-            start_auto_refresh(&self.host);
-        }
-    }
+/// The server that served this page, for pages of this build (`build.rs`).
+#[cfg(not(feature = "pages-demo"))]
+async fn open_backend() -> anyhow::Result<Arc<dyn Backend + Send + Sync>> {
+    use anyhow::Context;
+    use rssr_infra::http_backend::HttpBackend;
+
+    let origin = web_sys::window()
+        .context("没有浏览器窗口")?
+        .location()
+        .origin()
+        .map_err(|error| anyhow::anyhow!("无法读取页面地址：{error:?}"))?;
+    let base = url::Url::parse(&origin).context("页面地址无效")?;
+    Ok(Arc::new(HttpBackend::new(base, env!("RSSR_BUILD_ID"), reqwest::Client::new())))
 }
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl RefreshPort for RefreshCapability {
-    async fn add_subscription(
-        &self,
-        raw_url: &str,
-        fallback_site_url: Option<url::Url>,
-    ) -> anyhow::Result<AddSubscriptionOutcome> {
-        crate::demo::require_network()?;
-        let workflow = &self.host.use_cases.subscription_workflow;
-        let prepared = match workflow.prepare_subscription(raw_url).await? {
-            rssr_application::PrepareSubscriptionOutcome::Ready(prepared) => {
-                prepared.with_fallback_site_url(fallback_site_url)
-            }
-            rssr_application::PrepareSubscriptionOutcome::NeedsSelection {
-                page_url,
-                candidates,
-            } => {
-                return Ok(AddSubscriptionOutcome::NeedsSelection { page_url, candidates });
-            }
-        };
-        let outcome = workflow
-            .add_prepared_subscription(
-                AddSubscriptionLifecycleInput {
-                    subscription: AddSubscriptionInput {
-                        url: raw_url.to_string(),
-                        title: None,
-                        folder: None,
-                    },
-                    refresh_after_add: true,
-                },
-                prepared,
-            )
-            .await
-            .context("保存订阅失败")?;
-        let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
-        let outcome = self.handle_refresh_feed_outcome(refresh);
-        match outcome.failure_message {
-            Some(message) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { message }),
-            None => Ok(AddSubscriptionOutcome::SavedAndRefreshed),
-        }
-    }
-
-    async fn refresh_all(&self) -> anyhow::Result<RefreshAllExecutionOutcome> {
-        crate::demo::require_network()?;
-        self.host
-            .refresh_flight
-            .run(async {
-                let outcome = self
-                    .host
-                    .use_cases
-                    .refresh_service
-                    .refresh_all(RefreshAllInput::default())
-                    .await?;
-                self.handle_refresh_all_outcome(outcome)
-            })
-            .await
-    }
-
-    async fn refresh_feed(&self, feed_id: i64) -> anyhow::Result<RefreshFeedExecutionOutcome> {
-        crate::demo::require_network()?;
-        let outcome = self.host.use_cases.refresh_service.refresh_feed(feed_id).await?;
-        Ok(self.handle_refresh_feed_outcome(outcome))
-    }
+#[cfg(feature = "pages-demo")]
+async fn open_backend() -> anyhow::Result<Arc<dyn Backend + Send + Sync>> {
+    demo_host::open().await
 }
 
-impl RefreshCapability {
-    fn handle_refresh_all_outcome(
-        &self,
-        outcome: RefreshAllOutcome,
-    ) -> anyhow::Result<RefreshAllExecutionOutcome> {
-        let summary = outcome.summary();
-        let failure_lines = summary.joined_failure_lines();
+/// The Pages demo: the use cases over a private memory SQLite library, with no network and no periodic
+/// refresh.
+#[cfg(feature = "pages-demo")]
+mod demo_host {
+    use std::sync::Arc;
+    use std::time::Duration;
 
-        for feed in outcome.feeds {
-            match feed.result {
-                RefreshFeedResult::Updated { .. } => {
-                    tracing::debug!(feed_id = feed.feed_id, "刷新订阅成功");
-                }
-                RefreshFeedResult::NotModified => {
-                    tracing::debug!(feed_id = feed.feed_id, "订阅未变化");
-                }
-                RefreshFeedResult::Failed { message } => {
-                    tracing::warn!(feed_id = feed.feed_id, error = %message, "刷新订阅失败");
-                }
-            }
+    use rssr_api::Backend;
+    use rssr_application::{RefreshAllInput, RemoteConfigStore};
+    use rssr_infra::composition::compose_offline_library_use_cases;
+    use rssr_infra::local_backend::{LocalBackend, LocalHost, LocalTask};
+    use rssr_infra::platform_clock::now_utc;
+    use time::OffsetDateTime;
+
+    pub(super) async fn open() -> anyhow::Result<Arc<dyn Backend + Send + Sync>> {
+        let store = crate::demo::open_library().await?;
+        let composition = compose_offline_library_use_cases(store);
+        Ok(Arc::new(LocalBackend::new(composition.use_cases, WebHost)))
+    }
+
+    struct WebHost;
+
+    #[async_trait::async_trait(?Send)]
+    impl LocalHost for WebHost {
+        fn refresh_concurrency(&self) -> usize {
+            RefreshAllInput::default().max_concurrency
         }
 
-        Ok(RefreshAllExecutionOutcome {
-            failure_message: failure_lines,
-            inserted_count: summary.inserted_count,
-            total_count: summary.total_count,
-            failed_count: summary.failed_count,
-        })
-    }
-
-    fn handle_refresh_feed_outcome(
-        &self,
-        outcome: RefreshFeedOutcome,
-    ) -> RefreshFeedExecutionOutcome {
-        let inserted_count = outcome.inserted_count();
-        let failure_message = outcome.failure_line();
-        match outcome.result {
-            RefreshFeedResult::Updated { .. } | RefreshFeedResult::NotModified => {
-                RefreshFeedExecutionOutcome { inserted_count, failure_message: None }
-            }
-            RefreshFeedResult::Failed { message } => {
-                tracing::warn!(feed_id = outcome.feed_id, error = %message, "刷新订阅失败");
-                RefreshFeedExecutionOutcome {
-                    inserted_count,
-                    failure_message: Some(
-                        failure_message.unwrap_or_else(|| "刷新订阅失败".to_string()),
-                    ),
-                }
-            }
+        fn require_network(&self) -> anyhow::Result<()> {
+            crate::demo::require_network()
         }
-    }
-}
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl ReaderAssetPort for ReaderAssetCapability {
-    async fn localize_entry_assets(
-        &self,
-        _entry_id: i64,
-    ) -> anyhow::Result<ReaderAssetLocalizationOutcome> {
-        Ok(ReaderAssetLocalizationOutcome::default())
-    }
-}
+        fn runs_auto_refresh(&self) -> bool {
+            false
+        }
 
-#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
-#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
-impl RemoteConfigPort for RemoteConfigCapability {
-    async fn push(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<RemoteConfigPushOutcome> {
-        crate::demo::require_network()?;
-        push_exchange_remote(
-            &self.host.use_cases.import_export_service,
-            &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
-        )
-        .await
-    }
+        fn now_utc(&self) -> OffsetDateTime {
+            now_utc()
+        }
 
-    async fn pull(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> anyhow::Result<RemoteConfigPullOutcome> {
-        crate::demo::require_network()?;
-        pull_exchange_remote(
-            &self.host.use_cases.import_export_service,
-            &BrowserRemoteConfigStore::new(self.host.client.clone(), endpoint, remote_path),
-        )
-        .await
-    }
-}
+        fn spawn(&self, task: LocalTask) {
+            wasm_bindgen_futures::spawn_local(task);
+        }
 
-#[cfg(test)]
-mod tests {
-    use rssr_infra::application_adapters::browser::query::title_matches_search;
+        async fn sleep(&self, duration: Duration) {
+            gloo_timers::future::sleep(duration).await;
+        }
 
-    #[test]
-    fn web_title_search_is_case_insensitive() {
-        assert!(title_matches_search("Roche Scales NVIDIA AI Factories", "sca"));
-        assert!(title_matches_search("Roche Scales NVIDIA AI Factories", "SCA"));
-        assert!(!title_matches_search("Roche Scales NVIDIA AI Factories", "xyz"));
+        fn remote_config_store(
+            &self,
+            _endpoint: &str,
+            _remote_path: &str,
+        ) -> anyhow::Result<Box<dyn RemoteConfigStore>> {
+            Err(rssr_domain::DomainError::Network("静态演示已禁用远端配置同步。".into()).into())
+        }
     }
 }

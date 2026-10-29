@@ -46,7 +46,7 @@ function interceptDirectoryChannel() {
 }
 
 (async () => {
-  const browser = offline ? await chromium.launch({channel:'chrome',headless:true})
+  const browser = offline ? await chromium.launch({executablePath:process.env.CHROME_BIN,channel:process.env.CHROME_BIN?undefined:'chrome',headless:true})
     : await chromium.connectOverCDP(options['cdp-base']);
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light' });
   if (offline) await require('./directory_fixture.cjs').install(context,path.resolve(__dirname,'../..'));

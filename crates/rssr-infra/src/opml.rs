@@ -6,8 +6,13 @@ use quick_xml::{
     Reader, Writer,
     events::{BytesDecl, BytesEnd, BytesStart, Event},
 };
-use rssr_domain::ConfigFeed;
+use rssr_domain::{ConfigFeed, OpmlFeed};
 
+/// OPML 编解码，原生与 Web 共用（Web 端原先有一份更宽松的副本，审计 D5）。
+///
+/// 订阅名称按 OPML 2.0：`text` 是显示的名称，`title` 来自订阅源。导出时 `text` 写显示名称
+/// （没有名称时写空串），`title` 只写已知的源标题；导入时名称取 `text`，空白时退回 `title`
+/// （审计 B6）。不拿名称与订阅地址比较来猜名称的来源。
 #[derive(Debug, Clone, Default)]
 pub struct OpmlCodec;
 
@@ -16,17 +21,19 @@ impl OpmlCodec {
         Self
     }
 
-    pub fn encode(&self, feeds: &[ConfigFeed]) -> Result<String> {
+    pub fn encode(&self, feeds: &[OpmlFeed]) -> Result<String> {
         let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
 
         let mut opml = BytesStart::new("opml");
         opml.push_attribute(("version", "2.0"));
         writer.write_event(Event::Start(opml))?;
+        // OPML 2.0 的骨架是一个 <head> 加一个 <body>；头部信息都是可选的。
+        writer.write_event(Event::Empty(BytesStart::new("head")))?;
 
         writer.write_event(Event::Start(BytesStart::new("body")))?;
 
-        let mut grouped: BTreeMap<Option<String>, Vec<&ConfigFeed>> = BTreeMap::new();
+        let mut grouped: BTreeMap<Option<String>, Vec<&OpmlFeed>> = BTreeMap::new();
         for feed in feeds {
             grouped.entry(feed.folder.clone()).or_default().push(feed);
         }
@@ -34,8 +41,8 @@ impl OpmlCodec {
         for (folder, group_feeds) in grouped {
             if let Some(folder) = folder.as_deref() {
                 let mut outline = BytesStart::new("outline");
-                outline.push_attribute(("text", folder));
-                outline.push_attribute(("title", folder));
+                push_attribute(&mut outline, "text", folder);
+                push_attribute(&mut outline, "title", folder);
                 writer.write_event(Event::Start(outline))?;
 
                 for feed in group_feeds {
@@ -106,6 +113,7 @@ impl OpmlCodec {
             match event {
                 Event::Start(event) => {
                     let name = event.name().as_ref().to_vec();
+                    check_attributes(&event)?;
                     if element_stack.is_empty() {
                         ensure!(!saw_opml && name == b"opml", "OPML 必须只有一个 <opml> 根元素");
                         validate_opml_root(&event, reader.decoder())?;
@@ -119,17 +127,14 @@ impl OpmlCodec {
                         body_depth = Some(element_stack.len() + 1);
                     }
 
+                    ensure_outline_in_body(&name, &element_stack, body_depth)?;
                     if name == b"outline" && body_depth.is_some() {
                         let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
-                        if let Some(url) = outline.xml_url {
-                            feeds.push(ConfigFeed {
-                                url,
-                                title: outline.title.or(outline.text),
-                                folder: current_folder(&folder_stack),
-                            });
+                        if let Some(feed) = outline.feed(&folder_stack) {
+                            feeds.push(feed);
                             outline_depths.push(false);
                         } else {
-                            folder_stack.push(outline.title.or(outline.text));
+                            folder_stack.push(outline.name());
                             outline_depths.push(true);
                         }
                     }
@@ -137,6 +142,8 @@ impl OpmlCodec {
                 }
                 Event::Empty(event) => {
                     let name = event.name().as_ref().to_vec();
+                    check_attributes(&event)?;
+                    ensure_outline_in_body(&name, &element_stack, body_depth)?;
                     if element_stack.is_empty() {
                         ensure!(!saw_opml && name == b"opml", "OPML 必须只有一个 <opml> 根元素");
                         validate_opml_root(&event, reader.decoder())?;
@@ -150,12 +157,8 @@ impl OpmlCodec {
                         saw_body = true;
                     } else if name == b"outline" && body_depth.is_some() {
                         let outline = OutlineAttrs::from_event(&event, reader.decoder())?;
-                        if let Some(url) = outline.xml_url {
-                            feeds.push(ConfigFeed {
-                                url,
-                                title: outline.title.or(outline.text),
-                                folder: current_folder(&folder_stack),
-                            });
+                        if let Some(feed) = outline.feed(&folder_stack) {
+                            feeds.push(feed);
                         }
                     }
                 }
@@ -195,7 +198,8 @@ fn validate_opml_root(event: &BytesStart<'_>, decoder: Decoder) -> Result<()> {
     for attribute in event.attributes() {
         let attribute = attribute?;
         if attribute.key.as_ref() == b"version" {
-            let version = attribute.decode_and_unescape_value(decoder)?;
+            let version = attribute
+                .decoded_and_normalized_value(quick_xml::XmlVersion::default(), decoder)?;
             if !matches!(version.as_ref(), "1.0" | "1.1" | "2.0") {
                 bail!("不支持的 OPML 版本：{version}");
             }
@@ -204,14 +208,76 @@ fn validate_opml_root(event: &BytesStart<'_>, decoder: Decoder) -> Result<()> {
     Ok(())
 }
 
-fn write_feed_outline(writer: &mut Writer<Vec<u8>>, feed: &ConfigFeed) -> Result<()> {
-    let title = feed.title.as_deref().unwrap_or(&feed.url);
+fn write_feed_outline(writer: &mut Writer<Vec<u8>>, feed: &OpmlFeed) -> Result<()> {
+    // OPML 2.0 要求每个 outline 都有 `text`。没有名称时写空串，而不是订阅地址：地址写进去，
+    // 导入方（包括本应用）只能把它当作名称。源标题未知时不写 `title`，不拿显示名称冒充。
     let mut outline = BytesStart::new("outline");
-    outline.push_attribute(("text", title));
-    outline.push_attribute(("title", title));
+    push_attribute(&mut outline, "text", feed.name.as_deref().unwrap_or_default());
+    if let Some(source_title) = feed.source_title.as_deref() {
+        push_attribute(&mut outline, "title", source_title);
+    }
     outline.push_attribute(("type", "rss"));
-    outline.push_attribute(("xmlUrl", feed.url.as_str()));
+    push_attribute(&mut outline, "xmlUrl", &feed.url);
     writer.write_event(Event::Empty(outline))?;
+    Ok(())
+}
+
+/// 写一个属性值。除常规转义外，制表、换行、回车写成字符引用（XML 解析器按属性值规范化会把
+/// 字面的这三种字符变成空格），XML 1.0 不允许出现的字符直接去掉：导出的文件必须是合法 XML，
+/// 一个远端标题里的控制字符不应让整份导出失败。
+fn push_attribute(element: &mut BytesStart<'_>, key: &str, raw: &str) {
+    let mut value = String::with_capacity(raw.len());
+    for character in raw.chars() {
+        match character {
+            '&' => value.push_str("&amp;"),
+            '<' => value.push_str("&lt;"),
+            '>' => value.push_str("&gt;"),
+            '"' => value.push_str("&quot;"),
+            '\'' => value.push_str("&apos;"),
+            '\t' => value.push_str("&#9;"),
+            '\n' => value.push_str("&#10;"),
+            '\r' => value.push_str("&#13;"),
+            '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..='\u{10FFFF}' => {
+                value.push(character)
+            }
+            _ => {}
+        }
+    }
+    // `(&[u8], &[u8])` 原样写入；`(&str, &str)` 会再转义一次。
+    element.push_attribute((key.as_bytes(), value.as_bytes()));
+}
+
+/// quick-xml 产生起始标签事件时不检查属性语法，只有读取属性才会报错；每个元素都读一遍，
+/// 缺等号、缺引号或重复属性的文档整体拒绝。这不是完整的 XML 良构性校验（属性值里的裸 `<`
+/// 等仍会通过）。
+///
+/// quick-xml 0.41 checks duplicates with a hash pre-filter past a few attributes, but a name
+/// whose hash matches an earlier one is checked by scanning the tag's earlier names, and the hash
+/// keys are fixed: the attributes of a tag are bounded like a feed's (review C3-R6 R6-01). The
+/// bound is on their number, not length, so long outlines (a long title appears twice) stay
+/// importable (review C3-R5 R5-06).
+fn check_attributes(event: &BytesStart<'_>) -> Result<()> {
+    for (index, attribute) in event.attributes().enumerate() {
+        ensure!(
+            index < crate::feed_structure::MAX_XML_ATTRIBUTES,
+            "OPML 的标签属性超过 {} 个",
+            crate::feed_structure::MAX_XML_ATTRIBUTES
+        );
+        attribute?;
+    }
+    Ok(())
+}
+
+/// 订阅只能在 <body> 里：外面的 outline 以前被静默忽略，文件里的订阅少导入了却报告成功。
+fn ensure_outline_in_body(
+    name: &[u8],
+    element_stack: &[Vec<u8>],
+    body_depth: Option<usize>,
+) -> Result<()> {
+    ensure!(
+        name != b"outline" || element_stack.is_empty() || body_depth.is_some(),
+        "OPML 的 outline 必须位于 <body> 内"
+    );
     Ok(())
 }
 
@@ -233,7 +299,9 @@ impl OutlineAttrs {
 
         for attribute in event.attributes() {
             let attribute = attribute?;
-            let value = attribute.decode_and_unescape_value(decoder)?.into_owned();
+            let value = attribute
+                .decoded_and_normalized_value(quick_xml::XmlVersion::default(), decoder)?
+                .into_owned();
             match attribute.key.as_ref() {
                 b"text" => text = Some(value),
                 b"title" => title = Some(value),
@@ -243,5 +311,24 @@ impl OutlineAttrs {
         }
 
         Ok(Self { text, title, xml_url })
+    }
+
+    /// 显示的名称：`text` 优先，空白时退回 `title`（OPML 2.0：`text` 是显示文本，`title`
+    /// 来自订阅源；其他阅读器里改过的名称在 `text`）。
+    fn name(&self) -> Option<String> {
+        [&self.text, &self.title]
+            .into_iter()
+            .flatten()
+            .find(|value| !value.trim().is_empty())
+            .cloned()
+    }
+
+    /// 带 `xmlUrl` 的 outline 是一条订阅。
+    fn feed(&self, folder_stack: &[Option<String>]) -> Option<ConfigFeed> {
+        Some(ConfigFeed {
+            url: self.xml_url.clone()?,
+            title: self.name(),
+            folder: current_folder(folder_stack),
+        })
     }
 }

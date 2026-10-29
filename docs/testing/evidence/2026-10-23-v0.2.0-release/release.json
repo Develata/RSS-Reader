@@ -1,0 +1,111 @@
+{
+  "id": 421785578,
+  "tag": "v0.2.0",
+  "name": "RSS-Reader v0.2.0",
+  "url": "https://github.com/Develata/RSS-Reader/releases/tag/v0.2.0",
+  "created_at": "2026-10-23T11:17:34Z",
+  "published_at": "2026-10-23T11:54:51Z",
+  "draft": false,
+  "prerelease": false,
+  "body": "RSS-Reader v0.2.0 基于 `43cc00ed6ca5140e4bfd5891cb9ef250e3cf0321` 发布，完成服务器端 Web、统一 SQLite 资料库与 Pages 演示站的整合。\n\n## 本版变化\n\n- 自托管 Web 将文章与阅读状态保存在服务器，浏览器登录后使用同一份资料库；服务器上的 CLI 可以访问同一数据目录。\n- 桌面、Android、CLI、服务器与演示站复用同一套 SQLite 仓储；原生资料库统一为 `library.sqlite3`。\n- Web 服务与匹配页面一起分发，提供 Windows x64、Linux x64、macOS Intel / Apple Silicon 包；构建标识用于拒绝旧页面的写入。Docker 镜像复用已验证的 Linux 服务包。\n- 改进数学正文渲染，支持 MathML 与公式图片；Pages 演示预先抓取每日数学和陶哲轩博客的 RSS。\n- 收紧订阅抓取、地址解析和正文处理边界，修复设置草稿在页面离开时写入失败的处理，并补充构建、包装和浏览器验收。\n\n## 升级前请先阅读\n\nv0.2.0 是断代版本，不支持新旧程序同时使用同一资料库或降级。\n\n- **桌面 / Android / CLI：**先关闭旧版程序并保留完整数据目录。首次启动会把同一数据目录中的已发布 v0.1.x 旧库单向导入 `library.sqlite3`，旧文件保留；旧库必须在任一新版首次启动之前就位。未发布的开发库迁移 0008 / 0009 不受支持。\n- **macOS：**v0.1.x 数据位于旧应用包内。替换应用之前，先退出旧版，将 `RSS-Reader.app/Contents/MacOS/RSS-Reader/` 中的全部数据文件（含可能存在的 `-wal`、`-shm`）复制到 `~/Library/Application Support/RSS-Reader/`，再启动新版桌面端或 CLI。\n- **旧版 Web：**浏览器中的文章、已读与收藏不会迁移到服务器。升级前导出 JSON 配置或 OPML，登录新版后导入订阅与设置，再重新抓取文章；保留旧文章前不要清除旧站点数据。正式 Web 需要服务器在线。\n- **Pages 演示：**只载入预抓取的文章快照，资料库操作重新加载即重置；在线订阅、WebDAV 与自动刷新禁用。正式使用请部署 Web 服务或安装原生应用。\n\n升级细节见[用户指南](https://github.com/Develata/RSS-Reader/blob/v0.2.0/docs/user-guide.md)，自托管配置见[Web 部署指南](https://github.com/Develata/RSS-Reader/blob/main/docs/deployment/web.md)。[打开 Pages 演示](https://develata.me/RSS-Reader/)。\n\n## 验证与已知边界\n\n发布前最终提交的 CI 为 35/35 通过；产品长验收为 27/27 场景、108 项检查、零非预期控制台错误。完整公网 Pages 验收与最终部署的文件、公式复验均已通过，覆盖 570 个 MathML 与 144 张公式图；具体提交及覆盖范围见[整合验收记录](https://github.com/Develata/RSS-Reader/blob/v0.2.0/docs/handoffs/2026-10-23-integration-merge-pages.md)。\n\n[发布流程](https://github.com/Develata/RSS-Reader/actions/runs/39948069776)已通过，提供 14 个附件。四平台 Web 包均经实际服务启动验证，Linux 桌面安装包通过普通用户两次启动与单库复用检查，容器通过数据卷、会话、CLI 与备份检查。恢复发布使用 `52b5e9f` 修正发布检查，所有程序源码和 tag 均保持为 `43cc00e`。\n\n14 个公开附件的 SHA-256 已与 GitHub 记录和本轮 CI 产物逐一核对；Android APK / AAB 使用与 v0.1.23 相同的正式签名证书。镜像可固定使用 `ghcr.io/develata/rss-reader:v0.2.0`。\n\n公网测试曾出现慢下载及 503，具体链路瓶颈尚未定位。Windows 程序未做 Authenticode 签名，macOS 应用未签名或公证；本轮未补做移动端与 macOS 实机交互、真实 systemd 安装或跨模型复审。自动化构建与检查的通过不代表这些项目已完成。\n",
+  "assets": [
+    {
+      "id": 668978553,
+      "name": "RSS-Reader-android-arm64-v8a-release.aab",
+      "size": 16975829,
+      "digest": "sha256:576c44b74793b93099b5c8dc534a7a39db940eca636cde878d4ba37069903b25",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-android-arm64-v8a-release.aab"
+    },
+    {
+      "id": 668978554,
+      "name": "RSS-Reader-android-arm64-v8a-release.apk",
+      "size": 16603829,
+      "digest": "sha256:550782a6c67d5ad2bf7f1222657d86207087ba0fbaac1e1f8353608a420cc92b",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-android-arm64-v8a-release.apk"
+    },
+    {
+      "id": 668978559,
+      "name": "RSS-Reader-linux-x86_64.deb",
+      "size": 8324976,
+      "digest": "sha256:88a25f7c5b027dd96ee186dc0931bf2c1e9fce672ca79e84517ab504ba600389",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-linux-x86_64.deb"
+    },
+    {
+      "id": 668978558,
+      "name": "RSS-Reader-macos-aarch64.tar.gz",
+      "size": 8134186,
+      "digest": "sha256:dd87d026f7c9326d4719b89f02247c1eda97cbbad5c9cac09ac416f279f40566",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-macos-aarch64.tar.gz"
+    },
+    {
+      "id": 668978557,
+      "name": "RSS-Reader-macos-x86_64.tar.gz",
+      "size": 8400909,
+      "digest": "sha256:4fcbe0350e829f69efb7916ca9de496cb4578754bf388ea28aa082be630eb43d",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-macos-x86_64.tar.gz"
+    },
+    {
+      "id": 668978561,
+      "name": "RSS-Reader-windows-x86_64.zip",
+      "size": 7991014,
+      "digest": "sha256:ce83c46a84e2aa93b4ebd42fea512f2c5aac66f35b89510bb317bbc793693122",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/RSS-Reader-windows-x86_64.zip"
+    },
+    {
+      "id": 668978562,
+      "name": "rssr-cli-linux-x86_64.tar.gz",
+      "size": 6124876,
+      "digest": "sha256:de8372285f721ba6eb546248692e0c641909880cb052b6e57b095e7d5efe51ac",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-linux-x86_64.tar.gz"
+    },
+    {
+      "id": 668978555,
+      "name": "rssr-cli-macos-aarch64.tar.gz",
+      "size": 5417709,
+      "digest": "sha256:ee3415f67ff2150977737b7918207b291f0ece061268103e1b4f9fffc4b01086",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-macos-aarch64.tar.gz"
+    },
+    {
+      "id": 668978565,
+      "name": "rssr-cli-macos-x86_64.tar.gz",
+      "size": 5640747,
+      "digest": "sha256:af7ab782b8c24488d52b4ed4572160dfe14c128ac6a9df14cccc2e1cceeb7d69",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-macos-x86_64.tar.gz"
+    },
+    {
+      "id": 668978552,
+      "name": "rssr-cli-windows-x86_64.zip",
+      "size": 5352179,
+      "digest": "sha256:a895f0cd06ee8437bdd4a3b8796c08d38e6932fe3a2ba54c039b8fd74ebc3d8b",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-cli-windows-x86_64.zip"
+    },
+    {
+      "id": 668978560,
+      "name": "rssr-web-linux-x86_64.tar.gz",
+      "size": 8152263,
+      "digest": "sha256:7df5183d10fa24dd5b496496a7eabf4e24e0df71625a857ee8b93a7a268d8493",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-linux-x86_64.tar.gz"
+    },
+    {
+      "id": 668978564,
+      "name": "rssr-web-macos-aarch64.tar.gz",
+      "size": 7525646,
+      "digest": "sha256:13eeffcabe50f476e37bca2636209b3297ca26dd3c14b4ea691ac74025cbf862",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-macos-aarch64.tar.gz"
+    },
+    {
+      "id": 668978551,
+      "name": "rssr-web-macos-x86_64.tar.gz",
+      "size": 7766549,
+      "digest": "sha256:4079453e470b3ef9d7ab61ce0e38c89c9fc519a06f93aae48d6b66ad86196c39",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-macos-x86_64.tar.gz"
+    },
+    {
+      "id": 668978556,
+      "name": "rssr-web-windows-x86_64.zip",
+      "size": 7263230,
+      "digest": "sha256:0227a184566ce525c21ef2e3f4d57a1eb350820bb87e4b52dc9a7290e8cf369e",
+      "url": "https://github.com/Develata/RSS-Reader/releases/download/v0.2.0/rssr-web-windows-x86_64.zip"
+    }
+  ]
+}

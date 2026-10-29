@@ -6,27 +6,25 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use rssr_domain::{
-    ConfigFeed, ConfigPackage, EntryContentRepository, EntryIndexRepository, FeedRepository,
-    NewFeedSubscription, SettingsRepository, normalize_feed_url, parse_feed_url,
+    ConfigFeed, ConfigFingerprint, ConfigPackage, DomainError, FeedRepository, NewFeedSubscription,
+    OpmlFeed, UserSettings, parse_feed_url,
 };
 use time::OffsetDateTime;
 
 use self::rules::{import_field, validate_config_package};
-use crate::{
-    persistence_mutation::{ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort},
-    subscription_workflow::AppStatePort,
+use crate::library_queries::{ConfigSnapshot, LibraryQueryPort};
+use crate::persistence_mutation::{
+    ConfigReplacementFeed, ConfigReplacementPlan, ConfigReplacementPort,
 };
 
 #[derive(Clone)]
 pub struct ImportExportService {
     feed_repository: Arc<dyn FeedRepository>,
-    entry_index_repository: Arc<dyn EntryIndexRepository>,
-    entry_content_repository: Arc<dyn EntryContentRepository>,
-    settings_repository: Arc<dyn SettingsRepository>,
+    queries: Arc<dyn LibraryQueryPort>,
     opml_codec: Arc<dyn OpmlCodecPort>,
-    app_state_cleanup: Arc<dyn AppStatePort>,
     clock: Arc<dyn ClockPort>,
-    config_replacement_port: Option<Arc<dyn ConfigReplacementPort>>,
+    /// Replaces the subscriptions and settings in one transaction of the store.
+    config_replacement: Arc<dyn ConfigReplacementPort>,
 }
 
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -37,7 +35,9 @@ pub trait RemoteConfigStore: Send + Sync {
 }
 
 pub trait OpmlCodecPort: Send + Sync {
-    fn encode(&self, feeds: &[ConfigFeed]) -> Result<String>;
+    /// 导出：每条订阅带显示名称与源标题，分别写进 OPML 的 `text` 与 `title`（审计 B6）。
+    fn encode(&self, feeds: &[OpmlFeed]) -> Result<String>;
+    /// 导入：每条订阅只有一个名称（`text` 优先），按指定名称导入。
     fn decode(&self, raw: &str) -> Result<Vec<ConfigFeed>>;
 }
 
@@ -54,34 +54,26 @@ impl ClockPort for SystemClock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ConfigImportOutcome {
-    pub imported_feed_count: usize,
-    pub removed_feed_count: usize,
+    pub imported_feed_count: u64,
+    pub removed_feed_count: u64,
     pub settings_updated: bool,
-}
-
-impl ConfigImportOutcome {
-    pub fn summary_line(&self) -> String {
-        let settings = if self.settings_updated { "设置已更新" } else { "设置未变化" };
-        format!(
-            "导入 {} 个订阅，清理 {} 个缺失订阅，{settings}",
-            self.imported_feed_count, self.removed_feed_count
-        )
-    }
+    /// The settings now stored (committed by the replacement; no second read).
+    pub settings: UserSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OpmlImportOutcome {
-    pub imported_feed_count: usize,
+    pub imported_feed_count: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RemoteConfigPushOutcome {
-    pub exported_feed_count: usize,
+    pub exported_feed_count: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RemoteConfigPullOutcome {
     pub import: Option<ConfigImportOutcome>,
 }
@@ -104,97 +96,28 @@ impl RemoteConfigPullOutcome {
     }
 }
 
-#[derive(Default)]
-struct NoopAppStateCleanup;
-
-#[async_trait::async_trait]
-impl AppStatePort for NoopAppStateCleanup {
-    async fn clear_last_opened_feed_if_matches(&self, _feed_id: i64) -> Result<()> {
-        Ok(())
-    }
-}
-
 impl ImportExportService {
     pub fn new(
         feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-        settings_repository: Arc<dyn SettingsRepository>,
+        queries: Arc<dyn LibraryQueryPort>,
         opml_codec: Arc<dyn OpmlCodecPort>,
-    ) -> Self {
-        Self::new_with_app_state_cleanup(
-            feed_repository,
-            entry_index_repository,
-            entry_content_repository,
-            settings_repository,
-            opml_codec,
-            Arc::new(NoopAppStateCleanup),
-        )
-    }
-
-    pub fn new_with_app_state_cleanup(
-        feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-        settings_repository: Arc<dyn SettingsRepository>,
-        opml_codec: Arc<dyn OpmlCodecPort>,
-        app_state_cleanup: Arc<dyn AppStatePort>,
-    ) -> Self {
-        Self::new_with_app_state_cleanup_and_clock(
-            feed_repository,
-            entry_index_repository,
-            entry_content_repository,
-            settings_repository,
-            opml_codec,
-            app_state_cleanup,
-            Arc::new(SystemClock),
-        )
-    }
-
-    pub fn new_with_app_state_cleanup_and_clock(
-        feed_repository: Arc<dyn FeedRepository>,
-        entry_index_repository: Arc<dyn EntryIndexRepository>,
-        entry_content_repository: Arc<dyn EntryContentRepository>,
-        settings_repository: Arc<dyn SettingsRepository>,
-        opml_codec: Arc<dyn OpmlCodecPort>,
-        app_state_cleanup: Arc<dyn AppStatePort>,
         clock: Arc<dyn ClockPort>,
+        config_replacement: Arc<dyn ConfigReplacementPort>,
     ) -> Self {
-        Self {
-            feed_repository,
-            entry_index_repository,
-            entry_content_repository,
-            settings_repository,
-            opml_codec,
-            app_state_cleanup,
-            clock,
-            config_replacement_port: None,
-        }
+        Self { feed_repository, queries, opml_codec, clock, config_replacement }
     }
 
-    pub fn with_config_replacement_port(
-        mut self,
-        config_replacement_port: Arc<dyn ConfigReplacementPort>,
-    ) -> Self {
-        self.config_replacement_port = Some(config_replacement_port);
-        self
-    }
-
+    /// 订阅与设置来自同一个读快照，导出的配置不会是两个时刻拼起来的。
     pub async fn export_config(&self) -> Result<ConfigPackage> {
-        let feeds = self
-            .feed_repository
-            .list_feeds()
-            .await?
+        let ConfigSnapshot { feeds, settings } = self.queries.config_snapshot().await?;
+        let feeds = feeds
             .into_iter()
-            .filter(|feed| !feed.is_deleted)
             .map(|feed| ConfigFeed {
                 url: feed.url.to_string(),
                 title: feed.title,
                 folder: feed.folder,
             })
             .collect();
-
-        let settings = self.settings_repository.load().await?;
 
         Ok(ConfigPackage {
             version: rssr_domain::CONFIG_PACKAGE_VERSION,
@@ -204,9 +127,17 @@ impl ImportExportService {
         })
     }
 
+    /// The fingerprint of the configuration as stored now; a replacement expects it.
+    pub async fn config_fingerprint(&self) -> Result<ConfigFingerprint> {
+        Ok(self.queries.config_fingerprint().await?)
+    }
+
+    /// Replaces the configuration with `package`, unless it changed since the caller read
+    /// `expected` (then [`rssr_domain::DomainError::Conflict`], nothing changed).
     pub async fn import_config_package(
         &self,
         package: &ConfigPackage,
+        expected: &ConfigFingerprint,
     ) -> Result<ConfigImportOutcome> {
         validate_config_package(package)?;
 
@@ -225,54 +156,19 @@ impl ImportExportService {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        if let Some(port) = &self.config_replacement_port {
-            let outcome = port
-                .replace_config(ConfigReplacementPlan {
-                    feeds: desired_feeds,
-                    settings: package.settings.clone(),
-                })
-                .await?;
-            return Ok(ConfigImportOutcome {
-                imported_feed_count: package.feeds.len(),
-                removed_feed_count: outcome.removed_feed_count,
-                settings_updated: outcome.settings_updated,
-            });
-        }
-
-        // Legacy/test fallback for hand-built services that do not inject a backend-native
-        // replacement port. Shipping native/Web compositions always use the atomic path above.
-        let current_feeds = self.feed_repository.list_feeds().await?;
-        let current_settings = self.settings_repository.load().await?;
-        let imported_urls = desired_feeds.iter().map(|feed| feed.url.clone()).collect::<Vec<_>>();
-
-        for feed in desired_feeds {
-            let existed =
-                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == feed.url);
-            self.feed_repository
-                .upsert_subscription(&NewFeedSubscription {
-                    site_url: None,
-                    url: feed.url,
-                    title: import_field(feed.title, existed),
-                    folder: import_field(feed.folder, existed),
-                })
-                .await?;
-        }
-
-        let removed_feed_ids = current_feeds
-            .iter()
-            .filter(|feed| !imported_urls.iter().any(|url| *url == normalize_feed_url(&feed.url)))
-            .map(|feed| feed.id)
-            .collect::<Vec<_>>();
-        let removed_feed_count = removed_feed_ids.len();
-        for feed_id in removed_feed_ids {
-            self.remove_feed_with_cleanup(feed_id).await?;
-        }
-        self.settings_repository.save(&package.settings).await?;
-
+        let outcome = self
+            .config_replacement
+            .replace_config(ConfigReplacementPlan {
+                feeds: desired_feeds,
+                settings: package.settings.clone(),
+                expected: expected.clone(),
+            })
+            .await?;
         Ok(ConfigImportOutcome {
-            imported_feed_count: package.feeds.len(),
-            removed_feed_count,
-            settings_updated: current_settings != package.settings,
+            imported_feed_count: package.feeds.len() as u64,
+            removed_feed_count: outcome.removed_feed_count as u64,
+            settings_updated: outcome.settings_updated,
+            settings: outcome.settings,
         })
     }
 
@@ -280,33 +176,54 @@ impl ImportExportService {
         Ok(serde_json::to_string_pretty(&self.export_config().await?)?)
     }
 
-    pub async fn import_config_json(&self, raw: &str) -> Result<ConfigImportOutcome> {
-        let package: ConfigPackage = serde_json::from_str(raw)?;
-        self.import_config_package(&package).await
+    pub async fn import_config_json(
+        &self,
+        raw: &str,
+        expected: &ConfigFingerprint,
+    ) -> Result<ConfigImportOutcome> {
+        let package: ConfigPackage = serde_json::from_str(raw).map_err(|error| {
+            DomainError::InvalidInput(format!("配置包不是有效的 JSON：{error}"))
+        })?;
+        self.import_config_package(&package, expected).await
     }
 
+    /// 与配置包导出同一份订阅列表，另外带上源标题：配置包格式只有一个名称，带不了它。
     pub async fn export_opml(&self) -> Result<String> {
-        self.opml_codec.encode(&self.export_config().await?.feeds)
+        let feeds = self
+            .feed_repository
+            .list_feeds()
+            .await?
+            .into_iter()
+            .filter(|feed| !feed.is_deleted)
+            .map(|feed| OpmlFeed {
+                url: feed.url.to_string(),
+                name: feed.title,
+                source_title: feed.source_title,
+                folder: feed.folder,
+            })
+            .collect::<Vec<_>>();
+        self.opml_codec.encode(&feeds)
     }
 
     pub async fn import_opml(&self, raw: &str) -> Result<OpmlImportOutcome> {
-        let feeds = self.opml_codec.decode(raw)?;
-        let current_feeds = self.feed_repository.list_feeds().await?;
-        let imported_feed_count = feeds.len();
-        let mut subscriptions = Vec::with_capacity(imported_feed_count);
+        let feeds = self
+            .opml_codec
+            .decode(raw)
+            .map_err(|error| DomainError::InvalidInput(format!("OPML 无法解析：{error}")))?;
+        let imported_feed_count = feeds.len() as u64;
+        let mut subscriptions = Vec::with_capacity(feeds.len());
 
         // Validate and normalize the complete document before the first write. A bad URL near the
         // end of an OPML file must not leave the valid prefix imported.
         for feed in feeds {
             let url = parse_feed_url(&feed.url)
                 .with_context(|| format!("OPML 中存在无效订阅 URL：{}", feed.url))?;
-            let existed =
-                current_feeds.iter().any(|current| normalize_feed_url(&current.url) == url);
             subscriptions.push(NewFeedSubscription {
                 site_url: None,
                 url,
-                title: import_field(feed.title, existed),
-                folder: import_field(feed.folder, existed),
+                title: Some(import_field(feed.title)),
+                source_title: None,
+                folder: Some(import_field(feed.folder)),
             });
         }
 
@@ -319,30 +236,25 @@ impl ImportExportService {
         remote: &dyn RemoteConfigStore,
     ) -> Result<RemoteConfigPushOutcome> {
         let package = self.export_config().await?;
-        let exported_feed_count = package.feeds.len();
+        let exported_feed_count = package.feeds.len() as u64;
         let raw = serde_json::to_string_pretty(&package)?;
         remote.upload_config(&raw).await?;
         Ok(RemoteConfigPushOutcome { exported_feed_count })
     }
 
+    /// Downloads the configuration and replaces the local one with it. The expected
+    /// fingerprint is read before the download, so a local change made while downloading is
+    /// not overwritten.
     pub async fn pull_remote_config(
         &self,
         remote: &dyn RemoteConfigStore,
     ) -> Result<RemoteConfigPullOutcome> {
+        let expected = self.config_fingerprint().await?;
         match remote.download_config().await? {
-            Some(raw) => {
-                Ok(RemoteConfigPullOutcome::imported(self.import_config_json(&raw).await?))
-            }
+            Some(raw) => Ok(RemoteConfigPullOutcome::imported(
+                self.import_config_json(&raw, &expected).await?,
+            )),
             None => Ok(RemoteConfigPullOutcome::not_found()),
         }
-    }
-
-    async fn remove_feed_with_cleanup(&self, feed_id: i64) -> Result<()> {
-        // Keep the fallback failure mode consistent with direct removal: once cleanup begins,
-        // the feed is hidden first, so a later cleanup error cannot expose an empty subscription.
-        self.feed_repository.set_deleted(feed_id, true).await?;
-        self.entry_index_repository.delete_for_feed(feed_id).await?;
-        self.entry_content_repository.delete_for_feed(feed_id).await?;
-        self.app_state_cleanup.clear_last_opened_feed_if_matches(feed_id).await
     }
 }

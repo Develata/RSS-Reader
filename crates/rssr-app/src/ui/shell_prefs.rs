@@ -52,7 +52,7 @@ mod platform {
     fn prefs_path() -> Option<&'static PathBuf> {
         static PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
         PATH.get_or_init(|| {
-            let dir = match rssr_infra::db::sqlite_native::ensure_local_data_dir() {
+            let dir = match rssr_infra::store::local::ensure_local_data_dir() {
                 Ok(dir) => dir,
                 Err(error) => {
                     tracing::debug!(%error, "准备本地数据目录失败，界面偏好本次不持久化");

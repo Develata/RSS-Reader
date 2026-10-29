@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkDirectoryContracts } from './directory_contract.mjs';
+import { checkDirectoryScroll } from './directory_scroll_contract.mjs';
 import { measureDirectory } from './directory_performance.mjs';
 import { checkPullReleaseContracts, dragPull } from './pull_refresh_contract.mjs';
 import { checkSourceFilterContracts } from './source_filter_contract.mjs';
@@ -15,10 +16,8 @@ import {
   sleep,
   waitFor,
 } from './cdp_session.mjs';
-
-// Inspect the currently published slice; alternating slots keep interrupted writes invisible.
-const committedCore = `JSON.parse(localStorage.getItem('rssr-web-state-v1' +
-  (JSON.parse(localStorage.getItem('rssr-web-commit-v1'))?.revisions[0] % 2 === 1 ? '-next' : '')))`;
+import { startHarness, waitUntil } from './server_harness.mjs';
+import { ServerPage, VISIBLE, capturePage, fillField, key, pointerClick, textShown } from './server_page.mjs';
 
 function parseOptions(argv) {
   const options = new Map();
@@ -35,26 +34,63 @@ function parseOptions(argv) {
 
 const cli = parseOptions(process.argv.slice(2));
 const cdpBase = cli.get('--cdp-base') ?? process.env.CDP_BASE ?? 'http://127.0.0.1:9226';
-const staticBase = cli.get('--static-base') ?? process.env.STATIC_BASE ?? 'http://127.0.0.1:8091';
 const artifactDir =
   cli.get('--artifact-dir') ??
   process.env.ARTIFACT_DIR ??
-  'target/static-web-small-viewport-smoke';
+  'target/server-web-regression';
+// The page against the real server (phase C, C4c): `rssr-web` restarted on a fixture library per
+// seed, its subscriptions served by a loopback feed fixture server (see server_harness.mjs).
+const serverOptions = {
+  serverBin: cli.get('--server-bin') ?? process.env.RSSR_WEB_BIN,
+  staticDir: cli.get('--static-dir') ?? process.env.RSSR_WEB_STATIC_DIR,
+  fixtureBin: cli.get('--fixture-bin') ?? process.env.RSSR_FIXTURE_BIN,
+  seedsDir: cli.get('--seeds-dir') ?? 'tests/fixtures/browser_state',
+  themesDir: cli.get('--themes-dir') ?? 'assets/themes',
+  workDir: cli.get('--work-dir') ?? path.join(artifactDir, 'server-work'),
+  artifactDir,
+  port: Number.parseInt(cli.get('--port') ?? process.env.RSSR_WEB_PORT ?? '8091', 10),
+  username: 'smoke',
+  password: 'smoke-pass-123',
+};
+const base = `http://127.0.0.1:${serverOptions.port}`;
+// The harness (web mode), the session the harness signed in with on the current seed (its own
+// reads of the server's state), and whether the page signed in through the form yet.
+let harness;
+let session;
+// The page on the harness's server (web mode): seeds, signs in, checks the build.
+let serverPage;
 const width = Number.parseInt(cli.get('--width') ?? process.env.VIEWPORT_WIDTH ?? '360', 10);
 const height = Number.parseInt(cli.get('--height') ?? process.env.VIEWPORT_HEIGHT ?? '800', 10);
 const deviceScaleFactor = Number.parseFloat(
   cli.get('--dpr') ?? process.env.DEVICE_SCALE_FACTOR ?? '3',
 );
 const preset = cli.get('--preset') ?? process.env.THEME_PRESET ?? '';
+// `regression` (the default), `theme-matrix` (the reader in every theme) or `feed-smoke` (a first
+// run adding and reading a subscription).
+const suite = cli.get('--suite') ?? 'regression';
+if (!['regression', 'theme-matrix', 'feed-smoke'].includes(suite)) throw new Error(`unknown suite ${suite}`);
+if (suite !== 'regression' && (cli.has('--native-target') || cli.get('--directory-only') === 'true' || cli.get('--directory-scroll-only') === 'true' || cli.has('--directory-perf'))) {
+  throw new Error(`--suite ${suite} runs on the server only, without directory options`);
+}
+if (suite === 'theme-matrix' && preset) throw new Error('--suite theme-matrix runs every theme; --preset does not apply');
 // Native mode attaches only to an explicitly selected, already running Dioxus
-// WebView with an isolated, pre-seeded SQLite fixture supplied by the caller.
+// WebView with an isolated, pre-seeded SQLite fixture supplied by the caller
+// (the fixture tool writes one: `cargo run -p rssr-infra --example
+// browser_fixture_library -- --seeds tests/fixtures/browser_state --seed
+// directory-contract --data-dir <the app's data directory> --feed-base <url>`).
 const nativeTarget = cli.get('--native-target');
 const directoryOnly = cli.get('--directory-only') === 'true';
+const directoryScrollOnly = cli.get('--directory-scroll-only') === 'true';
 if (cli.has('--native-target') && !nativeTarget.trim()) {
   throw new Error('--native-target must identify an existing Dioxus WebView');
 }
-if (nativeTarget && ['--static-base', '--width', '--height', '--dpr', '--preset'].some(option => cli.has(option))) {
-  throw new Error('Native mode records the real window; static seeding and viewport/theme overrides are not supported');
+if (nativeTarget && ['--server-bin', '--width', '--height', '--dpr', '--preset'].some(option => cli.has(option))) {
+  throw new Error('Native mode records the real window; server seeding and viewport/theme overrides are not supported');
+}
+if (!nativeTarget) {
+  for (const [option, value] of [['--server-bin', serverOptions.serverBin], ['--static-dir', serverOptions.staticDir], ['--fixture-bin', serverOptions.fixtureBin]]) {
+    if (!value) throw new Error(`${option} is required`);
+  }
 }
 
 const assertions = [];
@@ -63,12 +99,54 @@ const ignoredConsoleErrors = [];
 const nativeMeasurements = [];
 let nativeEvidence;
 
+// The requests a check failed on purpose (Network request ids): the browser logs their failure.
+const provokedRequests = new Set();
+
 function recordConsoleError(error) {
   if (error.text?.includes("/_dioxus?build_id=") && error.text?.includes('WebSocket connection')) {
-    ignoredConsoleErrors.push({ ...error, reason: 'debug bundle live-reload endpoint is absent on static server' });
+    ignoredConsoleErrors.push({ ...error, reason: 'debug bundle live-reload endpoint is absent on rssr-web' });
+    return;
+  }
+  if (error.networkRequestId && provokedRequests.has(error.networkRequestId)) {
+    ignoredConsoleErrors.push({ ...error, reason: 'a request the check failed on purpose' });
     return;
   }
   consoleErrors.push(error);
+}
+
+/// Fails the page's requests whose URL matches `pattern` (a CDP URL pattern) while `body` runs:
+/// with `answer` (status and protocol error body) or, without it, as a network failure. Only the
+/// log entries of exactly those requests are ignored (by their Network request id; the Network
+/// domain is on in web mode): any other failure, of the same path included, still counts.
+async function withFailedRequests(client, pattern, answer, body) {
+  const detach = client.on('Fetch.requestPaused', ({ requestId, networkId }) => {
+    if (networkId) provokedRequests.add(networkId);
+    const reply = answer
+      ? client.send('Fetch.fulfillRequest', { requestId, responseCode: answer.status,
+        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+        body: Buffer.from(JSON.stringify(answer.error)).toString('base64') })
+      : client.send('Fetch.failRequest', { requestId, errorReason: 'Failed' });
+    reply.catch(() => {});
+  });
+  await client.send('Fetch.enable', { patterns: [{ urlPattern: pattern, requestStage: 'Request' }] });
+  try {
+    return await body();
+  } finally {
+    await client.send('Fetch.disable');
+    detach();
+  }
+}
+
+/// A read of the server's state by the harness (its own session), in place of the old reads of
+/// the browser's storage.
+async function serverState(pathname) {
+  return harness.server.api('GET', pathname, session);
+}
+
+/// The stored list preferences (the server answers them with the list page's first read).
+async function storedWorkspace() {
+  const input = encodeURIComponent(JSON.stringify({ load_preferences: true, load_feeds: false }));
+  return (await serverState(`/api/v1/entries/bootstrap?input=${input}`)).workspace;
 }
 
 function assertThat(name, condition, details) {
@@ -128,23 +206,13 @@ async function dispatchTouchScroll(client, point, scrollDeltaY) {
   await sleep(120);
 }
 
-function setupUrl(seed, nextPath, themePreset = preset) {
-  const params = new URLSearchParams({
-    username: 'smoke',
-    password: 'smoke-pass-123',
-    seed,
-    next: nextPath,
-  });
-  if (themePreset) {
-    params.set('preset', themePreset);
-  }
-  return `${staticBase}/__codex/setup-local-auth?${params}`;
-}
-
-async function seedAndNavigate(client, seed, nextPath, marker, themePreset = preset) {
-  await navigate(client, setupUrl(seed, nextPath, themePreset));
-  await selectorExists(client, marker, 30000);
-  await sleep(300);
+/// Restarts the server on a fresh library of `seed` (with the theme preset as custom CSS, and the
+/// seed changed by `edit` if given) and opens `nextPath`. The first time the page signs in through
+/// the login form; afterwards it gets the harness's session cookie for the new server's session
+/// store.
+async function seedAndNavigate(client, seed, nextPath, marker, themePreset = preset, { edit } = {}) {
+  await serverPage.seed(seed, nextPath, marker, { preset: themePreset, edit });
+  session = serverPage.cookie;
 }
 
 async function ensureEntryControlsOpen(client) {
@@ -152,14 +220,7 @@ async function ensureEntryControlsOpen(client) {
 }
 
 async function captureArtifact(client, name) {
-  const html = await evaluate(client, 'document.documentElement.outerHTML');
-  await writeFile(path.join(artifactDir, `${name}.html`), html, 'utf8');
-  const screenshot = await client.send('Page.captureScreenshot', {
-    format: 'png',
-    fromSurface: true,
-    captureBeyondViewport: false,
-  });
-  await writeFile(path.join(artifactDir, `${name}.png`), screenshot.data, 'base64');
+  await capturePage(client, artifactDir, name);
 }
 
 async function commonPageEvidence(client) {
@@ -227,7 +288,7 @@ async function checkEntriesOverflow(client) {
 }
 
 async function checkSettings(client) {
-  await navigate(client, `${staticBase}/settings`);
+  await navigate(client, `${base}/settings`);
   await selectorExists(client, '[data-page="settings"] [data-layout="theme-lab"]');
   const common = await commonPageEvidence(client);
   assertThat('settings page has no horizontal overflow', common.scrollWidth <= common.clientWidth + 1, common);
@@ -253,7 +314,7 @@ async function checkSettings(client) {
 }
 
 async function checkFeeds(client) {
-  await navigate(client, `${staticBase}/feeds`);
+  await navigate(client, `${base}/feeds`);
   await selectorExists(client, '[data-page="feeds"] [data-slot="feed-card-title"]');
   const evidence = await evaluate(
     client,
@@ -303,7 +364,7 @@ async function checkFeeds(client) {
 }
 
 async function checkReader(client) {
-  await navigate(client, `${staticBase}/entries/2`);
+  await navigate(client, `${base}/entries/2`);
   await selectorExists(client, '[data-page="reader"][data-state="loaded"] [data-slot="reader-title"]');
   const evidence = await evaluate(
     client,
@@ -321,6 +382,15 @@ async function checkReader(client) {
         });
       const shortcuts = [...document.querySelectorAll('[data-slot="reader-bottom-bar-shortcut"]')]
         .map((element) => getComputedStyle(element).display);
+      const bar = document.querySelector('[data-layout="reader-bottom-bar"]');
+      const barStyle = getComputedStyle(bar);
+      scrollTo(0, document.documentElement.scrollHeight);
+      const barRect = bar.getBoundingClientRect();
+      const lastControl = [...document.querySelectorAll('[data-layout="reader-page"] button, [data-layout="reader-page"] a')]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => element.getBoundingClientRect().bottom)
+        .reduce((lowest, bottom) => Math.max(lowest, bottom), 0);
+      scrollTo(0, 0);
       return {
         rootClientWidth: root.clientWidth,
         rootScrollWidth: root.scrollWidth,
@@ -330,12 +400,23 @@ async function checkReader(client) {
         busy: document.querySelector('[data-page="reader"]').getAttribute('aria-busy'),
         buttons,
         shortcuts,
+        barPosition: barStyle.position,
+        barOutsidePage: !bar.closest('[data-layout="reader-page"]'),
+        barGap: innerHeight - barRect.bottom,
+        barTop: barRect.top,
+        lastControl,
       };
     })()`,
   );
   assertThat('reader measurements use the loaded fixture content',
     evidence.positionReady === 'true' && evidence.busy === 'false' &&
     evidence.title.startsWith('用于验证 360 像素宽度阅读页标题'), evidence);
+  assertThat('reader bottom bar is fixed beside the page, not inside it',
+    evidence.barPosition === 'fixed' && evidence.barOutsidePage, evidence);
+  assertThat('reader bottom bar sits just above the viewport bottom whatever the article length',
+    evidence.barGap >= 8 && evidence.barGap <= 24, evidence);
+  assertThat('the page keeps room below its last control for the bar',
+    evidence.lastControl <= evidence.barTop, evidence);
   assertThat('reader title stays inside the viewport', evidence.titleBoundsOk, evidence);
   assertThat('reader page has no horizontal overflow', evidence.rootScrollWidth <= evidence.rootClientWidth + 1, evidence);
   assertThat(
@@ -369,21 +450,15 @@ async function checkReader(client) {
 
 async function checkEntriesInitialization(client) {
   await seedAndNavigate(client, 'mobile-ui-short', '/entries', '[data-page="entries"][data-position-ready="true"]');
-  const lockerTarget = await newPage('about:blank', cdpBase);
-  const locker = connect(lockerTarget.webSocketDebuggerUrl);
+  // The page's first read (preferences and subscriptions) held at the server: the page waits and
+  // does not claim the library is empty (formerly a Web Lock held by another tab).
+  const held = [];
+  const detach = client.on('Fetch.requestPaused', ({ requestId }) => held.push(requestId));
+  await client.send('Fetch.enable', { patterns: [{ urlPattern: '*/api/v1/entries/bootstrap*', requestStage: 'Request' }] });
   try {
-    await locker.send('Page.enable');
-    await locker.send('Runtime.enable');
-    await navigate(locker, setupUrl('', '/entries'));
-    await selectorExists(locker, '[data-page="entries"][data-position-ready="true"]');
-    await evaluate(locker, `new Promise(ready => {
-      navigator.locks.request('rssr-browser-state-v1', () => new Promise(release => {
-        window.__releaseEntriesLock = release;
-        ready();
-      }));
-    })`);
-    await navigate(client, `${staticBase}/entries`);
+    await navigate(client, `${base}/entries`);
     await selectorExists(client, '[data-page="entries"]');
+    await waitUntil('the held first read', 10000, async () => held.length > 0);
     const pending = await evaluate(client, `({
       ready:document.querySelector('[data-page="entries"]').dataset.positionReady,
       message:document.querySelector('[data-layout="entries-main"] > [role="status"]').textContent,
@@ -391,38 +466,29 @@ async function checkEntriesInitialization(client) {
     })`);
     assertThat('pending entries do not claim the library is empty',
       pending.ready === 'false' && pending.message.includes('正在加载') && !pending.empty, pending);
+    for (const requestId of held.splice(0)) await client.send('Fetch.continueRequest', { requestId });
   } finally {
-    try {
-      await evaluate(locker, 'window.__releaseEntriesLock?.()');
-    } finally {
-      await client.send('Target.closeTarget', {targetId:lockerTarget.id});
-      locker.close();
-    }
+    await client.send('Fetch.disable');
+    detach();
   }
   await selectorExists(client, '[data-slot="entry-card-title"]');
-  assertThat('entries recover after the initialization lock is released', await evaluate(client,
+  assertThat('entries recover after the first read answers', await evaluate(client,
     `document.querySelector('[data-page="entries"]').dataset.positionReady === 'true'`));
 
-  const {identifier} = await client.send('Page.addScriptToEvaluateOnNewDocument', {source:`
-    const getItem = Storage.prototype.getItem;
-    Storage.prototype.getItem = function(key) {
-      if (key === 'rssr-web-commit-v1') throw new DOMException('test read failure', 'SecurityError');
-      return getItem.call(this, key);
-    };
-  `});
-  try {
-    await navigate(client, `${staticBase}/entries`);
+  // The first read fails (a network failure): the failure shows, the list still loads, and no
+  // empty-library claim is made (formerly a failing browser storage).
+  await withFailedRequests(client, '*/api/v1/entries/bootstrap*', null, async () => {
+    await navigate(client, `${base}/entries`);
     await selectorExists(client, '[data-layout="entries-main"] > [role="status"][data-state="error"]');
+    await selectorExists(client, '[data-slot="entry-card-title"]');
     const failed = await evaluate(client, `({
       message:document.querySelector('[data-layout="entries-main"] > [role="status"]').textContent,
       empty:!!document.querySelector('[data-layout="entries-page-state"]')
     })`);
     assertThat('failed initial reads expose the error without an empty-library claim',
-      failed.message.includes('读取浏览器本地存储失败') && !failed.empty, failed);
-  } finally {
-    await client.send('Page.removeScriptToEvaluateOnNewDocument', {identifier});
-    await navigate(client, `${staticBase}/entries`);
-  }
+      failed.message.includes('加载文章页初始状态失败') && !failed.empty, failed);
+  });
+  await navigate(client, `${base}/entries`);
   await selectorExists(client, '[data-slot="entry-card-title"]');
   assertThat('reopening after a read failure preserves existing entries', await evaluate(client,
     `document.querySelector('[data-page="entries"]').dataset.positionReady === 'true' &&
@@ -434,20 +500,24 @@ async function checkPrimaryWorkflow(client) {
     await evaluate(client, `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'center', behavior:'instant'})`);
     await tapSelector(client, selector);
   };
-  // This older two-entry fixture uses example.com. Keep automatic refresh local
-  // and unchanged while checking navigation; do not depend on external CORS.
-  const refreshResponses = [];
-  const detachRefresh = client.on('Fetch.requestPaused', ({requestId}) => {
-    refreshResponses.push(client.send('Fetch.fulfillRequest', {requestId, responseCode:304,
-      responseHeaders:[{name:'Access-Control-Allow-Origin',value:'*'}]}));
-  });
-  await client.send('Fetch.enable', {patterns:[
-    {urlPattern:'https://example.com/feed.xml*',requestStage:'Request'},
-  ]});
-  try {
+  // The server fetches the subscriptions itself, from the fixture server; nothing reaches the
+  // network and the page has nothing to intercept.
+  {
     await seedAndNavigate(client, 'reader-demo', '/entries/1', '[data-page="reader"][data-position-ready="true"]');
-    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll:true})`);
-    await key(client, 'ArrowLeft', 'ArrowLeft');
+    // A key typed into a field is the field's, not a shortcut (the nav search stays collapsed
+    // here, so a field is placed in the reading region for the check).
+    await evaluate(client, `(() => {
+      const field = document.createElement('input');
+      document.querySelector('[data-layout="reader-body"]').append(field);
+      field.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', bubbles: true, cancelable: true}));
+      field.remove();
+    })()`);
+    await sleep(100);
+    assertThat('a key typed into a field does not switch entries',
+      await evaluate(client, `location.pathname === '/entries/1'`));
+    // Shortcuts belong to the whole page: nothing needs focus first.
+    await evaluate(client, `document.activeElement?.blur()`);
+    await key(client, 'k', 'KeyK');
     await waitFor(client, `location.pathname === '/entries/2' && document.querySelector('[data-page="reader"][data-position-ready="true"]')`);
     assertThat('unread keyboard navigation reaches the actual unread entry',
       await evaluate(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'unread'`));
@@ -455,19 +525,16 @@ async function checkPrimaryWorkflow(client) {
     await waitFor(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'read'`);
     assertThat('finishing all unread entries disables both unread directions', await evaluate(client,
       `['previous','next'].every(direction => document.querySelector('[data-nav="' + direction + '-unread-entry"]').disabled)`));
-    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll:true})`);
+    await evaluate(client, `document.activeElement?.blur()`);
     await key(client, 'ArrowLeft', 'ArrowLeft');
     await key(client, 'ArrowRight', 'ArrowRight');
+    await key(client, 'j', 'KeyJ');
     await sleep(100);
     assertThat('unread shortcuts do not fall back to already read feed entries', await evaluate(client, `location.pathname === '/entries/2'`));
     await tap('[data-nav="next-feed-entry"]');
     await waitFor(client, `location.pathname === '/entries/1' && document.querySelector('[data-page="reader"][data-position-ready="true"]')`);
     assertThat('separate feed navigation can still open a read entry',
       await evaluate(client, `document.querySelector('[data-action="mark-read"]').dataset.state === 'read'`));
-    await Promise.all(refreshResponses);
-  } finally {
-    await client.send('Fetch.disable');
-    detachRefresh();
   }
 
   await seedAndNavigate(client,'home-reader','/entries','[data-page="entries"][data-position-ready="true"]');
@@ -486,12 +553,15 @@ async function checkPrimaryWorkflow(client) {
   assertThat('always visible filter summary explains every active condition',['no matching title','仅已读','仅收藏','来源：'].every(part=>summary.includes(part)),summary);
   await tap('.entries-view-options summary');
   await tap('[data-action="clear-entry-filters"]');
-  await selectorExists(client,'[data-slot="entry-card-title"]');
-  const storedWorkspace=`JSON.parse(localStorage.getItem('rssr-web-app-state-v2'+(JSON.parse(localStorage.getItem('rssr-web-commit-v1')).revisions[1]%2===1?'-next':''))).entries_workspace`;
-  await waitFor(client,`(() => {const s=${storedWorkspace};return s.read_filter==='all' && s.starred_filter==='all' && s.selected_feed_urls.length===0 && s.grouping_mode==='source';})()`);
-  await navigate(client,`${staticBase}/entries`);
-  await selectorExists(client,'[data-slot="entry-card-title"]');
-  assertThat('reset persists without changing grouping',await evaluate(client,`!document.querySelector('[data-layout="entry-filter-summary"]') && document.querySelector('[data-action="group-by-source"]').getAttribute('aria-pressed')==='true' && document.querySelector('[data-page="entries"]').dataset.positionPage==='1'`));
+  await selectorExists(client, '[data-slot="entry-card-title"]');
+  await waitUntil('the reset preferences stored by the server', 10000, async () => {
+    const state = await storedWorkspace();
+    return state.read_filter === 'all' && state.starred_filter === 'all' &&
+      state.selected_feed_urls.length === 0 && state.grouping_mode === 'source';
+  });
+  await navigate(client, `${base}/entries`);
+  await selectorExists(client, '[data-slot="entry-card-title"]');
+  assertThat('reset persists without changing grouping', await evaluate(client, `!document.querySelector('[data-layout="entry-filter-summary"]') && document.querySelector('[data-action="group-by-source"]').getAttribute('aria-pressed')==='true' && document.querySelector('[data-page="entries"]').dataset.positionPage==='1'`));
 
   await seedAndNavigate(client, 'home-reader', '/entries/2', '[data-action="open-reader-image"]');
   await beginManualScroll(client);
@@ -520,18 +590,15 @@ async function checkPrimaryWorkflow(client) {
       result.sameBody && result.sameStatus && Math.abs(result.after-result.before)<=1 &&
       Math.abs(result.afterScroll-result.beforeScroll)<=1 && result.message && result.hidden && result.polite, result);
   }
-  await evaluate(client, `window.__savedStatusSetItem=Storage.prototype.setItem;
-    Storage.prototype.setItem=function(key,value){if(key.startsWith('rssr-web-entry-flags-v1'))throw new DOMException('test write failure','QuotaExceededError');return window.__savedStatusSetItem.call(this,key,value);}`);
-  try {
-    await tapSelector(client, '[data-action="mark-read"]');
-    await selectorExists(client, '[data-page="reader"] [data-layout="status-banner"][data-state="error"]');
-    assertThat('reader write errors remain visible and leave the button state unchanged', await evaluate(client, `
-      !window.__actionStatus.classList.contains('sr-only') && window.__actionStatus.textContent.trim().length>0 &&
-      window.__actionStatus.getBoundingClientRect().height>1 &&
-      document.querySelector('[data-action="mark-read"]').dataset.state==='read'`));
-  } finally {
-    await evaluate(client, 'Storage.prototype.setItem=window.__savedStatusSetItem; delete window.__savedStatusSetItem');
-  }
+  await withFailedRequests(client, '*/api/v1/entries/2/read*',
+    { status: 503, error: { code: 'unavailable', message: '服务器繁忙（测试）' } }, async () => {
+      await tapSelector(client, '[data-action="mark-read"]');
+      await selectorExists(client, '[data-page="reader"] [data-layout="status-banner"][data-state="error"]');
+      assertThat('reader write errors remain visible and leave the button state unchanged', await evaluate(client, `
+        !window.__actionStatus.classList.contains('sr-only') && window.__actionStatus.textContent.trim().length>0 &&
+        window.__actionStatus.getBoundingClientRect().height>1 &&
+        document.querySelector('[data-action="mark-read"]').dataset.state==='read'`));
+    });
 }
 
 async function checkShortDirectory(client) {
@@ -578,12 +645,6 @@ async function checkDirectoryLabels(client, label) {
     return {width:rail.clientWidth, scrollWidth:rail.scrollWidth, clipped};
   })()`);
   assertThat(label + ' names and counts remain readable', evidence.scrollWidth <= evidence.width + 1 && evidence.clipped.length === 0, evidence);
-}
-
-async function key(client, key, code, modifiers = 0) {
-  const windowsVirtualKeyCode = ({Escape:27, Enter:13, Tab:9, Backspace:8, ArrowLeft:37, ArrowRight:39})[key] ?? key.toUpperCase().charCodeAt(0);
-  await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode, ...(key === 'Enter' ? {text:'\r', unmodifiedText:'\r'} : {}) });
-  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode });
 }
 
 // Exercise browser hit testing as well as the Dioxus handler. Do not auto-scroll:
@@ -695,12 +756,6 @@ async function checkReaderRefreshFeedback(client, label) {
   }
 }
 
-async function waitForPaused(pending) {
-  const deadline = Date.now() + 10000;
-  while (!pending.length && Date.now() < deadline) await sleep(50);
-  if (!pending.length) throw new Error('Refresh did not issue a feed request within 10 seconds');
-}
-
 async function touchPull(client, distance, target) {
   await dragPull(client, distance, target);
   const phase = await evaluate(client, `document.querySelector('[data-slot="pull-refresh"]')?.dataset.state`);
@@ -709,34 +764,32 @@ async function touchPull(client, distance, target) {
   return phase;
 }
 
+// The server refreshes (the page only starts and waits for the job): the feed fixture server sees
+// its fetches, two subscriptions fetched concurrently per refresh. Each manual refresh that should
+// bring new entries arms one round first (one new entry per subscription). The server's own
+// periodic refresh runs at its start, before the page signs in, so the page has no start-up
+// refresh to join; joining is the server's refresh flight (its own tests).
 async function checkHomeRefreshAndGestures(client) {
-  let hold = false;
-  let requestCount = 0;
-  const requestsByFeed = new Map();
-  const pending = [];
-  const interceptErrors = [];
-  const detach = client.on('Fetch.requestPaused', ({requestId, request}) => {
-    requestCount++;
-    const feed = new URL(request.url).searchParams.get('feed');
-    requestsByFeed.set(feed, (requestsByFeed.get(feed) ?? 0) + 1);
-    if (hold) pending.push(requestId);
-    else client.send('Fetch.continueRequest', {requestId}).catch(error => interceptErrors.push(String(error)));
-  });
-  await client.send('Fetch.enable', {patterns: [{urlPattern: '*__codex/mobile-ui-feed.xml*', requestStage: 'Request'}]});
+  const feeds = harness.feeds;
+  const subscriptions = ['/home-reader/1.xml', '/home-reader/2.xml'];
+  const counts = () => subscriptions.map(feed => feeds.count(feed));
+  const requestCount = () => feeds.count();
+  const holdFetches = () => feeds.hold(pathname => pathname.startsWith('/home-reader/'));
+  const bothHeld = held => waitUntil('both subscriptions fetched', 15000, async () => held.waiting() === 2);
+  let held;
   try {
-    await evaluate(client, `localStorage.setItem('rssr-nav-hidden', '1'); localStorage.removeItem('rssr-entry-search'); localStorage.setItem('rssr-entry-controls-hidden', '1')`);
-    hold = true;
+    await evaluate(client, `localStorage.removeItem('rssr-entry-search'); localStorage.setItem('rssr-entry-controls-hidden', '1')`);
     await seedAndNavigate(client, 'home-reader', '/entries/2', '[data-slot="reader-body-html"]');
-    // Join the real startup auto-refresh instead of starting another all-feed batch.
-    await waitForPaused(pending);
-    const autoRequests = requestCount;
+    feeds.nextRound('home-reader');
+    held = holdFetches();
     await tapSelector(client, '[data-action="activate-home"]');
     await selectorExists(client, '[data-page="entries"]');
+    assertThat('Reader to Home only navigates before the refresh', requestCount() === 0, {requests: requestCount()});
     await tapSelector(client, '[data-action="activate-home"]');
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'refreshing'`);
-    assertThat('Home joins an already running automatic refresh', requestCount === autoRequests, {autoRequests, requestCount});
-    hold = false;
-    await client.send('Fetch.continueRequest', {requestId: pending.shift()});
+    await bothHeld(held);
+    held.release();
+    held = undefined;
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
     assertThat('successful manual refresh shows a completion message', await evaluate(client,
       `/新增 [0-9]+ 篇文章|没有新文章/.test(document.querySelector('[data-slot="manual-refresh-status"]').textContent)`));
@@ -744,16 +797,14 @@ async function checkHomeRefreshAndGestures(client) {
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle'`);
     assertThat('successful manual refresh feedback clears instead of returning on navigation', await evaluate(client,
       `document.querySelector('[data-slot="manual-refresh-status"]').textContent === '' && !/新增 [0-9]+ 篇文章|没有新文章/.test(document.querySelector('[data-action="activate-home"]').title)`));
-    await waitFor(client, `${committedCore}.feeds.every(f => !f.last_fetched_at.startsWith('2099'))`);
-    assertThat('automatic and manual refresh complete one shared batch',
-      requestCount === 2 && requestsByFeed.size === 2 && [...requestsByFeed.values()].every(count => count === 1),
-      {requestCount, requestsByFeed: Object.fromEntries(requestsByFeed)});
+    assertThat('a manual refresh fetches every subscription once',
+      requestCount() === 2 && counts().every(count => count === 1), {counts: counts()});
     await clickSelector(client, '[data-slot="entry-card-title"]');
     await selectorExists(client, '[data-page="reader"]');
     assertThat('finished refresh does not reappear when Reader mounts', await evaluate(client,
       `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle' && document.querySelector('[data-slot="manual-refresh-status"]').textContent === ''`));
     const normalShell = await shellEvidence(client, true);
-    const initialRequests = requestCount;
+    const initialRequests = requestCount();
     await clickSelector(client, '[data-action="toggle-search"]');
     await selectorExists(client, '[data-field="entry-search"]');
     await searchInputEvidence(client);
@@ -776,7 +827,7 @@ async function checkHomeRefreshAndGestures(client) {
 
     await clickSelector(client, '[data-action="activate-home"]');
     await selectorExists(client, '[data-page="entries"][data-entry-scope="all"]');
-    assertThat('Reader to Home only navigates', requestCount === initialRequests, {initialRequests, requestCount});
+    assertThat('Reader to Home only navigates', requestCount() === initialRequests, {initialRequests, requests: requestCount()});
     assertThat('finished refresh does not reappear on Home', await evaluate(client,
       `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'idle' && document.querySelector('[data-slot="manual-refresh-status"]').textContent === ''`));
     await shellEvidence(client);
@@ -806,7 +857,7 @@ async function checkHomeRefreshAndGestures(client) {
       }
       await clickSelector(client, '[data-action="activate-home"]');
       await selectorExists(client, '[data-page="entries"][data-entry-scope="all"]');
-      assertThat(`${destination} to Home only navigates`, requestCount === initialRequests, {initialRequests, requestCount});
+      assertThat(`${destination} to Home only navigates`, requestCount() === initialRequests, {initialRequests, requests: requestCount()});
     }
     // Exercise the actual toolbar back, not only its geometry.
     await clickSelector(client, '[data-slot="entry-card-title"]');
@@ -814,14 +865,15 @@ async function checkHomeRefreshAndGestures(client) {
     await clickSelector(client, '[data-nav="back"]');
     await selectorExists(client, '[data-page="entries"]');
 
-    const beforeRefresh = requestCount;
-    hold = true;
+    const beforeRefresh = requestCount();
+    feeds.nextRound('home-reader');
+    held = holdFetches();
     await clickSelector(client, '[data-action="activate-home"]');
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'refreshing'`);
-    await waitForPaused(pending);
+    await bothHeld(held);
     await evaluate(client, `for (let i = 0; i < 5; i++) document.querySelector('[data-action="activate-home"]').click()`);
     await sleep(150);
-    assertThat('repeated Home activation starts one batch', requestCount === beforeRefresh + 1 && pending.length === 1, {beforeRefresh, requestCount, pending: pending.length});
+    assertThat('repeated Home activation starts one batch', requestCount() === beforeRefresh + 2 && held.waiting() === 2, {beforeRefresh, requests: requestCount(), held: held.waiting()});
     await clickSelector(client, '[data-nav="feeds"]');
     await selectorExists(client, '[data-action="refresh-all"]');
     const refreshBusy = await evaluate(client, `(() => {
@@ -831,7 +883,7 @@ async function checkHomeRefreshAndGestures(client) {
     assertThat('Feeds reflects a refresh started on Home with disabled busy feedback',
       refreshBusy.disabled && refreshBusy.busy === 'true' && refreshBusy.text === '正在刷新…' && Number(refreshBusy.opacity) < 1, refreshBusy);
     await clickSelector(client, '[data-action="refresh-all"]');
-    assertThat('Feeds refresh uses the same in-flight gate', requestCount === beforeRefresh + 1, {requestCount});
+    assertThat('Feeds refresh uses the same in-flight gate', requestCount() === beforeRefresh + 2, {requests: requestCount()});
     await clickSelector(client, '[data-action="activate-home"]');
     await selectorExists(client, '[data-slot="entry-card-title"]');
     await clickSelector(client, '[data-slot="entry-card-title"]');
@@ -839,10 +891,11 @@ async function checkHomeRefreshAndGestures(client) {
     await beginManualScroll(client);
     await evaluate(client, `window.__readerBeforeRefresh = document.querySelector('[data-layout="reader-body"]'); window.__readerTextBeforeRefresh = window.__readerBeforeRefresh.innerHTML; window.scrollTo(0, 80); window.__readerScroll = scrollY`);
     await checkReaderRefreshFeedback(client, 'refreshing while reading');
-    hold = false;
-    await client.send('Fetch.continueRequest', {requestId: pending.shift()});
+    held.release();
+    held = undefined;
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
-    assertThat('manual batch survives page unmount and completes every subscription', requestCount === beforeRefresh + 2, {beforeRefresh, requestCount});
+    assertThat('manual batch survives page unmount and completes every subscription',
+      requestCount() === beforeRefresh + 2 && counts().every(count => count === 2), {beforeRefresh, counts: counts()});
     assertThat('refresh completion preserves Reader DOM and scroll position', await evaluate(client, `document.querySelector('[data-layout="reader-body"]') === window.__readerBeforeRefresh && window.__readerBeforeRefresh.innerHTML === window.__readerTextBeforeRefresh && Math.abs(scrollY - window.__readerScroll) <= 1`));
     await checkReaderRefreshFeedback(client, 'refresh finished while reading');
     await clickSelector(client, '[data-action="activate-home"]');
@@ -862,36 +915,38 @@ async function checkHomeRefreshAndGestures(client) {
 
     // Real CDP touch events, not synthetic reducer calls. Start on the page header.
     await evaluate(client, 'window.scrollTo(0, 0)');
-    const beforePull = requestCount;
+    const beforePull = requestCount();
     const shortPhase = await touchPull(client, 45);
     assertThat('short pull tracks movement below threshold', shortPhase === 'pulling', {phase: shortPhase});
-    assertThat('short pull does not refresh', requestCount === beforePull, {beforePull, requestCount});
-    await checkPullReleaseContracts(client, {assertThat, requestCount: () => requestCount});
+    assertThat('short pull does not refresh', requestCount() === beforePull, {beforePull, requests: requestCount()});
+    await checkPullReleaseContracts(client, {assertThat, requestCount});
     await evaluate(client, 'window.scrollTo(0, 350)');
     await waitFor(client, 'scrollY > 1');
     await touchPull(client, 115, '[data-slot="entry-card-meta"]');
-    assertThat('pull starting away from top does not refresh', requestCount === beforePull, {requestCount});
+    assertThat('pull starting away from top does not refresh', requestCount() === beforePull, {requests: requestCount()});
     await evaluate(client, 'window.scrollTo(0, 0)');
-    hold = true;
+    held = holdFetches();
     const phase = await touchPull(client, 130);
     assertThat('top pull arms at threshold', phase === 'armed', {phase});
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'refreshing'`);
+    await bothHeld(held);
     await clickSelector(client, '[data-action="activate-home"]');
-    assertThat('pull and Home share in-flight refresh', requestCount === beforePull + 1, {beforePull, requestCount});
-    hold = false;
-    await client.send('Fetch.continueRequest', {requestId: pending.shift()});
+    await sleep(150);
+    assertThat('pull and Home share in-flight refresh', requestCount() === beforePull + 2, {beforePull, requests: requestCount()});
+    held.release();
+    held = undefined;
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
 
-    hold = true;
+    held = holdFetches();
     await clickSelector(client, '[data-action="activate-home"]');
-    await waitForPaused(pending);
+    await bothHeld(held);
     await clickSelector(client, '[data-slot="entry-card-title"]');
     await selectorExists(client, '[data-layout="reader-body"]');
     await beginManualScroll(client);
     await evaluate(client, `window.scrollTo(0, 80); window.__errorReaderScroll = scrollY; window.__errorReaderBody = document.querySelector('[data-layout="reader-body"]'); window.__errorReaderReady = document.querySelector('[data-page="reader"]').dataset.positionReady`);
-    hold = false;
-    await client.send('Fetch.fulfillRequest', {requestId: pending.shift(), responseCode: 200,
-      responseHeaders: [{name:'Content-Type',value:'application/rss+xml'}], body: Buffer.from('invalid RSS fixture').toString('base64')});
+    feeds.failNext('/home-reader/1.xml');
+    held.release();
+    held = undefined;
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'error'`);
     assertThat('refresh failure is exposed and releases the gate', await evaluate(client, `document.querySelector('[data-slot="manual-refresh-status"]').textContent.includes('失败')`));
     const errorReaderPosition = await evaluate(client, `({sameBody: document.querySelector('[data-layout="reader-body"]') === window.__errorReaderBody,
@@ -903,11 +958,8 @@ async function checkHomeRefreshAndGestures(client) {
     await selectorExists(client, '[data-page="entries"]');
     await clickSelector(client, '[data-action="activate-home"]');
     await waitFor(client, `document.querySelector('[data-action="activate-home"]').dataset.refreshState === 'finished'`);
-    assertThat('network interception completed cleanly', pending.length === 0 && interceptErrors.length === 0, {pending, interceptErrors});
   } finally {
-    for (const requestId of pending) await client.send('Fetch.continueRequest', {requestId}).catch(() => {});
-    await client.send('Fetch.disable');
-    detach();
+    held?.release();
   }
 }
 
@@ -978,7 +1030,7 @@ async function checkReaderImagesAndSelection(client) {
   await client.send('Input.dispatchMouseEvent', {type:'mouseReleased', button:'left', buttons:0, clickCount:1, x:coords.end, y:coords.y});
   const selected = await evaluate(client, 'getSelection().toString()');
   assertThat('reader body supports native mouse drag selection', selected.length > 5, {selected});
-  await client.send('Browser.grantPermissions', {origin: staticBase, permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
+  await client.send('Browser.grantPermissions', {origin: base, permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
   await key(client, 'c', 'KeyC', 2);
   const clipboard = await evaluate(client, 'navigator.clipboard.readText()');
   assertThat('Ctrl+C copies native selection', clipboard === selected, {selected, clipboard});
@@ -1079,9 +1131,10 @@ async function checkReadingPreferencesAndFeedInput(client) {
   await key(client, 'a', 'KeyA', 2);
   await client.send('Input.insertText', {text:'1.25'});
   await clickSelector(client, '[data-action="save-settings"]');
-  await waitFor(client, `${committedCore}.settings.reader_font_scale === 1.25`);
+  await waitUntil('the font scale stored by the server', 10000, async () =>
+    (await serverState('/api/v1/settings')).reader_font_scale === 1.25);
   // Reopen through a real persisted setting, not an injected CSS variable.
-  await navigate(client, `${staticBase}/entries/2`);
+  await navigate(client, `${base}/entries/2`);
   await selectorExists(client, '[data-action="open-reader-image"]');
   const mobileAfter = await fontSize();
   await setViewport(client, 1280, 800, false, 1);
@@ -1093,8 +1146,10 @@ async function checkReadingPreferencesAndFeedInput(client) {
   await captureArtifact(client, 'reader-scaled');
   await clickSelector(client, '[data-nav="feeds"]');
   await selectorExists(client, '[data-field="feed-url-input"]');
-  const before = await evaluate(client, `${committedCore}.feeds.filter(f => !f.is_deleted).length`);
-  const feedUrl = `${staticBase}/__codex/mobile-ui-feed.xml?seed=mobile-ui-short&feed=keyboard-submit`;
+  // Subscriptions the server adds by fetching them from the feed fixture server.
+  const subscriptions = async () => (await serverState('/api/v1/feeds')).feeds;
+  const before = (await subscriptions()).length;
+  const feedUrl = `${harness.feeds.base}/new/keyboard-submit.xml`;
   await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
   await client.send('Input.insertText', {text:feedUrl});
   const focus = await evaluate(client, `(() => {
@@ -1104,23 +1159,20 @@ async function checkReadingPreferencesAndFeedInput(client) {
   })()`);
   assertThat('subscription input has a visible keyboard focus indicator', focus.visible && focus.outline !== 'none' && focus.width >= 2, focus);
   await key(client, 'Enter', 'Enter');
-  await waitFor(client, `${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 1}`);
+  await waitUntil('the added subscription', 15000, async () => (await subscriptions()).length === before + 1);
   await waitFor(client, `document.querySelector('[data-field="feed-url-input"]').value === ''`);
-  assertThat('Enter adds the subscription exactly once', await evaluate(client,
-    `${committedCore}.feeds.filter(f => !f.is_deleted && f.url === ${JSON.stringify(feedUrl)}).length === 1`));
-  // Pause the actual first refresh so duplicate submission and draft editing have
-  // deterministic overlap, without timing sleeps or changing production code.
-  const slowFeedUrl = `${staticBase}/__codex/mobile-ui-feed.xml?seed=mobile-ui-short&feed=pending-submit`;
-  const nextDraftUrl = `${staticBase}/__codex/mobile-ui-feed.xml?feed=next-draft`;
-  const pausedRequests = [];
-  const offPaused = client.on('Fetch.requestPaused', event => pausedRequests.push(event.requestId));
-  await client.send('Fetch.enable', {patterns:[{urlPattern:`${slowFeedUrl}*`, requestStage:'Request'}]});
+  assertThat('Enter adds the subscription exactly once',
+    (await subscriptions()).filter(feed => feed.url === feedUrl).length === 1, {feeds: await subscriptions()});
+  // Hold the server's first fetch of the new subscription so duplicate submission and draft
+  // editing overlap deterministically, without timing sleeps or changing production code.
+  const slowFeedUrl = `${harness.feeds.base}/new/pending-submit.xml`;
+  const nextDraftUrl = `${harness.feeds.base}/new/next-draft.xml`;
+  const held = harness.feeds.hold(pathname => pathname === '/new/pending-submit.xml');
   try {
     await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
     await client.send('Input.insertText', {text:slowFeedUrl});
-    const paused = client.waitForEvent('Fetch.requestPaused');
     await key(client, 'Enter', 'Enter');
-    const request = await paused;
+    await waitUntil('the held first fetch', 15000, async () => held.waiting() === 1);
     await waitFor(client, `document.querySelector('[data-action="add-feed"]').disabled`);
     assertThat('pending subscription exposes busy feedback while the input stays editable',
       await evaluate(client, `document.querySelector('[data-action="add-feed"]').getAttribute('aria-busy') === 'true' && !document.querySelector('[data-field="feed-url-input"]').disabled`));
@@ -1128,16 +1180,17 @@ async function checkReadingPreferencesAndFeedInput(client) {
     await key(client, 'a', 'KeyA', 2);
     await client.send('Input.insertText', {text:nextDraftUrl});
     await evaluate(client, `document.querySelector('[data-layout="feed-form"]').requestSubmit()`);
-    await client.send('Fetch.continueRequest', {requestId:request.requestId});
+    await sleep(300);
+    const fetches = harness.feeds.count('/new/pending-submit.xml');
+    held.release();
     await waitFor(client, `!document.querySelector('[data-action="add-feed"]').disabled`);
     assertThat('completed subscription keeps the next address typed during refresh',
       await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').value === ${JSON.stringify(nextDraftUrl)}`));
     assertThat('repeated pending submits produce one refresh and do not add the next draft',
-      pausedRequests.length === 1 && await evaluate(client,
-        `${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 2}`), {requests:pausedRequests.length});
+      fetches === 1 && (await subscriptions()).length === before + 2 &&
+        harness.feeds.count('/new/next-draft.xml') === 0, {fetches, feeds: await subscriptions()});
   } finally {
-    offPaused();
-    await client.send('Fetch.disable');
+    held.release();
   }
   await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
   await key(client, 'a', 'KeyA', 2);
@@ -1149,7 +1202,8 @@ async function checkReadingPreferencesAndFeedInput(client) {
     return !button.disabled && button.getAttribute('aria-busy') === 'false' && button.textContent.trim() === '刷新全部';
   })()`));
   assertThat('refresh button does not submit the subscription form', await evaluate(client,
-    `document.querySelector('[data-field="feed-url-input"]').value === 'https://example.com/should-not-submit.xml' && ${committedCore}.feeds.filter(f => !f.is_deleted).length === ${before + 2}`));
+    `document.querySelector('[data-field="feed-url-input"]').value === 'https://example.com/should-not-submit.xml'`) &&
+    (await subscriptions()).length === before + 2, {feeds: await subscriptions()});
 }
 
 async function nativePage() {
@@ -1380,7 +1434,7 @@ async function checkNarrowSidebarSearch(client) {
         `document.documentElement.scrollWidth <= innerWidth + 1 && getComputedStyle(document.querySelector('[data-layout="app-nav-topline"]')).flexWrap === 'wrap'`),
       entriesInput);
     if (themePreset.endsWith('-v1')) await captureArtifact(client, 'legacy-atlas-search-entries');
-    await navigate(client, `${staticBase}/entries/2`);
+    await navigate(client, `${base}/entries/2`);
     await selectorExists(client, '[data-slot="reader-body-html"]');
     await clickSelector(client, '[data-action="toggle-search"]');
     await searchInputEvidence(client);
@@ -1388,10 +1442,439 @@ async function checkNarrowSidebarSearch(client) {
   }
 }
 
+// --- Formerly the Playwright acceptances (nav collapse, reading position, reader metadata and
+// time); seeds that used to be edited in browser storage are now edited before the library is
+// built (`useSeed`'s `edit`).
+
+// Shared interactions and waits (pointerClick, fillField, textShown, VISIBLE) live in server_page.mjs.
+const pathname = client => evaluate(client, 'location.pathname');
+// The page's own preferences in this browser (the search text, hidden list controls) outlive a
+// seed; these checks start, as they did in fresh browser contexts, without them.
+const forgetShellPreferences = client => evaluate(client,
+  `localStorage.removeItem('rssr-entry-search'); localStorage.removeItem('rssr-entry-controls-hidden')`);
+const readerReady = async client => {
+  await selectorExists(client, '[data-page="reader"][data-position-ready="true"]');
+  await sleep(2300);
+};
+
+async function checkNavCollapse(client) {
+  const theme = preset || 'none';
+  await forgetShellPreferences(client);
+  await seedAndNavigate(client, 'reader-demo', '/entries/1', '[data-page="reader"][data-position-ready="true"]', preset,
+    {edit: ({core}) => { core.settings.archive_after_months = 0; }});
+  for (const navWidth of [360, 1280]) {
+    const label = `nav collapse ${theme} ${navWidth}`;
+    await setViewport(client, navWidth, 800, false, 1);
+    await navigate(client, `${base}/entries/1`);
+    await selectorExists(client, '[data-page="reader"][data-position-ready="true"]');
+    await selectorExists(client, '[data-action="toggle-nav"]');
+    const rect = selector => evaluate(client, `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:r.x, y:r.y, width:r.width, height:r.height}; })()`);
+    const fits = () => evaluate(client, 'document.documentElement.scrollWidth <= innerWidth');
+    const navState = () => evaluate(client, `document.querySelector('[data-layout="app-nav-shell"]').dataset.state`);
+    const expanded = await rect('[data-layout="app-nav-shell"]');
+    const target = await rect('[data-action="toggle-nav"]');
+    assertThat(`${label}: toggle is a touch target at the right edge`, target.width >= 44 && target.height >= 44 &&
+      target.x >= expanded.x + expanded.width - target.width - 20, {expanded, target});
+    assertThat(`${label}: expanded navigation fits`, await fits());
+    if (['none', 'atlas-sidebar'].includes(theme)) await captureArtifact(client, `nav-${theme}-${navWidth}-expanded`);
+    await clickSelector(client, '[data-action="toggle-search"]');
+    await selectorExists(client, '[data-field="entry-search"]');
+    assertThat(`${label}: search stays usable beside the collapse control`, (await rect('[data-field="entry-search"]')).width >= 140);
+    await fillField(client, '[data-field="entry-search"]', 'preserved query');
+    await pointerClick(client, '[data-action="toggle-nav"]');
+    await waitFor(client, `document.querySelector('[data-layout="app-nav-shell"]').dataset.state === 'collapsed'`);
+    const collapsedState = await evaluate(client, `(() => {
+      const nav = document.querySelector('[data-layout="app-nav-shell"]');
+      const toggle = document.querySelector('[data-action="toggle-nav"]');
+      return {expanded: toggle.getAttribute('aria-expanded'), label: toggle.getAttribute('aria-label'),
+        controls: nav.querySelectorAll('button, a, input').length, focused: document.activeElement === toggle};
+    })()`);
+    assertThat(`${label}: collapsed navigation keeps only the focused expand control`,
+      collapsedState.expanded === 'false' && collapsedState.label === '向右展开导航' &&
+      collapsedState.controls === 1 && collapsedState.focused, collapsedState);
+    const collapsed = await rect('[data-layout="app-nav-shell"]');
+    assertThat(`${label}: collapsed header is small and collapses toward the left`,
+      collapsed.width <= 45 && collapsed.height <= 45 && collapsed.x <= expanded.x + 1, {expanded, collapsed});
+    assertThat(`${label}: collapsed navigation fits`, await fits());
+    if (['none', 'atlas-sidebar'].includes(theme)) await captureArtifact(client, `nav-${theme}-${navWidth}-collapsed`);
+    await key(client, 'Enter', 'Enter');
+    await waitFor(client, `document.querySelector('[data-layout="app-nav-shell"]').dataset.state === 'normal'`);
+    await clickSelector(client, '[data-action="toggle-search"]');
+    assertThat(`${label}: the search query survives collapsing`, await evaluate(client,
+      `document.querySelector('[data-field="entry-search"]').value === 'preserved query'`));
+    await fillField(client, '[data-field="entry-search"]', '');
+    await key(client, 'Escape', 'Escape');
+    // A rendered article DOM node survives shell changes and flag updates.
+    assertThat(`${label}: fixture has rendered HTML`, await evaluate(client, `(() => {
+      window.__bodyNode = document.querySelector('[data-slot="reader-body-html"]')?.firstChild;
+      return !!window.__bodyNode;
+    })()`));
+    await clickSelector(client, '[data-action="toggle-starred"]', 200);
+    assertThat(`${label}: a flag change does not replace the body`, await evaluate(client,
+      `window.__bodyNode === document.querySelector('[data-slot="reader-body-html"]')?.firstChild`));
+    await clickSelector(client, '[data-nav="settings"]');
+    await selectorExists(client, '[data-page="settings"]');
+    await pointerClick(client, '[data-action="toggle-nav"]');
+    await evaluate(client, 'history.back()');
+    await selectorExists(client, '[data-page="reader"]');
+    assertThat(`${label}: shell state survives routes`, await navState() === 'collapsed');
+    await navigate(client, `${base}/entries/1`);
+    await selectorExists(client, '[data-action="toggle-nav"]');
+    assertThat(`${label}: a new session starts expanded`, await navState() === 'normal');
+  }
+  await setViewport(client, width, height, true, deviceScaleFactor);
+}
+
+async function checkReadingPosition(client) {
+  const longBody = Array.from({length: 2000}, (_, i) =>
+    `<p>Block ${i}: ${'Reading position performance. '.repeat(12)}</p>`).join('');
+  const scrollY = () => evaluate(client, 'scrollY');
+  for (const positionWidth of [360, 1280]) {
+    const label = `reading position ${positionWidth}`;
+    await forgetShellPreferences(client);
+    await setViewport(client, positionWidth, 800, false, 1);
+    await seedAndNavigate(client, 'reader-demo', '/entries', '[data-page="entries"][data-position-ready="true"]', preset, {edit: ({core, entry_content}) => {
+      core.settings.archive_after_months = 0;
+      for (const entry of entry_content.entries) entry.content_html = longBody;
+    }});
+    await selectorExists(client, 'a[href="/entries/1"]');
+    await pointerClick(client, 'a[href="/entries/1"]');
+    await readerReady(client);
+    await evaluate(client, `(() => {
+      window.__positionReads = 0;
+      const original = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function () {
+        if (this.closest('[data-layout="reader-body"]')) window.__positionReads++;
+        return original.call(this);
+      };
+      scrollTo(0, document.documentElement.scrollHeight * 0.8);
+    })()`);
+    const centre = await evaluate(client, '({x: innerWidth / 2, y: innerHeight / 2})');
+    for (let i = 0; i < 12; i++) {
+      await client.send('Input.dispatchMouseEvent', {type:'mouseWheel', ...centre, deltaX:0, deltaY: i % 2 ? -180 : 240});
+      await sleep(30);
+    }
+    await key(client, 'PageDown', 'PageDown');
+    await sleep(300);
+    assertThat(`${label}: continuous scrolling does not scan reader blocks`, await evaluate(client, 'window.__positionReads') === 0);
+    // Editing the shell search is outside the reader shortcut scope: caret movement must not scan a
+    // long article, even though an article remains open underneath.
+    await clickSelector(client, '[data-action="toggle-search"]');
+    await selectorExists(client, '[data-field="entry-search"]');
+    await fillField(client, '[data-field="entry-search"]', 'caret movement');
+    await evaluate(client, 'window.__positionReads = 0');
+    await key(client, 'ArrowLeft', 'ArrowLeft');
+    await key(client, 'ArrowRight', 'ArrowRight');
+    await sleep(100);
+    assertThat(`${label}: search caret movement does not scan reader blocks`,
+      await evaluate(client, 'window.__positionReads') === 0 && await pathname(client) === '/entries/1');
+    await fillField(client, '[data-field="entry-search"]', '');
+    await key(client, 'Escape', 'Escape');
+    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll: true})`);
+    const forward = await evaluate(client, `!document.querySelector('[data-nav="next-unread-entry"]').disabled`);
+    const arrow = forward ? 'ArrowRight' : 'ArrowLeft';
+    await key(client, arrow, arrow, 2);
+    await evaluate(client, `document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key: ${JSON.stringify(arrow)}, bubbles: true, isComposing: true}))`);
+    await sleep(200);
+    assertThat(`${label}: modified and composing keys neither navigate nor scan`,
+      await pathname(client) === '/entries/1' && await evaluate(client, 'window.__positionReads') === 0);
+    const saved = await scrollY();
+    assertThat(`${label}: the article was scrolled`, saved > 1000, {saved});
+    // Browser history has no preceding DOM click: it must capture the departing article.
+    await evaluate(client, 'history.back()');
+    await selectorExists(client, 'a[href="/entries/1"]');
+    await pointerClick(client, 'a[href="/entries/1"]');
+    await readerReady(client);
+    const restored = await scrollY();
+    assertThat(`${label}: browser back captures the position`, Math.abs(restored - saved) < 4, {saved, restored});
+    const adjacent = forward ? 'next-unread-entry' : 'previous-unread-entry';
+    await evaluate(client, `document.querySelector('[data-layout="reader-shortcut-scope"]').focus({preventScroll: true})`);
+    await key(client, arrow, arrow);
+    await waitFor(client, `/^\\/entries\\/\\d+$/.test(location.pathname) && location.pathname !== '/entries/1'`);
+    await readerReady(client);
+    await evaluate(client, 'history.back()');
+    await readerReady(client);
+    const afterKeyboard = await scrollY();
+    assertThat(`${label}: keyboard navigation captures the position`, Math.abs(afterKeyboard - saved) < 4, {saved, afterKeyboard});
+    // The native host's capture returns a fact synchronously, without changing history.
+    const nativeFact = await evaluate(client, `(() => {
+      const event = new CustomEvent('rssr-capture-position', {detail: {fact: null}});
+      document.dispatchEvent(event);
+      return event.detail.fact;
+    })()`);
+    assertThat(`${label}: the native capture bridge reports the position`, nativeFact?.kind === 'capture' &&
+      nativeFact.key === 'reader:1' && Math.abs(nativeFact.point.y - saved) < 4, nativeFact);
+    for (const edge of ['top', 'bottom']) {
+      await evaluate(client, `scrollTo(0, ${edge === 'top' ? 0 : 'document.documentElement.scrollHeight'})`);
+      const expected = await scrollY();
+      await clickSelector(client, `[data-nav="${adjacent}"]`);
+      await waitFor(client, `location.pathname !== '/entries/1'`);
+      await readerReady(client);
+      await evaluate(client, 'history.back()');
+      await readerReady(client);
+      const actual = await scrollY();
+      assertThat(`${label}: ${edge} edge is captured`, Math.abs(actual - expected) < 4, {expected, actual});
+    }
+  }
+  await setViewport(client, width, height, true, deviceScaleFactor);
+}
+
+/// Reader metadata (long, missing), the original link, unread counts and local-time offsets
+/// across a daylight-saving change.
+async function checkReaderMetadataAndTime(client) {
+  const feeds = harness.feeds;
+  const long = '长来源LongUnbrokenSource'.repeat(25);
+  // The unread count of the first source, while it is visible (null otherwise).
+  const sourceCount = `(count => count && ${VISIBLE}(count) ? count.textContent.trim() : null)(document.querySelector('[data-slot="entry-filters-source-unread-count"]'))`;
+  const fits = () => evaluate(client, 'document.documentElement.scrollWidth <= innerWidth');
+  const meta = () => evaluate(client, `[...document.querySelectorAll('[data-slot="reader-meta"]')].map(element => element.textContent)`);
+  await forgetShellPreferences(client);
+  await client.send('Emulation.setTimezoneOverride', {timezoneId: 'America/New_York'});
+  let script;
+  try {
+    // The start-up refresh fails once, so the seeded last success is kept (a success would store
+    // the time of the refresh).
+    feeds.failNext('/reader-demo/1.xml');
+    await setViewport(client, 360, 800, false, 1);
+    await seedAndNavigate(client, 'reader-demo', '/entries/2', '[data-slot="reader-title"]', preset, {edit: ({core}) => {
+      core.settings.archive_after_months = 0;
+      core.feeds[0].title = long;
+      core.feeds[0].last_success_at = '2026-03-08 07:00:00.0 +00:00:00';
+      core.entries[0].published_at = '2026-03-08 06:59:59.0 +00:00:00';
+      core.entries[1].published_at = '2026-03-08 07:00:00.0 +00:00:00';
+      core.entries[1].author = '长作者Author'.repeat(35);
+      core.entries[1].url = `${feeds.base}/original/${'long-url'.repeat(80)}`;
+    }});
+    await textShown(client, 'Demo Entry Two', '[data-slot="reader-title"]');
+    await textShown(client, '发布时间：2026-03-08 03:00 UTC-04:00');
+    const lines = await meta();
+    assertThat('a directly opened reader loads its source and author; the offset after the DST change',
+      lines[0] === `来源：${long}` && /^作者：长作者/.test(lines[1]), lines);
+    for (const readerWidth of [360, 1280]) {
+      await setViewport(client, readerWidth, 800, false, 1);
+      await sleep(200);
+      const link = await evaluate(client, `document.querySelector('[data-action="open-original"]').getBoundingClientRect().height`);
+      assertThat(`reader ${readerWidth}: long source, author and address fit; the original link is a touch target`,
+        await fits() && link >= 44, {link});
+      await captureArtifact(client, `task1-reader-${readerWidth}`);
+    }
+    await checkOpenOriginal(client);
+
+    await pointerClick(client, '[data-action="mark-read"]');
+    await selectorExists(client, '[data-action="mark-read"][data-state="read"]');
+    await pointerClick(client, '[data-action="activate-home"]');
+    await selectorExists(client, '[data-page="entries"]');
+    const openSources = async () => {
+      await pointerClick(client, '[data-action="open-source-filter"]');
+      await selectorExists(client, '#source-filter-dialog');
+    };
+    const closeSources = async () => {
+      await key(client, 'Escape');
+      await waitFor(client, `!document.querySelector('#source-filter-dialog')`);
+    };
+    const readSourceCount = async () => {
+      await openSources();
+      const count = await evaluate(client, sourceCount);
+      await closeSources();
+      return count;
+    };
+    await openSources();
+    await waitFor(client, `${sourceCount} === '· 0'`);
+    const describedBy = await evaluate(client, `document.querySelector('[data-field="entry-source-filter"]').getAttribute('aria-describedby')`);
+    for (const listWidth of [360, 1280]) {
+      await setViewport(client, listWidth, 800, false, 1);
+      await sleep(200);
+      const chip = await evaluate(client, `document.querySelector('[data-layout="entry-filters-source-chip"]').getBoundingClientRect().height`);
+      assertThat(`sources ${listWidth}: long source names fit; the source chip is a touch target`, await fits() && chip >= 44, {chip});
+      await captureArtifact(client, `task1-sources-${listWidth}`);
+    }
+    assertThat('marking read in the reader shows 0 unread; the count is described to assistive technology',
+      /^source-unread-/.test(describedBy ?? ''), {describedBy});
+    await closeSources();
+    await clickSelector(client, '[data-action="mark-read"]');
+    await openSources();
+    await waitFor(client, `${sourceCount} === '· 1'`);
+    await closeSources();
+    await pointerClick(client, '[data-action="toggle-search"]');
+    await fillField(client, '[data-field="entry-search"]', 'does not match');
+    await sleep(400);
+    const searched = await readSourceCount();
+    await fillField(client, '[data-field="entry-search"]', '');
+    await pointerClick(client, '[data-action="toggle-search"]');
+    await pointerClick(client, '.entries-view-options summary');
+    await pointerClick(client, '.entries-view-options input[type="checkbox"]');
+    const archived = await readSourceCount();
+    assertThat('marking unread in the list updates the count; search and archive filters do not change it',
+      searched === '· 1' && archived === '· 1', {searched, archived});
+    // Source counts do not wait for the filtered article query. Clearing search
+    // and changing the archive filter may still be replacing its empty results.
+    await selectorExists(client, '#entry-card-2 [data-action="mark-read"]');
+    // A flag write the server refuses (formerly a failing browser storage): the counts stay.
+    await withFailedRequests(client, '*/api/v1/entries/2/read*',
+      {status: 503, error: {code: 'unavailable', message: '服务器繁忙（测试）'}}, async () => {
+        await pointerClick(client, '#entry-card-2 [data-action="mark-read"]');
+        await selectorExists(client, '[data-state="error"]');
+      });
+    const afterFailure = await readSourceCount();
+    await clickSelector(client, '[data-nav="feeds"]');
+    await textShown(client, '本地文章 2 · 未读 1');
+    await waitFor(client, `document.body.innerText.includes('最近成功：2026-03-08 03:00 UTC-04:00')`);
+    assertThat('after a refused write the list and the subscription page agree; the last success follows the local offset',
+      afterFailure === '· 1', {afterFailure});
+    await navigate(client, `${base}/entries/1`);
+    await textShown(client, '发布时间：2026-03-08 01:59 UTC-05:00');
+    assertThat('one session shows both offsets around the DST change', true);
+
+    // Missing metadata: the source falls back to the subscription address, a blank author and a
+    // missing original link are hidden, a missing time is unknown.
+    await seedAndNavigate(client, 'reader-demo', '/entries/1', '[data-slot="reader-title"]', preset, {edit: ({core}) => {
+      core.settings.archive_after_months = 0;
+      core.feeds[0].title = null;
+      core.entries[0].author = '   ';
+      core.entries[0].published_at = null;
+      core.entries[0].url = null;
+    }});
+    await textShown(client, `来源：${feeds.base}/reader-demo/1.xml`);
+    await textShown(client, '发布时间：未知发布时间');
+    const missing = await evaluate(client, `({original: document.querySelectorAll('[data-action="open-original"]').length,
+      meta: document.querySelectorAll('[data-slot="reader-meta"]').length})`);
+    assertThat('missing title falls back to the subscription address; blank author and missing link are hidden; missing time is unknown',
+      missing.original === 0 && missing.meta === 2, missing);
+
+    // A subscription that is gone (deleted) while its entry is still stored: the entry stays readable.
+    await seedAndNavigate(client, 'reader-demo', '/entries/1', '[data-slot="reader-title"]', preset, {edit: ({core}) => {
+      core.settings.archive_after_months = 0;
+      core.feeds[0].is_deleted = true;
+    }});
+    await textShown(client, '来源：未知来源');
+    await textShown(client, 'Demo Entry One body.');
+    assertThat('an entry whose subscription is gone shows an unknown source and its body', true);
+
+    // The card and its date group agree in several offsets, including a failed offset (UTC).
+    await seedAndNavigate(client, 'reader-demo', '/entries/2', '[data-slot="reader-title"]', preset, {edit: ({core}) => {
+      core.settings.archive_after_months = 0;
+      for (const entry of core.entries) entry.published_at = '2026-03-01 00:15:00.0 +00:00:00';
+    }});
+    for (const [timezoneId, date, full, fail] of [
+      ['America/New_York', '2026-02-28', '2026-02-28 19:15 UTC-05:00', false],
+      ['Asia/Kathmandu', '2026-03-01', '2026-03-01 06:00 UTC+05:45', false],
+      ['Pacific/Chatham', '2026-03-01', '2026-03-01 14:00 UTC+13:45', false],
+      ['America/New_York', '2026-03-01', '2026-03-01 00:15 UTC', true],
+    ]) {
+      await client.send('Emulation.setTimezoneOverride', {timezoneId});
+      if (fail) ({identifier: script} = await client.send('Page.addScriptToEvaluateOnNewDocument',
+        {source: 'Date.prototype.getTimezoneOffset = () => NaN;'}));
+      await navigate(client, `${base}/entries/2`);
+      await textShown(client, 'Demo Entry Two', '[data-slot="reader-title"]');
+      await textShown(client, `发布时间：${full}`);
+      await pointerClick(client, '[data-action="activate-home"]');
+      await waitFor(client, `(meta => !!meta && ${VISIBLE}(meta))(document.querySelector('[data-slot="entry-card-meta"]'))`);
+      const dates = await evaluate(client, `({cards: [...document.querySelectorAll('[data-slot="entry-card-meta"]')].map(element => element.textContent),
+        groups: [...document.querySelectorAll('[data-slot="entry-group-title"]')].map(element => element.textContent)})`);
+      assertThat(`card and date group agree: ${timezoneId}, ${full}, UTC fallback=${fail}`,
+        dates.cards.every(text => text.includes(date)) && dates.groups.some(text => text.includes(date)), dates);
+      if (script) {
+        await client.send('Page.removeScriptToEvaluateOnNewDocument', {identifier: script});
+        script = undefined;
+      }
+    }
+  } finally {
+    if (script) await client.send('Page.removeScriptToEvaluateOnNewDocument', {identifier: script}).catch(() => {});
+    await client.send('Emulation.setTimezoneOverride', {timezoneId: ''});
+    await setViewport(client, width, height, true, deviceScaleFactor);
+  }
+}
+
+/// The original link opens a separate tab without an opener; the reader stays.
+async function checkOpenOriginal(client) {
+  const before = await evaluate(client, 'location.href');
+  // Bounded, the body included (the signal covers reading it).
+  const listTargets = async () =>
+    (await (await fetch(`${cdpBase}/json/list`, {signal: AbortSignal.timeout(5000)})).json());
+  const known = new Set((await listTargets()).map(target => target.id));
+  await pointerClick(client, '[data-action="open-original"]');
+  let opened;
+  await waitUntil('the original page in a new tab', 10000, async () => {
+    opened = (await listTargets()).find(target => !known.has(target.id) && target.type === 'page' &&
+      target.url.startsWith(`${harness.feeds.base}/original/`));
+    return opened !== undefined;
+  });
+  const popup = connect(opened.webSocketDebuggerUrl);
+  try {
+    await popup.send('Runtime.enable');
+    const opener = await evaluate(popup, 'window.opener === null');
+    assertThat('the original link opens a new tab without an opener and keeps the reader',
+      opener && await evaluate(client, 'location.href') === before, {opener});
+  } finally {
+    popup.close();
+    await fetch(`${cdpBase}/json/close/${opened.id}`, {signal: AbortSignal.timeout(5000)}).catch(() => {});
+  }
+}
+
+// --- Suites besides the regression: the reader in every theme, and the first-run feed smoke.
+
+const THEME_MATRIX = [
+  // [preset, the theme's mark in the page (its accent colour)]
+  ['', ''],
+  ['atlas-sidebar', '#b24c3d'],
+  ['newsprint', '#8f3f2b'],
+  ['amethyst-glass', '#8b5cf6'],
+  ['midnight-ledger', '#53c0bb'],
+];
+
+async function checkReaderThemeMatrix(client) {
+  for (const [theme, mark] of THEME_MATRIX) {
+    const slug = theme || 'default';
+    await seedAndNavigate(client, 'reader-demo', '/entries/2',
+      '[data-page="reader"][data-position-ready="true"] [data-slot^="reader-body-"]', theme);
+    await captureArtifact(client, slug);
+    const page = await evaluate(client, `(() => {
+      const html = document.documentElement.outerHTML;
+      return {reader: !!document.querySelector('[data-page="reader"] [data-layout="reader-page"], [data-page="reader"][data-layout="reader-page"]'),
+        title: document.querySelector('[data-slot="reader-title"]')?.textContent.trim(),
+        customCss: !!document.getElementById('user-custom-css'),
+        mark: ${JSON.stringify(mark)} === '' || html.includes(${JSON.stringify(mark)})};
+    })()`);
+    assertThat(`theme ${slug}: the reader shows the entry ${theme ? 'with the theme' : 'without custom CSS'}`,
+      page.reader && page.title === 'Demo Entry Two' && page.customCss === Boolean(theme) && page.mark, page);
+  }
+}
+
+/// A first run: the server creates the library; the page adds a subscription through the form,
+/// refreshes it and opens its entries.
+async function checkFeedSmoke(client) {
+  const name = 'smoke-feed';
+  const feedUrl = `${harness.feeds.base}/new/${name}.xml`;
+  const card = `[...document.querySelectorAll('li[data-layout="feed-card"]')].find(card => card.textContent.includes(${JSON.stringify(`Added fixture ${name}`)}))`;
+  await seedAndNavigate(client, null, '/feeds', '[data-page="feeds"] [data-field="feed-url-input"]', '');
+  await evaluate(client, `document.querySelector('[data-field="feed-url-input"]').focus()`);
+  await client.send('Input.insertText', {text: feedUrl});
+  await clickSelector(client, '[data-action="add-feed"]');
+  await waitFor(client, `!!${card}`, 90000);
+  const before = await evaluate(client, `${card}.dataset.lastFetchedAt`);
+  await evaluate(client, `${card}.querySelector('[data-action="refresh-feed"]').click()`);
+  await waitFor(client, `(() => { const card = ${card};
+    if (card.dataset.refreshState === 'failed') throw new Error('refresh failed: ' + card.dataset.fetchError);
+    return card.dataset.refreshState === 'success' && BigInt(card.dataset.lastFetchedAt || '0') > BigInt(${JSON.stringify(before || '0')});
+  })()`, 90000);
+  assertThat('the added subscription was fetched when added and when refreshed',
+    harness.feeds.count(`/new/${name}.xml`) === 2, {fetches: harness.feeds.count(`/new/${name}.xml`)});
+  await evaluate(client, `${card}.querySelector('[data-nav="feed-entries"]').click()`);
+  await selectorExists(client, '[data-page="entries"][data-entry-scope="feed"]', 90000);
+  await textShown(client, `Added fixture entry ${name}`, '[data-slot="entry-card-title"]');
+  await captureArtifact(client, 'browser-feed-smoke');
+  assertThat('a first run adds, refreshes and reads a subscription', true);
+}
+
 async function run() {
   await mkdir(artifactDir, { recursive: true });
   let client;
+  // An interrupted run still stops the server it started.
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
+    process.once(signal, () => { (harness?.close() ?? Promise.resolve()).finally(() => process.exit(code)); });
+  }
   try {
+    if (!nativeTarget) harness = await startHarness(serverOptions);
     const page = nativeTarget ? await nativePage() : await newPage('about:blank', cdpBase);
     client = connect(page.webSocketDebuggerUrl);
 
@@ -1408,13 +1891,18 @@ async function run() {
     });
     client.on('Log.entryAdded', ({ entry }) => {
       if (entry?.level === 'error') {
-        recordConsoleError({ type: 'log.error', text: entry.text, source: entry.source, url: entry.url });
+        recordConsoleError({ type: 'log.error', text: entry.text, source: entry.source, url: entry.url,
+          networkRequestId: entry.networkRequestId });
       }
     });
 
     await client.send('Page.enable');
     await client.send('Runtime.enable');
     await client.send('Log.enable');
+    if (harness) {
+      serverPage = await new ServerPage({ client, harness, base,
+        username: serverOptions.username, password: serverOptions.password }).start();
+    }
     const directoryEnvironment = {
       native: Boolean(nativeTarget), assertThat, consoleErrors,
       setViewport: (w, h, mobile, dpr) => setViewport(client, w, h, mobile, dpr),
@@ -1422,16 +1910,25 @@ async function run() {
       capture: name => captureArtifact(client, name),
       manualScroll: () => beginManualScroll(client, 'entries'),
     };
-    if (nativeTarget && (directoryOnly || cli.has('--directory-perf'))) {
+    if (nativeTarget && (directoryOnly || directoryScrollOnly || cli.has('--directory-perf'))) {
       nativeEvidence = {targetId:page.id, browser:await client.send('Browser.getVersion'),
         window:await evaluate(client, '({url:location.href,userAgent:navigator.userAgent,width:innerWidth,height:innerHeight,dpr:devicePixelRatio})')};
     }
     if (cli.has('--directory-perf')) {
       await measureDirectory(client, directoryEnvironment, cli.get('--directory-perf'), artifactDir);
+    } else if (directoryScrollOnly) {
+      await checkDirectoryScroll(client, directoryEnvironment);
     } else if (directoryOnly) {
       await checkDirectoryContracts(client, directoryEnvironment);
+      if (!nativeTarget) await checkDirectoryScroll(client, directoryEnvironment);
     } else if (nativeTarget) {
       await checkNativeWindow(client, page);
+    } else if (suite === 'theme-matrix') {
+      await setViewport(client, width, height, true, deviceScaleFactor);
+      await checkReaderThemeMatrix(client);
+    } else if (suite === 'feed-smoke') {
+      await setViewport(client, width, height, true, deviceScaleFactor);
+      await checkFeedSmoke(client);
     } else {
       await setViewport(client, width, height, true, deviceScaleFactor);
 
@@ -1453,12 +1950,16 @@ async function run() {
       await checkShortDirectory(client);
       await checkDesktop(client);
       await checkNarrowSidebarSearch(client);
+      await checkNavCollapse(client);
       // The default CI theme runs the deeper behavioral contracts once; the
       // existing five-theme layout coverage remains in the shared smoke above.
       if (!preset) {
+        await checkReadingPosition(client);
+        await checkReaderMetadataAndTime(client);
         await seedAndNavigate(client, 'home-reader', '/entries', '[data-page="entries"][data-position-ready="true"]');
         await checkSourceFilterContracts(client, assertThat);
         await checkDirectoryContracts(client, directoryEnvironment);
+        await checkDirectoryScroll(client, directoryEnvironment);
       }
     }
 
@@ -1490,6 +1991,7 @@ async function run() {
     throw error;
   } finally {
     client?.close();
+    await harness?.close();
   }
 }
 

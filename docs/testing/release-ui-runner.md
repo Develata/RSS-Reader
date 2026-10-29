@@ -1,4 +1,40 @@
-# Release UI runner 行为基线与迁移
+# Release UI runner：当前入口与历史迁移
+
+## 当前契约（2026-10-22，v0.2 阶段 D）
+
+```bash
+# 默认自动门禁，完成后退出
+bash scripts/run_release_ui_regression.sh
+# 自动门禁、认证、共享 SQL 浏览器契约、三个固定服务器套件
+bash scripts/run_release_ui_regression.sh --full
+# 正式 Web 长验收单独执行
+bash scripts/run_server_web_regression.sh --suite acceptance --long
+# 只输出计划
+bash scripts/run_release_ui_regression.sh --full --plan
+```
+
+固定组使用 `run_server_web_regression.sh` 的 theme-matrix（port + 10）、regression（port + 11）、feed-smoke（web-port + 11）。`--with-rssr-web` 开认证 smoke；未选固定组时另跑 feed-smoke（web-port + 1）。`--skip-automated` 跳过 Rust 门禁，`--skip-build` 只复用页面，服务器和夹具仍会构建。页面与服务器必须同一构建。没有常驻 SPA 阶段，结束后退出；旧的静态服务/代理阶段选项已删除。
+
+Windows 显式选择 Git Bash（`RSSR_BASH` 或 `--bash`），保持 Cargo、dx、Node 和 Chrome 对子进程可用。`--full` 不包括 acceptance，也不覆盖 CI 四个非默认主题的全页面回归。固定端口要求 port 与 web-port 均不超过 55524，以容纳 CDP 派生端口。
+
+`summary.json` / `summary.md` 记录每阶段状态与退出码；skipped 不等于通过，failed/interrupted/blocked 表示失败、中断或未运行。`completed` 仅说明选中的命令结束，不代表人工验收。构建与日志规则见 [服务器浏览器回归](./server-web-regression.md)。
+
+`--with-browser-contracts` / `--full` 运行 14 个共享 SQL、内存执行器与正文 targets；旧三个浏览器存储 harness 已退役。逐项语义对应见 [阶段 D 迁移表](./phase-d-browser-contract-migration.md)。
+
+独立 runner 校验：
+
+```bash
+cargo fmt --manifest-path scripts/release-ui/Cargo.toml --check
+cargo clippy --manifest-path scripts/release-ui/Cargo.toml --all-targets --locked --target-dir target/release-ui-runner -- -D warnings
+cargo test --manifest-path scripts/release-ui/Cargo.toml --locked --target-dir target/release-ui-runner
+python -X utf8 scripts/release-ui/tests/acceptance.py --bash "$BASH"
+```
+
+Windows 深层 worktree 若在真实构建场景遇到 MSVC `LNK1104`，先核对输出路径长度；可用 `--artifacts-root E:/rssr-qa/release-ui` 缩短测试目录。每次仍建立独立目录并保留日志，中文和空格路径案例继续执行，不因此跳过编译器配置验收。
+
+## 历史迁移记录（2026-10-03 至 2026-10-06）
+
+下文保留当时的契约、旧命令和实测结果，只供原提交复现；当前操作以上一节为准，不把历史失败或跳过改写成通过。
 
 基线：`f1984c04f2a2875faaa9e175d746417ae80ebcf6` 的
 `scripts/run_release_ui_regression.sh`，409 行。2026-10-03 在 Windows
@@ -18,7 +54,7 @@ LAPTOP-H6JEOCF0 / Git Bash 检查；下表来自源码，不冒充整套实测�
 | bundle | 首个部署 smoke / fixed smoke / SPA 之前构建一次；后续同 profile 复用；skip-build 仍检查 public 目录 |
 | 部署 smoke | 拒绝已有监听；启动 cargo rssr-web；健康检查、登录重定向、cookie 会话、feeds/settings、登出；失败时清理 |
 | 部署 browser smoke | with-rssr-web 且无 fixed-smokes 时执行，端口 web-port + 1 |
-| fixed smokes | reader 五主题 (port + 10) → 小视口 (port + 11，CDP 再 + 10000) → browser feed (web-port + 11) |
+| fixed smokes | reader 五主题 (port + 10) → 小视口 (port + 11，CDP 再 + 10000) → proxy feed (web-port + 10) → browser feed (web-port + 11) |
 | SPA | 复用 bundle，调用 `run_web_spa_regression_server.sh`，终端常驻以便手工检查 |
 | 产物 | summary.md、automated-gates.log、browser-contracts.log、rssr-web.log、rssr-web-browser-feed-smoke.log、fixed-smokes.log，四个固定 smoke 子目录 |
 | 失败 | set -e / pipefail 传递命令失败；不会继续后续阶段；summary 可能仍为 pending，SPA 正常运行也保留 pending |
@@ -27,6 +63,10 @@ LAPTOP-H6JEOCF0 / Git Bash 检查；下表来自源码，不冒充整套实测�
 本轮保持命令、阶段顺序、profile、产物位置和 skip 的含义。失败报告改为
 failed/interrupted，后续未运行阶段为 blocked，显式未选择的阶段为 skipped；
 不把进程退出 0 或 SPA 启动写作人工验收通过。
+
+v0.2 C4a 起 `rssr-web` 不再提供 `/feed-proxy`：`proxy-feed` 阶段、`--skip-external-feed`
+选项以及随之而来的 `partial` 分组状态和 `completed-with-skips` 总体状态已移除；固定 smoke
+为 reader 五主题、小视口、browser feed 三项。上表与下面带日期的证据章节是当时的记录，不随之改写。
 
 ## 实现选择
 
@@ -164,10 +204,10 @@ Chrome 154.0.8037.93，Python 3.14.7。仓库根目录保持 `E:/gitclone/RSS-Re
 - 原 Bash 自动门禁实跑通过，其他组 skipped，10.50 秒；新 CLI 相同四条自动门禁也通过。
 - 新 CLI 从当前源码构建的一轮 aggregate（自动门禁 + rssr-web + fixed，未选择 browser contracts
   和 SPA）耗时 159.45 秒，**最终退出 1**。Web bundle 只构建一次，登录 smoke、五主题 Reader、
-  小视口 278 项通过；外部代理 smoke 失败，fixed-browser-feed 正确 blocked。
-- 后续跳过外部 feed 的一轮聚合耗时 167.87 秒，exit 0，外部代理 smoke 明确 skipped、固定组为 partial。
-  自动门禁、51 项 wasm 契约、一次 Web 构建、登录、五主题、278 项小视口与既有同源 browser feed
-  流程通过。外部代理 smoke 与该跳过选项已随 `/feed-proxy` 于 2026-10-20 退役删除。
+  小视口 278 项通过；proxy-feed 失败，fixed-browser-feed 正确 blocked。
+- 后续 `--release --full --skip-external-feed --no-serve` 的实际聚合耗时 167.87 秒，
+  exit 0 / `completed-with-skips`。自动门禁、51 项 wasm 契约、一次 Web 构建、登录、五主题、
+  278 项小视口与既有同源 browser feed 流程通过；proxy-feed 明确 skipped，固定组为 partial。
   日志 `target/release-ui-validation/aggregate-local/`。阶段 PID 均已退出，七个端口可重绑。
 - 真实阻塞：既有默认 feed `www.ruanyifeng.com` 本机 DNS 返回 `198.18.1.2` / `2001:2::f3`，
   rssr-web 原有安全规则拒绝并返回 400。离开受限 token 的只读核对仍返回这些地址，HTTPS HEAD
@@ -189,9 +229,9 @@ Chrome 154.0.8037.93，Python 3.14.7。仓库根目录保持 `E:/gitclone/RSS-Re
 外部 feed 的 DNS/HTTPS 限制仍保留为单独未通过项，不以本地 fixture 代替外部可达性证据。
 Linux/Windows CI 及最终提交状态以交接记录和 PR 为准；不能把本机 Windows 结果写作
 Unix 信号验证。完整交接见
-[2026-10-03-release-ui-runner-rust.md](../handoffs/2026-10-03-release-ui-runner-rust.md)。
+[2026-10-03-release-ui-runner-rust.md](../handoffs/archive/2026-10/2026-10-03-release-ui-runner-rust.md)。
 后续审阅修复及对应复现证据见
-[2026-10-03-release-ui-runner-review-fixes.md](../handoffs/2026-10-03-release-ui-runner-review-fixes.md)。
+[2026-10-03-release-ui-runner-review-fixes.md](../handoffs/archive/2026-10/2026-10-03-release-ui-runner-review-fixes.md)。
 
 ## web-auth 生命周期迁移（第一小步，2026-10-05）
 
@@ -237,12 +277,12 @@ readiness 日志 `rssr-web-readiness.log` 和断言日志
 Cargo JSON。后续 HTTP 迁移应在成本与语义验证后移除这一单份 adapter，
 不得长期维护两套断言。新增测试使用 Python 标准库本地 HTTP peer，
 它属于验收夹具，不进入产品运行时。迁移测量、平台边界和 CI 结果见
-[交接记录](../handoffs/2026-10-05-web-auth-owned-process.md)。
+[交接记录](../handoffs/archive/2026-10/2026-10-05-web-auth-owned-process.md)。
 
 2026-10-06 的清理等待及 Windows 文件路径阻塞修复、固定输入复测与最终 CI
-状态见 [后续交接](../handoffs/2026-10-06-web-auth-blocker-fixes.md)。
+状态见 [后续交接](../handoffs/archive/2026-10/2026-10-06-web-auth-blocker-fixes.md)。
 2026-10-06 的退出观察延迟复测后，readiness 使用有限的 5/10/20 ms
 早期 sleep，随后恢复 40 ms；Unix stop 使用 5/10 ms 后恢复 25 ms。
 完整 1.5 秒进程组宽限与 ESRCH 提前结束条件保持。固定版本的分段归因、
 30 组 A/B/C 耗时/CPU 结果和 Windows 补验见
-[轮询优化交接](../handoffs/2026-10-06-web-auth-polling-latency.md)。
+[轮询优化交接](../handoffs/archive/2026-10/2026-10-06-web-auth-polling-latency.md)。

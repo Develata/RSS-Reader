@@ -1,0 +1,135 @@
+{
+  "original": "E:\\gitclone\\RSS-Reader\\target\\native-readiness-20261028\\upgrade\\before.sqlite3",
+  "candidate": "E:\\gitclone\\RSS-Reader\\target\\release-v0.2.1-20261028\\unpacked\\RSS-Reader-windows-x86_64\\RSS-Reader\\library.sqlite3",
+  "tables": {
+    "entries": {
+      "before": 5000,
+      "after": 5000,
+      "exactMatch": true,
+      "changedColumns": []
+    },
+    "entry_contents": {
+      "before": 5000,
+      "after": 5000,
+      "exactMatch": true,
+      "changedColumns": []
+    },
+    "feeds": {
+      "before": 6,
+      "after": 6,
+      "exactMatch": false,
+      "changedColumns": [
+        "last_fetched_at",
+        "refresh_diagnosed",
+        "refresh_issued",
+        "updated_at"
+      ]
+    },
+    "app_settings": {
+      "before": 0,
+      "after": 0,
+      "exactMatch": true,
+      "changedColumns": []
+    }
+  },
+  "originalSha256": "e0e2b6b4523ccf03e2bb982a8bdd6b6938beca8e24acc8a3668392cde90b0172",
+  "integrity": "ok",
+  "archiveColumnPresent": true,
+  "archivedRows": 0,
+  "migrationsBefore": [
+    [
+      1,
+      "baseline",
+      "4d803f258f9fa7f2edbc8db0cf9f862978ec46c4131a359340fbbbebeb9ce5ff98a6d048057cfc8f3e3d290c6a94bdc4",
+      "2026-10-28T09:40:12.5681757Z"
+    ]
+  ],
+  "migrationsAfter": [
+    [
+      1,
+      "baseline",
+      "4d803f258f9fa7f2edbc8db0cf9f862978ec46c4131a359340fbbbebeb9ce5ff98a6d048057cfc8f3e3d290c6a94bdc4",
+      "2026-10-28T09:40:12.5681757Z"
+    ],
+    [
+      2,
+      "manual_archive",
+      "b4f7cd4cf812458c489da875c5b8763b0386233ddb7b50f0d9db379fe3604e497eb6c22f1d77c1ca3a42b092807ae5fe",
+      "2026-10-28T12:30:33.7997131Z"
+    ]
+  ],
+  "fixtureOrigin": "A synthetic single-library fixture opened by the official Windows v0.2.0 app in the earlier native acceptance. Android is an initialized-directory injected fixture, not original Android legacy data.",
+  "limitations": [
+    "No custom settings rows exist in the source fixture.",
+    "Feed refresh ticket counters and timestamps may change during native startup."
+  ],
+  "refreshTickets": [
+    {
+      "feedId": 1,
+      "before": {
+        "refresh_diagnosed": 1,
+        "refresh_issued": 1
+      },
+      "after": {
+        "refresh_diagnosed": 2,
+        "refresh_issued": 2
+      }
+    },
+    {
+      "feedId": 2,
+      "before": {
+        "refresh_diagnosed": 1,
+        "refresh_issued": 1
+      },
+      "after": {
+        "refresh_diagnosed": 2,
+        "refresh_issued": 2
+      }
+    },
+    {
+      "feedId": 3,
+      "before": {
+        "refresh_diagnosed": 1,
+        "refresh_issued": 1
+      },
+      "after": {
+        "refresh_diagnosed": 2,
+        "refresh_issued": 2
+      }
+    },
+    {
+      "feedId": 4,
+      "before": {
+        "refresh_diagnosed": 1,
+        "refresh_issued": 1
+      },
+      "after": {
+        "refresh_diagnosed": 2,
+        "refresh_issued": 2
+      }
+    },
+    {
+      "feedId": 5,
+      "before": {
+        "refresh_diagnosed": 1,
+        "refresh_issued": 1
+      },
+      "after": {
+        "refresh_diagnosed": 2,
+        "refresh_issued": 2
+      }
+    },
+    {
+      "feedId": 6,
+      "before": {
+        "refresh_diagnosed": 1,
+        "refresh_issued": 1
+      },
+      "after": {
+        "refresh_diagnosed": 2,
+        "refresh_issued": 2
+      }
+    }
+  ],
+  "refreshTicketsNeverDecrease": true
+}

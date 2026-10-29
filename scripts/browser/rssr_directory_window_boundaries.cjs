@@ -7,7 +7,7 @@ const fixture=require('./directory_fixture.cjs');
 (async()=>{
   const output=path.resolve(process.env.ARTIFACT_DIR||'target/directory-window-boundaries-20261027');
   await fs.mkdir(output,{recursive:true});
-  const browser=await chromium.launch({channel:'chrome',headless:true});
+  const browser=await chromium.launch({executablePath:process.env.CHROME_BIN,channel:process.env.CHROME_BIN?undefined:'chrome',headless:true});
   const context=await browser.newContext({viewport:{width:1440,height:900}});
   await fixture.install(context,path.resolve(__dirname,'../..'));
   await context.addInitScript(()=>{
@@ -52,7 +52,12 @@ const fixture=require('./directory_fixture.cjs');
   };
   const scenario=async(name,run)=>{
     try{const evidence=await run();results.push({name,pass:true,evidence});}
-    catch(error){results.push({name,pass:false,error:String(error),state:await snapshot().catch(()=>null)});}
+    catch(error){
+      results.push({name,pass:false,error:String(error),state:await snapshot().catch(()=>null)});
+      const artifact=path.join(output,`failure-${results.length}`);
+      await fs.writeFile(artifact+'.html',await page.content());
+      await page.screenshot({path:artifact+'.png'});
+    }
   };
   try{
     for(const change of ['search','source-filter','page','group','empty-and-restore','reader-return'])await scenario('Retired focus reply after '+change,async()=>{

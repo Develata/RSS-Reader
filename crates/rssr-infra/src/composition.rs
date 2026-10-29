@@ -1,135 +1,124 @@
 use std::sync::Arc;
 
+use crate::{application_adapters::InfraOpmlCodec, opml::OpmlCodec};
 use rssr_application::{AppCompositionInput, AppUseCases};
 
 #[cfg(not(target_arch = "wasm32"))]
-use {
-    crate::{
-        application_adapters::{
-            InfraFeedRefreshSource, InfraOpmlCodec, SqliteAppStateAdapter,
-            SqlitePersistenceMutations, SqliteRefreshStore,
-        },
-        db::{
-            SqlitePool, app_state_repository::SqliteAppStateRepository,
-            entry_repository::SqliteEntryRepository, feed_repository::SqliteFeedRepository,
-            settings_repository::SqliteSettingsRepository,
-        },
-        fetch::FetchClient,
-        opml::OpmlCodec,
-        parser::FeedParser,
-    },
-    rssr_application::SystemClock,
+use crate::{
+    application_adapters::InfraFeedRefreshSource, fetch::FetchClient, outbound::OutboundPolicy,
+    parser::FeedParser, subscription_probe::HttpSubscriptionProbe,
 };
 
-#[cfg(target_arch = "wasm32")]
-use {
-    crate::application_adapters::browser::{
-        adapters::{
-            BrowserAppStateAdapter, BrowserEntryRepository, BrowserFeedRefreshSource,
-            BrowserFeedRepository, BrowserOpmlCodec, BrowserPersistenceMutations,
-            BrowserRefreshStore, BrowserSettingsRepository,
-        },
-        state::BrowserStore,
-    },
-    rssr_application::ClockPort,
-};
-
-#[cfg(not(target_arch = "wasm32"))]
-pub struct NativeSqliteComposition {
+/// Use cases over one library, plus the entry store used by body localization.
+pub struct LibraryComposition {
     pub use_cases: AppUseCases,
-    pub entry_repository: Arc<SqliteEntryRepository>,
+    pub entries: Arc<crate::store::LibraryEntries>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn compose_native_sqlite_use_cases(
-    index_pool: SqlitePool,
-    content_pool: SqlitePool,
-) -> NativeSqliteComposition {
-    compose_native_sqlite_use_cases_with_outbound(
-        index_pool,
-        content_pool,
-        crate::outbound::OutboundPolicy::Unrestricted,
+pub fn compose_library_use_cases(store: crate::store::LibraryStore) -> LibraryComposition {
+    compose_library_with_sources(
+        store,
+        HttpSubscriptionProbe::with_feed_client(),
+        FetchClient::new(),
     )
 }
 
-/// 同 [`compose_native_sqlite_use_cases`]，订阅探测与 feed 抓取按 `outbound` 限制目标地址。
+/// [`compose_library_use_cases`] whose subscription probing and feed fetching follow `policy`
+/// (a server's [`OutboundPolicy::PublicOnly`]); a client that cannot be built is an error.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn compose_native_sqlite_use_cases_with_outbound(
-    index_pool: SqlitePool,
-    content_pool: SqlitePool,
-    outbound: crate::outbound::OutboundPolicy,
-) -> NativeSqliteComposition {
-    let feed_repository = Arc::new(SqliteFeedRepository::new(index_pool.clone()));
-    let entry_repository = Arc::new(SqliteEntryRepository::new_with_content_pool(
-        index_pool.clone(),
-        content_pool.clone(),
-    ));
-    let settings_repository = Arc::new(SqliteSettingsRepository::new(index_pool.clone()));
-    let app_state_repository = Arc::new(SqliteAppStateRepository::new(index_pool.clone()));
-    let app_state = Arc::new(SqliteAppStateAdapter::new(app_state_repository));
-    let persistence_mutations =
-        Arc::new(SqlitePersistenceMutations::new(index_pool, content_pool.clone()));
-
-    let use_cases = AppUseCases::compose(AppCompositionInput {
-        feed_repository: feed_repository.clone(),
-        entry_index_repository: entry_repository.clone(),
-        entry_content_repository: entry_repository.clone(),
-        settings_repository,
-        app_state,
-        subscription_probe: Arc::new(
-            crate::subscription_probe::HttpSubscriptionProbe::with_outbound(
-                crate::fetch::client::feed_http_client(
-                    crate::fetch::client::FEED_TIMEOUTS,
-                    outbound,
-                ),
-                outbound,
-            ),
-        ),
-        refresh_source: Arc::new(InfraFeedRefreshSource::new(
-            FetchClient::with_outbound(outbound),
-            FeedParser::new(),
-        )),
-        refresh_store: Arc::new(SqliteRefreshStore::new(
-            feed_repository.clone(),
-            entry_repository.clone(),
-        )),
-        opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
-        clock: Arc::new(SystemClock),
-        subscription_activation: persistence_mutations.clone(),
-        subscription_removal: persistence_mutations.clone(),
-        config_replacement: persistence_mutations,
-    });
-
-    NativeSqliteComposition { use_cases, entry_repository }
+pub fn compose_library_use_cases_with(
+    store: crate::store::LibraryStore,
+    policy: &OutboundPolicy,
+) -> anyhow::Result<LibraryComposition> {
+    if *policy == OutboundPolicy::Unrestricted {
+        return Ok(compose_library_use_cases(store));
+    }
+    Ok(compose_library_with_sources(
+        store,
+        HttpSubscriptionProbe::with_policy(policy.clone())?,
+        FetchClient::with_policy(policy.clone())?,
+    ))
 }
 
-#[cfg(target_arch = "wasm32")]
-pub fn compose_browser_use_cases(
-    state: BrowserStore,
-    client: reqwest::Client,
-    clock: Arc<dyn ClockPort>,
-) -> AppUseCases {
-    let feed_repository = Arc::new(BrowserFeedRepository::new(state.clone()));
-    let entry_repository = Arc::new(BrowserEntryRepository::new(state.clone()));
-    let settings_repository = Arc::new(BrowserSettingsRepository::new(state.clone()));
-    let app_state = Arc::new(BrowserAppStateAdapter::new(state.clone()));
-    let persistence_mutations = Arc::new(BrowserPersistenceMutations::new(state.clone()));
+#[cfg(not(target_arch = "wasm32"))]
+fn compose_library_with_sources(
+    store: crate::store::LibraryStore,
+    subscription_probe: HttpSubscriptionProbe,
+    fetch_client: FetchClient,
+) -> LibraryComposition {
+    compose_library_ports(
+        store,
+        Arc::new(subscription_probe),
+        Arc::new(InfraFeedRefreshSource::new(fetch_client, FeedParser::new())),
+    )
+}
 
-    AppUseCases::compose(AppCompositionInput {
-        feed_repository: feed_repository.clone(),
-        entry_index_repository: entry_repository.clone(),
-        entry_content_repository: entry_repository,
-        settings_repository,
-        app_state,
-        subscription_probe: Arc::new(crate::subscription_probe::HttpSubscriptionProbe::new(
-            client.clone(),
-        )),
-        refresh_source: Arc::new(BrowserFeedRefreshSource::new(client.clone())),
-        refresh_store: Arc::new(BrowserRefreshStore::new(state)),
-        opml_codec: Arc::new(BrowserOpmlCodec),
-        clock,
-        subscription_activation: persistence_mutations.clone(),
-        subscription_removal: persistence_mutations.clone(),
-        config_replacement: persistence_mutations,
-    })
+/// A library whose network ports are unavailable, including when called directly through use
+/// cases. The Pages host additionally disables the periodic refresh loop and remote config.
+pub fn compose_offline_library_use_cases(store: crate::store::LibraryStore) -> LibraryComposition {
+    compose_library_ports(store, Arc::new(NetworkDisabled), Arc::new(NetworkDisabled))
+}
+
+fn compose_library_ports(
+    store: crate::store::LibraryStore,
+    subscription_probe: Arc<dyn rssr_application::SubscriptionProbePort>,
+    refresh_source: Arc<dyn rssr_application::FeedRefreshSourcePort>,
+) -> LibraryComposition {
+    use crate::store::{
+        LibraryAppState, LibraryEntries, LibraryFeeds, LibraryMutations, LibraryQueries,
+        LibraryRefreshStore, LibrarySettings,
+    };
+
+    let entries = Arc::new(LibraryEntries::new(store.clone()));
+    let mutations = Arc::new(LibraryMutations::new(store.clone()));
+    let settings = Arc::new(LibrarySettings::new(store.clone()));
+    let workspace_edits = Arc::new(crate::store::LibraryWorkspaceEdits::new(store.clone()));
+    let use_cases = AppUseCases::compose(AppCompositionInput {
+        entry_batch: workspace_edits.clone(),
+        feed_edit: workspace_edits,
+        feed_repository: Arc::new(LibraryFeeds::new(store.clone())),
+        entry_index_repository: entries.clone(),
+        settings_repository: settings.clone(),
+        settings_update: settings,
+        app_state: Arc::new(LibraryAppState::new(store.clone())),
+        subscription_probe,
+        refresh_source,
+        refresh_store: Arc::new(LibraryRefreshStore::new(store.clone())),
+        opml_codec: Arc::new(InfraOpmlCodec::new(OpmlCodec::new())),
+        clock: Arc::new(crate::platform_clock::PlatformClock),
+        subscription_activation: mutations.clone(),
+        subscription_removal: mutations.clone(),
+        config_replacement: mutations,
+        library_queries: Arc::new(LibraryQueries::new(store)),
+    });
+    LibraryComposition { use_cases, entries }
+}
+
+struct NetworkDisabled;
+
+fn network_disabled() -> anyhow::Error {
+    rssr_domain::DomainError::Network("静态演示已禁用在线订阅与刷新。".into()).into()
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl rssr_application::SubscriptionProbePort for NetworkDisabled {
+    async fn probe(
+        &self,
+        _url: &url::Url,
+    ) -> anyhow::Result<rssr_application::SubscriptionProbeOutcome> {
+        Err(network_disabled())
+    }
+}
+
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+impl rssr_application::FeedRefreshSourcePort for NetworkDisabled {
+    async fn refresh(
+        &self,
+        _target: &rssr_application::RefreshTarget,
+    ) -> anyhow::Result<rssr_application::FeedRefreshSourceOutput> {
+        Err(network_disabled())
+    }
 }

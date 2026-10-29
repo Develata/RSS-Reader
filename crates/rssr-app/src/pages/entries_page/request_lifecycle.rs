@@ -1,8 +1,8 @@
 //! Page-local initialization/query rules, independent of the UI executor.
 //!
 //! The adapter owns task lifetimes and publishes the returned intents. This model
-//! owns only request identities; revisions and article data stay in the existing
-//! page state. Bootstrap and queries deliberately have separate generations.
+//! owns read request identities; revisions and article data stay in page state.
+//! Bootstrap and queries have separate generations. Preference writes live in session/workspace.
 
 use super::{intent::EntriesPageIntent, state::EntriesPageState};
 
@@ -34,6 +34,13 @@ pub(super) enum QueryCompletion {
 }
 
 impl EntriesRequestLifecycle {
+    pub(super) fn has_started(&self) -> bool {
+        self.bootstrap_generation != 0
+    }
+    pub(super) fn invalidate_query(&mut self) {
+        self.query_generation = self.query_generation.wrapping_add(1);
+    }
+
     pub(super) fn begin_bootstrap(&mut self, state: &EntriesPageState) -> BootstrapRequest {
         self.bootstrap_generation = self.bootstrap_generation.wrapping_add(1);
         BootstrapRequest {
@@ -132,6 +139,7 @@ mod tests {
                 })
                 .collect(),
             archived_count: 3,
+            truncated: false,
         }
     }
 
@@ -159,7 +167,8 @@ mod tests {
         let mut state = EntriesPageState::new();
         let first = lifecycle.begin_bootstrap(&state);
         assert!(first.load_preferences);
-        state.preferences_load = PreferencesLoadState::Unavailable("read failed".into());
+        state.preferences_load =
+            PreferencesLoadState::Unavailable { message: "read failed".into(), tone: "error" };
         let retry = lifecycle.begin_bootstrap(&state);
         assert!(retry.load_preferences);
         assert!(!lifecycle.accepts_bootstrap(first));
@@ -176,7 +185,8 @@ mod tests {
         let mut lifecycle = EntriesRequestLifecycle::default();
         let mut state = EntriesPageState::new();
         assert!(lifecycle.begin_query(&state, Some(2)).is_none());
-        state.preferences_load = PreferencesLoadState::Unavailable("read failed".into());
+        state.preferences_load =
+            PreferencesLoadState::Unavailable { message: "read failed".into(), tone: "error" };
         let fallback = lifecycle.begin_query(&state, None).unwrap();
         publish(&lifecycle, fallback, &mut state, [loaded(&[1])]);
         assert_eq!(state.entries.len(), 1);

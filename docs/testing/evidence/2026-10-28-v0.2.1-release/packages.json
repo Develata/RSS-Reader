@@ -1,0 +1,125 @@
+{
+  "source": "dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+  "macos": [
+    {
+      "architecture": "x86_64",
+      "version": "0.2.1",
+      "cpuType": 16777223,
+      "executedOnThisHost": false
+    },
+    {
+      "architecture": "aarch64",
+      "version": "0.2.1",
+      "cpuType": 16777228,
+      "executedOnThisHost": false
+    }
+  ],
+  "web": [
+    {
+      "platform": "linux-x86_64",
+      "buildId": "git-dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "verifiedFiles": 4,
+      "ciChecks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "platform": "windows-x86_64",
+      "buildId": "git-dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "verifiedFiles": 4,
+      "ciChecks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "platform": "macos-x86_64",
+      "buildId": "git-dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "verifiedFiles": 4,
+      "ciChecks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    },
+    {
+      "platform": "macos-aarch64",
+      "buildId": "git-dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "verifiedFiles": 4,
+      "ciChecks": [
+        "package hashes and WASM id",
+        "new library",
+        "login",
+        "static index",
+        "matching build writes",
+        "old build rejected without mutation"
+      ]
+    }
+  ],
+  "publicFilesIdenticalAcrossPlatforms": {
+    "public/assets/rssr-app-dxh3661abde98c247.js": "ad8fe6f2796e068209ef6d5ad354bd71911dddf249b693cf9daef22e3dfecf83",
+    "public/assets/rssr-app_bg-dxh9dcbe77552f3bc9.wasm": "d193ae7a7fc04f7836bcfc6415c3d75d62e074f2479813919ddaae0371a393f9",
+    "public/index.html": "a5da27f99017864be3003c176b2e0219f18db4bb3a3bd0a4b2a6288f6e6f1ede"
+  },
+  "containerChecks": {
+    "status": "pass",
+    "build_id": "git-dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "image": "rss-reader-smoke:dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+    "checks": [
+      "new data volume, login and matching build write",
+      "old build rejected without mutation",
+      "image server is the exact packaged binary",
+      "owner CLI shares the running server library",
+      "CLI rejects root and unrelated uid for owner data",
+      "owner CLI backup while server runs",
+      "graceful restart retains session and data",
+      "read-only legacy credential volume migrates unchanged; old session rejected",
+      "migrated credentials survive removal of the legacy mount"
+    ]
+  },
+  "aabZipStructure": [
+    {
+      "version": "v0.2.0",
+      "entries": 951,
+      "manifestIndex": 950,
+      "duplicateNames": false,
+      "symbolicLinks": false
+    },
+    {
+      "version": "v0.2.1",
+      "entries": 951,
+      "manifestIndex": 950,
+      "duplicateNames": false,
+      "symbolicLinks": false
+    }
+  ],
+  "registry": [
+    {
+      "tag": "v0.2.1",
+      "digest": "sha256:494d08f3a7c7d2fc1a38f074f0866b0c9af13fab0cfee130c1b600a19a0069cb",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json"
+    },
+    {
+      "tag": "sha-dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee",
+      "digest": "sha256:494d08f3a7c7d2fc1a38f074f0866b0c9af13fab0cfee130c1b600a19a0069cb",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json"
+    },
+    {
+      "tag": "latest",
+      "digest": "sha256:494d08f3a7c7d2fc1a38f074f0866b0c9af13fab0cfee130c1b600a19a0069cb",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json"
+    }
+  ]
+}

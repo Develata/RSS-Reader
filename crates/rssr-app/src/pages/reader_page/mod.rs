@@ -1,7 +1,7 @@
-mod facade;
+pub(crate) mod facade;
 mod image_viewer;
 pub(crate) mod intent;
-mod reducer;
+pub(crate) mod reducer;
 mod result_lifecycle;
 mod session;
 pub(crate) mod state;
@@ -15,7 +15,7 @@ use crate::{
     hooks::use_mobile_back_navigation::{navigate_back, use_mobile_back_navigation_with_dismiss},
     hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
-    ui::{use_reactive_side_effect, use_reactive_task},
+    ui::{AppShellState, use_reactive_side_effect, use_reactive_task},
 };
 
 pub(crate) use self::session::ReaderPageSession;
@@ -33,7 +33,6 @@ pub fn ReaderPage(entry_id: i64) -> Element {
 
     let navigator = use_navigator();
     let facade = use_reader_page_workspace(entry_id);
-    let shortcuts = facade.shortcuts();
     let previous_facade = facade.clone();
     let read_facade = facade.clone();
     let starred_facade = facade.clone();
@@ -51,18 +50,16 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             AppNav { on_back: move |_| {
                 if !viewer.write().close() { navigate_back(navigator, Some(AppRoute::EntriesPage {})); }
             } }
-            // 快捷键处理器必须挂在**不包含 AppNav** 的容器上。此前挂在外层 article 上，
-            // 而 AppNav 里的搜索框就在它内部：keydown 冒泡上来后，在搜索框里打一个 m
-            // 就会把当前文章标记为已读，打 f 会切换收藏，方向键还会直接换页。
+            // 快捷键监听整个页面（hooks/use_reader_shortcuts.rs），输入框里的按键不算；阅读区
+            // 仍可用 Tab 进入，读屏在这里读出快捷键说明。
             div {
                 "data-layout": "reader-shortcut-scope",
                 role: "region",
                 aria_label: "文章阅读区",
                 aria_describedby: "reader-shortcuts-help",
                 tabindex: 0,
-                onkeydown: move |event| shortcuts.call(event),
             p { id: "reader-shortcuts-help", class: "sr-only",
-                "阅读区内可用 M 切换已读，F 切换收藏，左右方向键切换未读文章。"
+                "阅读页可用 J、K 或左右方向键切换未读文章，M 切换已读，F 切换收藏；在输入框里不生效。"
             }
             header { class: "reader-header", "data-layout": "reader-header",
                 h1 { class: "reader-title", "data-slot": "reader-title", "{facade.title()}" }
@@ -85,9 +82,9 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             }
             StatusBanner {
                 message: facade.error().unwrap_or_else(|| facade.status_message()).to_string(),
-                tone: (if facade.error().is_some() { "error" } else { facade.status_tone() }).to_string(),
+                tone: (if facade.error().is_some() { facade.error_tone() } else { facade.status_tone() }).to_string(),
                 announce: true,
-                visually_hidden: facade.error().is_none() && facade.status_tone() != "error",
+                visually_hidden: !facade.status_shown(),
             }
             if facade.error().is_none() {
                 div { class: "reader-body", "data-layout": "reader-body", "data-state": "{facade.body_state()}",
@@ -117,64 +114,76 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                         }
                     }
                 }
-                nav { class: "reader-bottom-bar", "data-layout": "reader-bottom-bar", "aria-label": "阅读快捷操作",
-                    button {
-                        class: "reader-bottom-bar__button",
-                        disabled: !facade.has_previous_entry_target(),
-                        title: if facade.has_previous_entry_target() { "上一篇未读文章" } else { "此方向没有未读文章" },
-                        "data-state": "{facade.previous_entry_state()}",
-                        "data-nav": "previous-unread-entry",
-                        onclick: move |_| {
-                            if let Some(target) = previous_facade.previous_entry_target() {
-                                navigator.push(AppRoute::ReaderPage { entry_id: target });
-                            }
-                        },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "‹" }
-                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "上一未读" }
-                    }
-                    button {
-                        class: "reader-bottom-bar__button",
-                        "data-state": "{facade.read_state()}",
-                        "data-action": "mark-read",
-                        onclick: move |_| {
-                            read_facade.toggle_read(false);
-                        },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "{facade.read_toggle_icon()}" }
-                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
-                            "{facade.read_toggle_text()}"
-                            span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（M）" }
+            }
+            }
+        }
+        // 底栏固定在视口底部，位置不随文章长短变化；放在 article 之外：有的主题给阅读页加了
+        // backdrop-filter，会让里面的 fixed 定位相对于阅读页而不是视口。
+        if facade.error().is_none() {
+            nav { class: "reader-bottom-bar", "data-layout": "reader-bottom-bar", "aria-label": "阅读快捷操作",
+                button {
+                    class: "reader-bottom-bar__button",
+                    disabled: !facade.has_previous_entry_target(),
+                    title: if facade.has_previous_entry_target() { "上一篇未读文章（K 或 ←）" } else { "此方向没有未读文章" },
+                    "data-state": "{facade.previous_entry_state()}",
+                    "data-nav": "previous-unread-entry",
+                    onclick: move |_| {
+                        if let Some(target) = previous_facade.previous_entry_target() {
+                            navigator.push(AppRoute::ReaderPage { entry_id: target });
                         }
-                    }
-                    button {
-                        class: "reader-bottom-bar__button",
-                        "data-state": "{facade.starred_state()}",
-                        "data-action": "toggle-starred",
-                        aria_pressed: facade.is_starred(),
-                        onclick: move |_| {
-                            starred_facade.toggle_starred(false);
-                        },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "{facade.starred_toggle_icon()}" }
-                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
-                            "收藏"
-                            span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（F）" }
-                        }
-                    }
-                    button {
-                        class: "reader-bottom-bar__button",
-                        disabled: !facade.has_next_entry_target(),
-                        title: if facade.has_next_entry_target() { "下一篇未读文章" } else { "此方向没有未读文章" },
-                        "data-state": "{facade.next_entry_state()}",
-                        "data-nav": "next-unread-entry",
-                        onclick: move |_| {
-                            if let Some(target) = next_facade.next_entry_target() {
-                                navigator.push(AppRoute::ReaderPage { entry_id: target });
-                            }
-                        },
-                        span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "›" }
-                        span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label", "下一未读" }
+                    },
+                    span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "‹" }
+                    span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
+                        "上一未读"
+                        span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（K）" }
                     }
                 }
-            }
+                button {
+                    class: "reader-bottom-bar__button",
+                    disabled: !facade.flags_known(entry_id),
+                    "data-state": "{facade.read_state()}",
+                    "data-action": "mark-read",
+                    onclick: move |_| {
+                        read_facade.toggle_read(false);
+                    },
+                    span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "{facade.read_toggle_icon()}" }
+                    span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
+                        "{facade.read_toggle_text()}"
+                        span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（M）" }
+                    }
+                }
+                button {
+                    class: "reader-bottom-bar__button",
+                    disabled: !facade.flags_known(entry_id),
+                    "data-state": "{facade.starred_state()}",
+                    "data-action": "toggle-starred",
+                    aria_pressed: facade.is_starred(),
+                    onclick: move |_| {
+                        starred_facade.toggle_starred(false);
+                    },
+                    span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "{facade.starred_toggle_icon()}" }
+                    span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
+                        "收藏"
+                        span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（F）" }
+                    }
+                }
+                button {
+                    class: "reader-bottom-bar__button",
+                    disabled: !facade.has_next_entry_target(),
+                    title: if facade.has_next_entry_target() { "下一篇未读文章（J 或 →）" } else { "此方向没有未读文章" },
+                    "data-state": "{facade.next_entry_state()}",
+                    "data-nav": "next-unread-entry",
+                    onclick: move |_| {
+                        if let Some(target) = next_facade.next_entry_target() {
+                            navigator.push(AppRoute::ReaderPage { entry_id: target });
+                        }
+                    },
+                    span { class: "reader-bottom-bar__icon", "data-slot": "reader-bottom-bar-icon", aria_hidden: "true", "›" }
+                    span { class: "reader-bottom-bar__label", "data-slot": "reader-bottom-bar-label",
+                        "下一未读"
+                        span { class: "reader-bottom-bar__shortcut", "data-slot": "reader-bottom-bar-shortcut", "（J）" }
+                    }
+                }
             }
         }
         if let image_viewer::ImageViewerState::Open(image) = viewer() {
@@ -186,9 +195,17 @@ pub fn ReaderPage(entry_id: i64) -> Element {
 fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
     let state = use_signal(state::ReaderPageState::new);
     let session = ReaderPageSession::new(entry_id, state);
-    let shortcuts = use_reader_shortcuts(session);
+    use_reader_shortcuts(session);
     use_reactive_task(entry_id, move |_| {
         session.load();
+    });
+    // The read-only refresh, on every bump after the page opened (C4b item 2).
+    let library_revision = use_context::<AppShellState>().library_revision();
+    let opened_at = use_hook(|| library_revision);
+    use_reactive_task(library_revision, move |revision| {
+        if revision != opened_at {
+            session.reread();
+        }
     });
 
     let snapshot = session.snapshot();
@@ -209,5 +226,5 @@ fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
         },
     );
 
-    ReaderPageFacade::new(session, snapshot, shortcuts)
+    ReaderPageFacade::new(session, snapshot)
 }

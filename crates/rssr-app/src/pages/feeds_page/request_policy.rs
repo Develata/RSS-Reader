@@ -47,7 +47,9 @@ impl RefreshFeedback {
     /// newer status may replace this message while the adapter is waiting.
     pub(super) fn capture(revision: u64, message: &str, tone: &str) -> Self {
         Self {
-            delay: Duration::from_secs(if tone == "error" { 6 } else { 3 }),
+            delay: Duration::from_secs(
+                if tone == "error" || tone == crate::ui::failure::TONE_UNKNOWN { 6 } else { 3 },
+            ),
             clear: FeedsPageIntent::ClearRefreshStatus { revision, message: message.to_owned() },
         }
     }
@@ -72,6 +74,7 @@ mod tests {
         let commands = [
             UiCommand::Feeds(FeedsCommand::AddFeed {
                 raw_url: "feed".into(),
+                token: 1,
                 fallback_site_url: None,
             }),
             UiCommand::Feeds(FeedsCommand::LoadEdit { feed_id: 1, generation: 4 }),
@@ -85,7 +88,13 @@ mod tests {
             }),
             UiCommand::Feeds(FeedsCommand::RemoveFeed { feed_id: 1, feed_title: "feed".into() }),
             UiCommand::Feeds(FeedsCommand::ExportConfig),
-            UiCommand::Feeds(FeedsCommand::ImportConfig { raw: "config".into() }),
+            UiCommand::Feeds(FeedsCommand::ImportConfig {
+                raw: "config".into(),
+                expected: rssr_domain::ConfigFingerprint::compute(
+                    vec![],
+                    &rssr_domain::UserSettings::default(),
+                ),
+            }),
             UiCommand::Feeds(FeedsCommand::ExportOpml),
             UiCommand::Feeds(FeedsCommand::ImportOpml { raw: "opml".into() }),
             UiCommand::Settings(SettingsCommand::Load),
@@ -129,8 +138,15 @@ mod tests {
     }
 
     #[test]
-    fn feedback_duration_only_treats_the_exact_error_tone_as_failure() {
-        for (tone, seconds) in [("error", 6), ("info", 3), ("success", 3), ("Error", 3), ("", 3)] {
+    fn feedback_duration_preserves_error_and_unknown_tones() {
+        for (tone, seconds) in [
+            ("error", 6),
+            (crate::ui::failure::TONE_UNKNOWN, 6),
+            ("info", 3),
+            ("success", 3),
+            ("Error", 3),
+            ("", 3),
+        ] {
             assert_eq!(
                 RefreshFeedback::capture(1, "status", tone).delay,
                 Duration::from_secs(seconds)

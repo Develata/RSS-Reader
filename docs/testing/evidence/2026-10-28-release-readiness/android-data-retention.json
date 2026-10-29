@@ -1,0 +1,25 @@
+{
+  "status": "pass",
+  "backupBeforeSha256": "7deadfae5f3a33a011f732b00accba0a6aecc562d4253defaa2c6c38d2114895",
+  "backupAfterSha256": "d88dfa6cffdfb9c38c17406088bcb49f8d64818b6644f844c17abf8227cb3291",
+  "legacyFilesByteIdentical": {
+    "files/RSS-Reader/rss-reader-content.db": true,
+    "files/RSS-Reader/rss-reader.db-wal": true,
+    "files/RSS-Reader/rss-reader.db": true,
+    "files/RSS-Reader/rss-reader.db-shm": true,
+    "files/RSS-Reader/rss-reader-content.db-wal": true,
+    "files/RSS-Reader/rss-reader-content.db-shm": true,
+    "cache/RSS-Reader/rss-reader.db": true,
+    "cache/RSS-Reader/rss-reader.db-wal": true,
+    "cache/RSS-Reader/rss-reader.db-shm": true,
+    "cache/RSS-Reader/rss-reader-content.db": true,
+    "cache/RSS-Reader/rss-reader-content.db-wal": true,
+    "cache/RSS-Reader/rss-reader-content.db-shm": true
+  },
+  "newLibrary": {
+    "integrity": "ok",
+    "feeds": 6,
+    "entries": 5000,
+    "bodies": 5000
+  }
+}

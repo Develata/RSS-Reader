@@ -34,7 +34,7 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $rssrRun 'RSS-Reader') | Out-Null
         $rssrExe = Join-Path $rssrRun 'rssr-app.exe'
         Copy-Item -LiteralPath (Join-Path $rssrRoot "$rssrVariant/rssr-app.exe") -Destination $rssrExe
-        foreach ($rssrFile in @('rss-reader.db', 'rss-reader-content.db')) {
+        foreach ($rssrFile in @('library.sqlite3')) {
             Copy-Item -LiteralPath (Join-Path $rssrRoot "seed-matched/$rssrFile") -Destination (Join-Path $rssrRun 'RSS-Reader')
         }
         $rssrSha = if ($rssrVariant -eq 'a') { $BaselineSha } else { $CandidateSha }

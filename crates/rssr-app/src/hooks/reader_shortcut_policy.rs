@@ -28,8 +28,8 @@ pub(super) fn resolve(
         return None;
     }
     match key() {
-        ShortcutKey::Previous => Some(ReaderShortcut::Previous),
-        ShortcutKey::Next => Some(ReaderShortcut::Next),
+        ShortcutKey::Previous | ShortcutKey::Character('k' | 'K') => Some(ReaderShortcut::Previous),
+        ShortcutKey::Next | ShortcutKey::Character('j' | 'J') => Some(ReaderShortcut::Next),
         ShortcutKey::Character('m' | 'M') => Some(ReaderShortcut::ToggleRead),
         ShortcutKey::Character('f' | 'F') => Some(ReaderShortcut::ToggleStarred),
         _ => None,

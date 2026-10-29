@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "before": "read",
+  "after": "unread",
+  "modified": "unread",
+  "checks": [
+    "M changes the open reader article",
+    "Ctrl+M leaves read state unchanged"
+  ]
+}

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use rssr_domain::{EntriesWorkspaceState, FeedRepository, FeedSummary, UserSettings};
+use rssr_domain::{EntriesWorkspaceState, FeedSummary, UserSettings};
 
-use crate::{AppStateService, SettingsService};
+use crate::AppStateService;
+use crate::library_queries::{EntriesStart, LibraryQueryPort};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EntriesBootstrapInput {
-    pub feed_id: Option<i64>,
     pub load_preferences: bool,
     pub load_feeds: bool,
 }
@@ -26,62 +26,42 @@ pub struct SaveEntriesWorkspaceOutcome {
 
 #[derive(Clone)]
 pub struct EntriesWorkspaceService {
-    settings_service: SettingsService,
     app_state_service: AppStateService,
-    feed_repository: Arc<dyn FeedRepository>,
-    save_gate: Arc<tokio::sync::Mutex<()>>,
+    queries: Arc<dyn LibraryQueryPort>,
 }
 
 impl EntriesWorkspaceService {
-    pub fn new(
-        settings_service: SettingsService,
-        app_state_service: AppStateService,
-        feed_repository: Arc<dyn FeedRepository>,
-    ) -> Self {
-        Self { settings_service, app_state_service, feed_repository, save_gate: Arc::default() }
+    pub fn new(app_state_service: AppStateService, queries: Arc<dyn LibraryQueryPort>) -> Self {
+        Self { app_state_service, queries }
     }
 
     pub async fn bootstrap(
         &self,
         input: EntriesBootstrapInput,
     ) -> anyhow::Result<EntriesBootstrapOutcome> {
-        if let Some(feed_id) = input.feed_id {
-            let _ = self.app_state_service.save_last_opened_feed_id(Some(feed_id)).await;
-        }
-
-        let settings = if input.load_preferences {
-            Some(self.settings_service.load().await.context("读取设置失败")?)
-        } else {
-            None
-        };
-
-        let workspace = if input.load_preferences {
-            Some(
-                self.app_state_service
-                    .load_entries_workspace()
-                    .await
-                    .context("读取文章页工作区状态失败")?,
-            )
-        } else {
-            None
-        };
-
-        let feeds = if input.load_feeds {
-            Some(self.feed_repository.list_summaries().await.context("读取订阅失败")?)
-        } else {
-            None
-        };
+        // 设置、列表偏好与订阅来自同一个读快照。
+        let EntriesStart { settings, workspace, feeds } = self
+            .queries
+            .entries_start(input.load_preferences, input.load_feeds)
+            .await
+            .context("读取文章页初始数据失败")?;
 
         Ok(EntriesBootstrapOutcome { settings, workspace, feeds })
+    }
+
+    /// Remembers `feed_id` as the last opened subscription, for the startup view. A read never
+    /// writes it on the side (B2-D6); the page calls this when it opens a subscription.
+    pub async fn remember_opened_feed(&self, feed_id: i64) -> anyhow::Result<()> {
+        self.app_state_service
+            .save_last_opened_feed_id(Some(feed_id))
+            .await
+            .context("记住上次打开的订阅失败")
     }
 
     pub async fn save_workspace_if_changed(
         &self,
         next: EntriesWorkspaceState,
     ) -> anyhow::Result<SaveEntriesWorkspaceOutcome> {
-        // Serialize the comparison as well as the write across service clones.
-        // Otherwise a quick A -> B -> A can skip the final A while B is pending.
-        let _save = self.save_gate.lock().await;
         let current =
             self.app_state_service.load_entries_workspace().await.context("读取文章页偏好失败")?;
         if current == next {
@@ -103,6 +83,7 @@ mod tests {
     };
 
     use super::{EntriesBootstrapInput, EntriesWorkspaceService};
+    use crate::library_queries::test_support::RepositoryQueries;
 
     struct SettingsRepositoryStub {
         settings: UserSettings,
@@ -130,11 +111,11 @@ mod tests {
             Ok(self.state.lock().expect("lock app state").clone())
         }
 
-        async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
+        async fn update(&self, mutate: rssr_domain::AppStateMutation) -> rssr_domain::Result<()> {
             if self.fail_save {
                 return Err(rssr_domain::DomainError::Persistence("save failed".to_string()));
             }
-            *self.state.lock().expect("lock app state") = state.clone();
+            mutate(&mut self.state.lock().expect("lock app state"));
             Ok(())
         }
     }
@@ -145,18 +126,17 @@ mod tests {
 
     #[async_trait::async_trait]
     impl FeedRepository for FeedRepositoryStub {
-        async fn edit_details(
+        async fn upsert_subscriptions(
             &self,
-            _feed_id: i64,
-        ) -> rssr_domain::Result<rssr_domain::FeedEditDetails> {
-            Err(rssr_domain::DomainError::NotFound)
+            new_feeds: &[rssr_domain::NewFeedSubscription],
+        ) -> rssr_domain::Result<Vec<rssr_domain::Feed>> {
+            let mut feeds = Vec::with_capacity(new_feeds.len());
+            for new_feed in new_feeds {
+                feeds.push(self.upsert_subscription(new_feed).await?);
+            }
+            Ok(feeds)
         }
-        async fn update_subscription(
-            &self,
-            _edit: &rssr_domain::FeedEditRequest,
-        ) -> rssr_domain::Result<()> {
-            Err(rssr_domain::DomainError::InvalidInput("edit not used by this test double".into()))
-        }
+
         async fn upsert_subscription(
             &self,
             _new_feed: &NewFeedSubscription,
@@ -189,13 +169,11 @@ mod tests {
         feeds: Vec<i64>,
         fail_save: bool,
     ) -> EntriesWorkspaceService {
-        EntriesWorkspaceService::new(
-            crate::SettingsService::new(Arc::new(SettingsRepositoryStub { settings })),
-            crate::AppStateService::new(Arc::new(AppStateRepositoryStub {
-                state: Mutex::new(state),
-                fail_save,
-            })),
-            Arc::new(FeedRepositoryStub {
+        let app_state = Arc::new(AppStateRepositoryStub { state: Mutex::new(state), fail_save });
+        let queries = RepositoryQueries {
+            settings: Some(Arc::new(SettingsRepositoryStub { settings })),
+            app_state: Some(app_state.clone()),
+            feeds: Some(Arc::new(FeedRepositoryStub {
                 summaries: feeds
                     .into_iter()
                     .map(|id| FeedSummary {
@@ -209,8 +187,10 @@ mod tests {
                         fetch_error: None,
                     })
                     .collect(),
-            }),
-        )
+            })),
+            ..RepositoryQueries::default()
+        };
+        EntriesWorkspaceService::new(crate::AppStateService::new(app_state), Arc::new(queries))
     }
 
     #[tokio::test]
@@ -226,11 +206,7 @@ mod tests {
         };
 
         let outcome = service(settings.clone(), state, vec![1, 2], false)
-            .bootstrap(EntriesBootstrapInput {
-                feed_id: None,
-                load_preferences: true,
-                load_feeds: true,
-            })
+            .bootstrap(EntriesBootstrapInput { load_preferences: true, load_feeds: true })
             .await
             .expect("bootstrap entries");
 
@@ -239,21 +215,22 @@ mod tests {
         assert_eq!(outcome.feeds.expect("feeds").len(), 2);
     }
 
+    /// Reading the page's start data writes nothing; remembering the opened subscription is its
+    /// own write, and its failure is reported.
     #[tokio::test]
-    async fn bootstrap_remembers_feed_best_effort_without_blocking() {
-        let outcome =
-            service(UserSettings::default(), AppStateSnapshot::default(), Vec::new(), true)
-                .bootstrap(EntriesBootstrapInput {
-                    feed_id: Some(7),
-                    load_preferences: false,
-                    load_feeds: false,
-                })
-                .await
-                .expect("bootstrap ignores failed last feed save");
+    async fn remembering_the_opened_feed_is_an_explicit_write() {
+        let failing =
+            service(UserSettings::default(), AppStateSnapshot::default(), Vec::new(), true);
+        let outcome = failing
+            .bootstrap(EntriesBootstrapInput { load_preferences: false, load_feeds: false })
+            .await
+            .expect("a read does not write");
+        assert_eq!((outcome.settings, outcome.workspace, outcome.feeds), (None, None, None));
+        assert!(failing.remember_opened_feed(7).await.is_err());
 
-        assert_eq!(outcome.settings, None);
-        assert_eq!(outcome.workspace, None);
-        assert_eq!(outcome.feeds, None);
+        let working =
+            service(UserSettings::default(), AppStateSnapshot::default(), Vec::new(), false);
+        working.remember_opened_feed(7).await.expect("remember");
     }
 
     #[tokio::test]
@@ -280,83 +257,5 @@ mod tests {
                 .await
                 .expect("save changed workspace");
         assert!(changed.changed);
-    }
-
-    struct DelayedAppStateRepository {
-        state: Mutex<AppStateSnapshot>,
-        first_save_started: tokio::sync::Notify,
-        release_first_save: tokio::sync::Semaphore,
-        writes: std::sync::atomic::AtomicUsize,
-        fail_first: bool,
-    }
-
-    #[async_trait::async_trait]
-    impl AppStateRepository for DelayedAppStateRepository {
-        async fn load(&self) -> rssr_domain::Result<AppStateSnapshot> {
-            Ok(self.state.lock().unwrap().clone())
-        }
-
-        async fn save(&self, state: &AppStateSnapshot) -> rssr_domain::Result<()> {
-            if self.writes.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
-                self.first_save_started.notify_one();
-                self.release_first_save.acquire().await.unwrap().forget();
-                if self.fail_first {
-                    return Err(rssr_domain::DomainError::Persistence("first save failed".into()));
-                }
-            }
-            *self.state.lock().unwrap() = state.clone();
-            Ok(())
-        }
-    }
-
-    #[tokio::test]
-    async fn overlapping_preferences_preserve_the_latest_choice_after_success_or_failure() {
-        use std::{future::Future, task::Poll};
-
-        for fail_first in [false, true] {
-            let repository = Arc::new(DelayedAppStateRepository {
-                state: Mutex::new(AppStateSnapshot::default()),
-                first_save_started: tokio::sync::Notify::new(),
-                release_first_save: tokio::sync::Semaphore::new(0),
-                writes: Default::default(),
-                fail_first,
-            });
-            let service = EntriesWorkspaceService::new(
-                crate::SettingsService::new(Arc::new(SettingsRepositoryStub {
-                    settings: UserSettings::default(),
-                })),
-                crate::AppStateService::new(repository.clone()),
-                Arc::new(FeedRepositoryStub { summaries: Vec::new() }),
-            );
-            let first_service = service.clone();
-            let first = tokio::spawn(async move {
-                first_service
-                    .save_workspace_if_changed(EntriesWorkspaceState {
-                        read_filter: ReadFilter::UnreadOnly,
-                        ..Default::default()
-                    })
-                    .await
-            });
-            repository.first_save_started.notified().await;
-            let latest = EntriesWorkspaceState {
-                read_filter: if fail_first { ReadFilter::ReadOnly } else { ReadFilter::All },
-                ..Default::default()
-            };
-            let second = service.save_workspace_if_changed(latest.clone());
-            tokio::pin!(second);
-            // Poll once while the first write is blocked. The old implementation
-            // returned "unchanged" for All because it still read the initial state.
-            let early = std::future::poll_fn(|cx| Poll::Ready(second.as_mut().poll(cx))).await;
-            let waited = early.is_pending();
-            repository.release_first_save.add_permits(1);
-            assert_eq!(first.await.unwrap().is_err(), fail_first);
-            match early {
-                Poll::Ready(result) => result,
-                Poll::Pending => second.await,
-            }
-            .expect("latest preference save can complete after the older attempt");
-            assert_eq!(repository.state.lock().unwrap().entries_workspace, latest);
-            assert!(waited, "even the unchanged check must wait for the pending save");
-        }
     }
 }

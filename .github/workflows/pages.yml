@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-wasm-c-toolchain
       - uses: ./.github/actions/cleanup-github-runner
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -76,10 +77,14 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           base="$CONFIGURED_BASE"
-          if [[ "$EVENT_NAME" == pull_request ]]; then
+          if [[ "$EVENT_NAME" == pull_request || "$GITHUB_REF" != refs/heads/main ]]; then
             base="/${REPOSITORY#*/}"
           fi
           echo "PAGES_BASE_PATH=$base" >> "$GITHUB_ENV"
+      - name: Prepare real RSS article snapshot
+        run: |
+          cargo test --locked -p rssr-infra --example pages_snapshot
+          cargo run --locked -p rssr-infra --example pages_snapshot
       - name: Build the real Dioxus app
         run: |
           dx build --platform web --package rssr-app --release --locked \
@@ -92,16 +97,24 @@ jobs:
       - uses: ./.github/actions/setup-browser-tests
         with:
           with-driver: 'false'
-      - name: Check subpath, direct entry, persistence and network downgrade
+          with-fonts: 'true'
+      - name: Check RSS content, memory reset, subpath, performance and network policy
         run: bash scripts/test_pages.sh
-      - name: Preserve smoke diagnostics on failure
-        if: failure()
+      - name: Preserve the RSS snapshot used by this build
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-rss-snapshot-${{ github.run_id }}-${{ github.run_attempt }}
+          path: assets/pages-demo/snapshot.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Preserve Pages acceptance and performance evidence
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: pages-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: target/pages-smoke/
           if-no-files-found: ignore
-          retention-days: 3
+          retention-days: 7
       - name: Validate Pages hidden-file manifest
         run: |
           python3 - <<'PYTHON'

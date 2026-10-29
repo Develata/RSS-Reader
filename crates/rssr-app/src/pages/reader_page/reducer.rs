@@ -41,6 +41,18 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
                 return;
             }
             state.error = error;
+            state.error_tone = "error";
+        }
+        ReaderPageIntent::LoadFailed { entry_id, failure } => {
+            if entry_id != state.current_entry_id {
+                return;
+            }
+            state.error = Some(failure.message());
+            state.error_tone = failure.tone();
+        }
+        ReaderPageIntent::Failed(failure) => {
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
         }
         ReaderPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
             // 与 ApplyLoadedContent / SetError 同样的归属校验：快速翻页时先发出的切换请求
@@ -54,6 +66,27 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             if let Some(is_starred) = is_starred {
                 state.is_starred = is_starred;
             }
+            state.reread_generation = state.reread_generation.wrapping_add(1);
+        }
+        ReaderPageIntent::ApplyReread { entry_id, is_read, is_starred, navigation_state } => {
+            if entry_id != state.current_entry_id || !state.content_loaded {
+                return;
+            }
+            state.is_read = is_read;
+            state.is_starred = is_starred;
+            state.navigation_state = navigation_state;
+        }
+        ReaderPageIntent::RereadWanted(wanted) => state.reread_wanted = wanted,
+        ReaderPageIntent::RereadIssued => {
+            state.reread_generation = state.reread_generation.wrapping_add(1);
+        }
+        ReaderPageIntent::RereadMissing { entry_id } => {
+            if entry_id != state.current_entry_id {
+                return;
+            }
+            state.status =
+                "这篇文章已不在资料库中（可能已被清理或订阅已删除），正文仍可阅读。".into();
+            state.status_tone = "error".into();
         }
     }
 }
@@ -205,5 +238,30 @@ mod tests {
 
         reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 1 });
         assert!(!state.asset_localization_requested);
+    }
+
+    /// 加载中与加载失败时，屏幕上的已读/收藏不是存储里的值，不能据此切换：加载中按下的
+    /// 切换会被迟到的加载结果盖掉，界面显示与库里不一致。
+    #[test]
+    fn flags_are_known_only_once_the_entry_has_loaded() {
+        let mut state = ReaderPageState::new();
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+        assert!(!state.flags_known(7), "加载中");
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::ApplyLoadedContent { entry_id: 7, content: loaded_content("Story") },
+        );
+        assert!(state.flags_known(7));
+        assert!(!state.flags_known(8), "另一篇文章的标记不是这些");
+
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::SetError { entry_id: 7, error: Some("读取失败".to_string()) },
+        );
+        assert!(!state.flags_known(7), "加载失败");
+
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 8 });
+        assert!(!state.flags_known(8), "换文章后重新加载中");
     }
 }

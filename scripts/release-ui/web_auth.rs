@@ -15,21 +15,26 @@ pub fn spawn(root: &Path, profile: &str, port: u16, logs: &Path) -> io::Result<O
     let log = logs.join("rssr-web.log");
     File::create(&log)?;
     let mut command = Command::new("cargo");
+    // The caller's deployment settings (public origin, seed credentials, environment, data
+    // directory) must not reach the smoke service: only the variables set below apply. Windows
+    // variable names are case-insensitive, so match them that way (harmless elsewhere).
+    for (name, _) in std::env::vars_os() {
+        let upper = name.to_string_lossy().to_ascii_uppercase();
+        if upper.starts_with("RSS_READER_WEB_") || upper == "RSSR_DATA_DIR" {
+            command.env_remove(&name);
+        }
+    }
     // profile selects only the static bundle. The server has always used the
     // default Cargo profile, including when the bundle is a release build.
     command
         .current_dir(root)
         .args(["run", "--locked", "-p", "rssr-web"])
+        .env("RSS_READER_WEB_ENV", "development")
         .env("RSS_READER_WEB_BIND", format!("127.0.0.1:{port}"))
         .env("RSS_READER_WEB_STATIC_DIR", format!("target/dx/rssr-app/{profile}/web/public"))
         .env("RSS_READER_WEB_USERNAME", "smoke")
         .env("RSS_READER_WEB_PASSWORD", "smoke-pass-123")
-        .env("RSS_READER_WEB_SESSION_SECRET", "release-ui-regression-session-secret-0123456789")
-        .env("RSS_READER_WEB_AUTH_STATE_FILE", logs.join("rssr-web-auth.json"))
-        // Keep the server-mode library inside this run's logs instead of the user's home.
-        .env("RSS_READER_WEB_DATA_DIR", logs.join("rssr-web-data"))
-        // Server mode fetches feeds on the server; the smokes use 127.0.0.1 fixture feeds.
-        .env("RSS_READER_WEB_ALLOW_PRIVATE_FEEDS", "true");
+        .env("RSSR_DATA_DIR", logs.join("rssr-web-data"));
     OwnedProcess::spawn(command, &log)
 }
 

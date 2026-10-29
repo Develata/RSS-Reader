@@ -10,12 +10,13 @@ import java.nio.charset.StandardCharsets
 typealias BuildConfig = io.github.develata.rssreader.BuildConfig
 
 class MainActivity : WryActivity() {
-    // Dioxus uses Rust route history. WebView fragment history must not consume Back.
-    override val handleBackNavigation: Boolean = false
-
     private data class PendingThemeExport(val css: String)
 
     private var pendingThemeExport: PendingThemeExport? = null
+
+    // 返回键交给应用（use_mobile_back_navigation.rs）：页面内回到上一页或首页，首页上 5 秒内
+    // 按两次才退到后台。不沿 WebView 的历史后退：应用内跳转不进那份历史，它只记页内锚点。
+    override val handleBackNavigation: Boolean = false
 
     private val createThemeDocument = registerForActivityResult(
         ActivityResultContracts.CreateDocument("text/css")
@@ -57,13 +58,12 @@ class MainActivity : WryActivity() {
         super.onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // JNI only queues input; Rust owns overlay and navigation decisions.
                 if (!dispatchSystemBack()) moveTaskToBack(true)
             }
         })
     }
 
-    fun moveReaderTaskToBackground() {
+    fun exitToBackground() {
         runOnUiThread { moveTaskToBack(true) }
     }
 
@@ -103,6 +103,7 @@ class MainActivity : WryActivity() {
     }
 
     private external fun completeThemeCssExport(status: Int, message: String)
+
     private external fun dispatchSystemBack(): Boolean
 
     private companion object {

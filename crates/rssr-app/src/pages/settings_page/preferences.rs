@@ -18,7 +18,8 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     let entries_page_size_facade = facade.clone();
     let font_scale_facade = facade.clone();
     let mut invalid = use_signal(InvalidNumericFields::default);
-    let replacement_revision = facade.draft_replacement_revision();
+    let [refresh_revision, archive_revision, page_size_revision, font_scale_revision] =
+        facade.numeric_revisions();
 
     rsx! {
         div { "data-layout": "settings-card-section", "data-section": "reading-preferences",
@@ -102,12 +103,12 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                 Err(_) => {
                                     refresh_facade.note_draft_edit();
                                     invalid.write().refresh_interval =
-                                        Some(refresh_facade.draft_replacement_revision());
+                                        Some(refresh_facade.numeric_revisions()[0]);
                                 }
                             }
                         }
                     }
-                    if invalid().refresh_interval == Some(replacement_revision) {
+                    if invalid().refresh_interval == Some(refresh_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
@@ -135,12 +136,12 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                 Err(_) => {
                                     archive_facade.note_draft_edit();
                                     invalid.write().archive_after_months =
-                                        Some(archive_facade.draft_replacement_revision());
+                                        Some(archive_facade.numeric_revisions()[1]);
                                 }
                             }
                         }
                     }
-                    if invalid().archive_after_months == Some(replacement_revision) {
+                    if invalid().archive_after_months == Some(archive_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
@@ -168,12 +169,12 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                 Err(_) => {
                                     entries_page_size_facade.note_draft_edit();
                                     invalid.write().entries_page_size =
-                                        Some(entries_page_size_facade.draft_replacement_revision());
+                                        Some(entries_page_size_facade.numeric_revisions()[2]);
                                 }
                             }
                         }
                     }
-                    if invalid().entries_page_size == Some(replacement_revision) {
+                    if invalid().entries_page_size == Some(page_size_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                     p { "data-slot": "page-intro",
@@ -204,12 +205,12 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                                 Err(_) => {
                                     font_scale_facade.note_draft_edit();
                                     invalid.write().reader_font_scale =
-                                        Some(font_scale_facade.draft_replacement_revision());
+                                        Some(font_scale_facade.numeric_revisions()[3]);
                                 }
                             }
                         }
                     }
-                    if invalid().reader_font_scale == Some(replacement_revision) {
+                    if invalid().reader_font_scale == Some(font_scale_revision) {
                         p { "data-slot": "page-intro", "data-state": "invalid", "{NUMERIC_INPUT_HINT}" }
                     }
                 }
@@ -218,10 +219,10 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     }
 }
 
-/// Each parse error belongs to the draft projection where it occurred. Accepted
-/// loading/download/save results retire it, including equal-value replacements;
-/// an A -> B -> A replacement cannot revive it. Rejected backfills leave it intact.
-/// Parsing failures still preserve the last parsed value and count as user edits.
+/// Each parse error belongs to a field's projection. Stored settings retire it
+/// only when that field has no pending/submitted edit, even for equal values.
+/// An A -> B -> A projection cannot revive it. Parse failures retain the last
+/// parsed value and do not create a SettingsPatch, matching the main form contract.
 /// Rendering only compares revisions; it neither writes signals nor emits input.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 struct InvalidNumericFields {

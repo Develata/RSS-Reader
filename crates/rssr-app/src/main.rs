@@ -14,7 +14,6 @@ mod router;
 mod status;
 mod theme;
 mod ui;
-mod web_auth;
 
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::EnvFilter;
@@ -38,7 +37,9 @@ fn init_tracing() {
 
 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
 fn main() {
-    use dioxus::desktop::{Config, LogicalSize, WindowBuilder, tao::window::Icon};
+    use dioxus::desktop::{
+        Config, LogicalSize, WindowBuilder, tao::event::Event, tao::window::Icon,
+    };
     use dioxus::prelude::LaunchBuilder;
     use image::ImageFormat;
 
@@ -64,7 +65,14 @@ fn main() {
         // native Copy/Select All actions available while reading. Dioxus
         // 0.7.9 also enables WebView devtools with this setting.
         .with_disable_context_menu(false)
-        .with_custom_head(bootstrap::native_document::head());
+        .with_custom_head(bootstrap::native_document::head())
+        // The event loop's last event: the process exits right after it, so the library is closed
+        // here (its log checkpointed into the main file) rather than cut off mid-close.
+        .with_custom_event_handler(|event, _| {
+            if let Event::LoopDestroyed = event {
+                bootstrap::close_local_library();
+            }
+        });
     LaunchBuilder::new().with_cfg(config).launch(app::App);
 
     fn load_window_icon() -> Option<Icon> {

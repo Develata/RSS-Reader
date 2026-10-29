@@ -1,6 +1,6 @@
 # UI Shell / Bus / Page Facade 边界
 
-当前实现核对：2026-09-30。
+Web 装配与存储边界核对：2026-10-22（v0.2 C4c）。
 
 ## 目的
 
@@ -21,7 +21,7 @@
 
 这份文档是 [Headless Active Interface 设计目标](./headless-active-interface.md) 的当前实现版，不是愿景版。
 
-文章列表目录的交互规则与实现边界见[文章列表目录：手动浏览与自动跟随](./entries-directory-follow.md)。页面内 Rust 状态统一管理实时活动位置、手动展开与自动跟随；手机顶部目录和桌面右侧目录分别订阅，复用 presenter 的 `Arc`。目录状态不进入文章 presenter 输入。DOM adapter 负责输入来源、测量、滚动和提交版本确认；验证与平台限制见[本次交接](../handoffs/2026-10-03-directory-follow-rust.md)。
+文章列表目录的交互规则与实现边界见[文章列表目录：手动浏览与自动跟随](./entries-directory-follow.md)。页面内 Rust 状态统一管理实时活动位置、手动展开与自动跟随；手机顶部目录和桌面右侧目录分别订阅，复用 presenter 的 `Arc`。目录状态不进入文章 presenter 输入。DOM adapter 负责输入来源、测量、滚动和提交版本确认；验证与平台限制见[本次交接](../handoffs/archive/2026-10/2026-10-03-directory-follow-rust.md)。
 
 ---
 
@@ -65,7 +65,7 @@
 - SQLite / native 实现
 - browser persisted-state 实现
 - parser / fetch / WebDAV / OPML / JSON codec
-- 原生索引与正文双库，以及 browser `BrowserStore` 的分片、Web Locks 与版本化提交
+- 原生 / 服务器单库 `library.sqlite3`、正式 Web 的 `HttpBackend` 传输，以及 Pages 演示复用共享 SQL 的内存 SQLite；不保留 BrowserStore 持久化路径
 
 这层实现存储、网络、解析等端口；业务结果和流程规则仍由 application 定义。
 
@@ -99,15 +99,7 @@
 
 页面 session 还负责自己发起的异步结果归属：Entries 只接纳最新查询，Reader 按文章身份及加载代际隔离迟到结果，Settings 保存区分提交快照与后续草稿。这些均为 UI 生命周期状态，不下沉到 domain / application，也不让 CSS 决定业务命令。
 
-Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；`write_lifecycle.rs` 决定单条/批量写入准入、结果归属和后续动作顺序，`preferences_policy.rs` 检查偏好保存资格与当前选择。session 保留 Dioxus 任务作用域、命令执行及状态发布，状态转移仍由既有 reducer 负责，应用服务保留持久化串行语义。具体边界见[原生界面前置模块](./native-ui-preparation.md)。
-
-Reader 的 `result_lifecycle.rs` 以命令所属文章 ID 和原状态的 `load_generation` 判断整批结果归属，加载、标记和图片本地化共用该规则。session 先同步发布加载开始状态，再捕获归属，保留原任务作用域和发布顺序；reducer 继续分配代次并执行状态转移，拒绝迟到 UI 结果不等于回滚已提交写入。
-
-Settings 的 `save_policy.rs` 准备提交副本、归并最后保存结果，并以提交快照和当前草稿决定回填及未保存提示。session 保留同步 pending gate、页面任务作用域、命令构造和 signal 发布；按整份草稿值比较，主题选择单独判断，不新增编辑代次或业务状态镜像。
-
-Feeds 的 `request_policy.rs` 区分 Shell 刷新、快照查询、单来源刷新与其他命令，只为快照分配和校验代次；过期查询整批丢弃，写入完成不受后来查询影响。单来源刷新在整批结果发布后捕获提示时长与清除身份，reducer 同时比较 revision 和消息后才清空。session 继续持有原查询 signal、页面任务和计时适配，“刷新全部”的任务与去重仍归 Shell。
-
-Feeds 的 `edit_state.rs` 将原编辑字段及转移收拢为内嵌状态，统一加载身份、草稿、保存与关闭 gate；页面 reducer 负责命令和页面级确认/提示/reload 的串接，session 保留执行职责。原生 dialog 的取消事件必须经过同一个 Rust 入口，不能因焦点离开已禁用控件而自行关闭。
+Entries 的初始化/查询代次、接纳/重查和返回页码顺序由页面内普通 Rust 模块 `request_lifecycle.rs` 决定；session 保留 Dioxus 任务作用域、命令执行及状态发布。会话内部由 `session/queries.rs`、`session/workspace.rs`、`session/articles.rs` 分别负责读取、偏好保存、文章写入；保存队列与查询代次独立，`write_feedback.rs` 只投影文案。页面通过一个装配 hook 获取会话，偏好以 `EntriesWorkspaceState` 整体传至 Backend。维护入口和生命周期约束见[会话模块说明](../../crates/rssr-app/src/pages/entries_page/session/README.md)，普通 Rust 请求规则见[原生界面前置模块](./native-ui-preparation.md)。
 
 不再负责：
 
@@ -179,8 +171,8 @@ Feeds 的 `edit_state.rs` 将原编辑字段及转移收拢为内嵌状态，统
 `runtime` 是模块，不存在名为 `UiRuntime` 的结构体。入口 `execute_ui_command` 负责：
 
 - 接收 `UiCommand`
-- 调用 `AppServices`
-- 访问 application 用例及 host capability（不直接拼装仓储或平台 I/O）
+- 经 `runtime/backend.rs` 获取 `Arc<dyn Backend>`，由装配层提供本地或 HTTP 实现
+- 调用 Backend 用例接口（不直接拼装仓储、平台 I/O 或 application 服务）
 - 产出 `Vec<UiIntent>`
 
 当前实现见：
@@ -386,3 +378,5 @@ CSS 可以控制显示，不应承担业务判断。
 - application 定义用例语义，infra 实现平台端口
 
 方向实现版。
+
+PR #40 的页面规则接入继续遵循上述 Backend 边界；Settings 使用逐字段补丁及 stored/submitted/pending 投影，Entries 补读沿用完整 Reread。详见[原生控件适配契约](./native-control-adapter-contracts.md)。

@@ -1,9 +1,13 @@
-use dioxus::prelude::*;
 use std::time::Duration;
 
 /// Timer implementation stays at the shell adapter boundary; refresh state and
 /// its expiry rule are shared Rust code on every platform.
 pub(crate) async fn wait_for_refresh_feedback(duration: Duration) {
+    sleep(duration).await;
+}
+
+/// Waits `duration` on this platform's timer.
+pub(crate) async fn sleep(duration: Duration) {
     #[cfg(target_arch = "wasm32")]
     gloo_timers::future::sleep(duration).await;
 
@@ -11,23 +15,23 @@ pub(crate) async fn wait_for_refresh_feedback(duration: Duration) {
     tokio::time::sleep(duration).await;
 }
 
-/// 本地门禁通过之后进入阅读器。
-///
-/// Web 端整页重载而不是就地切状态：解锁会换掉 `localStorage` 里可读的数据集，
-/// 重载是让所有已挂载的组件都从新数据重新起一遍最省事、也最不容易漏的做法。
-/// 重载失败（例如被浏览器策略拦下）才回落到就地切换。
-#[cfg(target_arch = "wasm32")]
-pub(crate) fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
-    if let Some(window) = web_sys::window()
-        && window.location().reload().is_ok()
-    {
-        return;
+/// Leaves the page for the server's sign-in page, which comes back to this path (C4b item 1). The
+/// in-process library of the other platforms has no session to end.
+pub(crate) fn sign_in_again() {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(location) = web_sys::window().map(|window| window.location()) {
+        let path = location.pathname().unwrap_or_else(|_| "/".into())
+            + &location.search().unwrap_or_default();
+        let next: String = url::form_urlencoded::byte_serialize(path.as_bytes()).collect();
+        let _ = location.set_href(&format!("/login?next={next}"));
     }
-
-    on_authenticated.call(());
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn complete_web_auth_transition(on_authenticated: EventHandler<()>) {
-    on_authenticated.call(());
+/// Reloads the page (it is of another build than the server, C4b item 1). Only the browser has
+/// one to reload.
+pub(crate) fn reload_page() {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(window) = web_sys::window() {
+        let _ = window.location().reload();
+    }
 }

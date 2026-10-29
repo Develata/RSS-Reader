@@ -1,0 +1,61 @@
+{
+  "windows": {
+    "status": "pass",
+    "files": [
+      {
+        "name": "RSS-Reader.exe",
+        "fileVersion": "0.2.0",
+        "productVersion": "0.2.0",
+        "authenticode": "NotSigned"
+      },
+      {
+        "name": "rssr-cli.exe",
+        "fileVersion": null,
+        "productVersion": null,
+        "authenticode": "NotSigned"
+      }
+    ],
+    "cliVersion": "rssr 0.2.0"
+  },
+  "linux": {
+    "status": "pass",
+    "environment": "WSL Debian GNU/Linux 13 (trixie)",
+    "cliVersion": "rssr 0.2.0",
+    "debPackage": "rssr-app",
+    "debVersion": "0.2.0",
+    "debArchitecture": "amd64",
+    "debMinimumLibc6": "2.39",
+    "localDesktopInstall": false,
+    "installedDesktopSmokeJob": 120395522817
+  },
+  "android": {
+    "status": "pass",
+    "apkVersionName": "0.2.0",
+    "apkVersionCode": 200,
+    "apkSignatureVerificationJob": 120395523041,
+    "publicApkMatchesVerifiedCIBytes": true,
+    "aabJarsignerVerifyExit": 0,
+    "aabJarsignerResult": "jar verified.",
+    "certificateSha256": "4ed80b39e18b306e7072cbe258c7adf99ea9223d9026a81f9e78a6fb1f95dc17",
+    "sameCertificateAsPreviousVersion": "v0.1.23",
+    "previousAabSha256": "6f3494c496008129480799394fa919af20db896480a8b61e991b7bf84d51ba19",
+    "jdkVersion": "26",
+    "newAndPreviousAabSameWarningCategories": true,
+    "newAndPreviousAabEntries": 951,
+    "newAndPreviousAabManifestIndex": 950,
+    "duplicateEntries": 0,
+    "symlinkEntries": 0,
+    "warnings": [
+      "Warning: ",
+      "This jar contains entries whose certificate chain is invalid. Reason: PKIX path building failed: sun.security.provider.certpath.SunCertPathBuilderException: unable to find valid certification path to requested target",
+      "This jar contains entries whose signer certificate is self-signed.",
+      "This jar contains signatures that do not include a timestamp. Without a timestamp, users may not be able to validate this jar after any of the signer certificates expire (as early as 2300-05-12).",
+      "POSIX file permission and/or symlink attributes detected. These attributes are ignored when signing and are not protected by the signature.",
+      "",
+      "This JAR file contains internal inconsistencies that may result in different contents when reading via JarFile and JarInputStream:",
+      "- Manifest is missing when reading via JarInputStream",
+      "- Entry BUNDLE-METADATA/com.android.tools.build.gradle/app-metadata.properties is signed in JarFile but is not signed in JarInputStream"
+    ],
+    "physicalDeviceUpgradeOrStoreUpload": false
+  }
+}

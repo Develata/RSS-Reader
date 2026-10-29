@@ -3,17 +3,26 @@
 #![allow(clippy::double_must_use)]
 pub mod app_state_service;
 pub mod composition;
+mod content_identity;
+pub use content_identity::entry_content_hash;
 pub mod entries_list_service;
 pub mod entries_workspace_service;
+pub mod entry_batch_service;
+pub mod entry_flags_service;
+pub mod feed_edit_service;
+pub use entry_batch_service::{EntryBatchPort, EntryBatchService};
+pub use feed_edit_service::{FeedEditPort, FeedEditService};
+pub mod error;
 pub mod feed_catalog_service;
 pub mod feed_service;
 pub mod feeds_snapshot_service;
 pub mod import_export_service;
+pub mod library_queries;
 pub mod persistence_mutation;
 pub mod reader_service;
 pub mod refresh_service;
+mod result_bounds;
 pub mod settings_service;
-pub mod settings_sync_service;
 pub mod startup_service;
 mod subscription_discovery;
 pub mod subscription_workflow;
@@ -21,14 +30,13 @@ pub use subscription_discovery::*;
 
 pub use app_state_service::AppStateService;
 pub use composition::{AppCompositionInput, AppStateServicesPort, AppUseCases};
-pub use entries_list_service::{
-    EntriesListOutcome, EntriesListService, ToggleEntryReadInput, ToggleEntryReadOutcome,
-    ToggleEntryStarredInput, ToggleEntryStarredOutcome,
-};
+pub use entries_list_service::{EntriesListOutcome, EntriesListService, MAX_LISTED_ENTRIES};
 pub use entries_workspace_service::{
     EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesWorkspaceService,
     SaveEntriesWorkspaceOutcome,
 };
+pub use entry_flags_service::{EntryFlagOutcome, EntryFlagsService};
+pub use error::{ErrorKind, PublicError, classify};
 pub use feed_catalog_service::FeedCatalogService;
 pub use feed_service::{AddSubscriptionInput, FeedService, RemoveSubscriptionInput};
 pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};
@@ -36,25 +44,30 @@ pub use import_export_service::{
     ClockPort, ConfigImportOutcome, ImportExportService, OpmlCodecPort, OpmlImportOutcome,
     RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore, SystemClock,
 };
+pub use library_queries::{
+    ConfigSnapshot, EntriesPage, EntriesStart, FeedsOverview, LibraryQueryPort, ReaderSnapshot,
+    StartupState,
+};
 pub use persistence_mutation::{
     ActivatedSubscription, ConfigReplacementFeed, ConfigReplacementOutcome, ConfigReplacementPlan,
-    ConfigReplacementPort, SubscriptionActivationPort, SubscriptionRemovalPort,
+    ConfigReplacementPort, SettingsUpdatePort, SubscriptionActivationPort, SubscriptionRemovalPort,
 };
-pub use reader_service::{
-    ReaderEntrySnapshot, ReaderService, ToggleReadInput, ToggleReadOutcome, ToggleStarredInput,
-    ToggleStarredOutcome,
-};
+pub use reader_service::{ReaderEntry, ReaderEntrySnapshot, ReaderService};
 pub use refresh_service::{
     DEFAULT_REFRESH_CONCURRENCY, FeedRefreshSourceOutput, FeedRefreshSourcePort, FeedRefreshUpdate,
-    ParsedEntryData, ParsedFeedUpdate, RefreshAllInput, RefreshAllOutcome, RefreshAllSummary,
-    RefreshCommit, RefreshCommitOutcome, RefreshFailure, RefreshFeedFailureSummary,
-    RefreshFeedOutcome, RefreshFeedResult, RefreshHttpMetadata, RefreshLocalizedEntry,
-    RefreshService, RefreshStorePort, RefreshTarget, SERIAL_REFRESH_CONCURRENCY,
+    ParsedEntryData, ParsedFeedUpdate, RefreshAllExecutionOutcome, RefreshAllInput,
+    RefreshAllOutcome, RefreshAllSummary, RefreshCommit, RefreshCommitOutcome, RefreshFailure,
+    RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome, RefreshFeedResult,
+    RefreshHttpMetadata, RefreshLocalizationCandidate, RefreshService, RefreshStorePort,
+    RefreshTarget, RefreshTicket, SERIAL_REFRESH_CONCURRENCY,
 };
-pub use settings_service::SettingsService;
-pub use settings_sync_service::{AppliedRemoteConfigOutcome, SettingsSyncService};
+pub use result_bounds::{
+    MAX_DISCOVERY_CANDIDATES, MAX_LISTED_FAILURES, MAX_MESSAGE_BYTES, MAX_NAME_BYTES,
+    MAX_RESULT_BYTES, MAX_URL_BYTES, TRUNCATION_MARK, truncate_marked, truncate_marked_str,
+};
+pub use settings_service::{SettingsPatch, SettingsService};
 pub use startup_service::{StartupService, StartupTarget};
 pub use subscription_workflow::{
     AddSubscriptionAndRefreshOutcome, AddSubscriptionLifecycleInput,
-    AddSubscriptionLifecycleOutcome, AppStatePort, SubscriptionWorkflow,
+    AddSubscriptionLifecycleOutcome, AddSubscriptionOutcome, AppStatePort, SubscriptionWorkflow,
 };

@@ -1,12 +1,30 @@
 name: Setup browser test tools
 description: Cache the exact Chrome version and optionally its matching WebDriver
 inputs:
+  with-fonts:
+    description: Install CJK and OpenType math fonts for readable UI screenshots
+    default: 'false'
   with-driver:
     description: Install ChromeDriver for wasm contracts (CDP UI checks do not need it)
     default: 'true'
 runs:
   using: composite
   steps:
+    - name: Install screenshot fonts
+      if: inputs.with-fonts == 'true'
+      shell: bash
+      run: |
+        bash scripts/configure_ubuntu_apt.sh
+        apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+        sudo apt-get "${apt_options[@]}" update
+        sudo apt-get "${apt_options[@]}" install -y --no-install-recommends fontconfig fonts-noto-cjk fonts-lmodern
+        fc-cache -f
+        cjk_fonts="$(fc-list ':lang=zh-cn' family)"
+        test -n "$cjk_fonts"
+        math_font="$(fc-match -f '%{family}' 'Latin Modern Math')"
+        test "$math_font" = 'Latin Modern Math'
+        printf 'CJK fallback: %s\n' "$(fc-match -f '%{family}' ':lang=zh-cn')"
+        printf 'Math font: %s\n' "$math_font"
     - name: Resolve Chrome version
       id: chrome
       shell: bash

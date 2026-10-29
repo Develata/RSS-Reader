@@ -1,132 +1,31 @@
 # 设计文档
 
-这个目录收纳 RSS-Reader 的长期设计原则、公开命令与界面接口，以及主题编写约定。
+这里保存现行产品规则、架构边界和公开接口。核对日期：2026-10-28，已发布 v0.2.1 的源码为 `dbfbf896`。实施记录和某次验收结果分别进入[交接目录](../handoffs/README.md)与[测试索引](../testing/README.md)；后续工作见[当前待办](../maintenance-backlog.md)。
 
-## 当前文档
+## 现行契约
 
-- [功能设计哲学](./functional-design-philosophy.md)
-- [文章列表目录：手动浏览与自动跟随（已确认设计，待实施）](./entries-directory-follow.md)
-- [Headless Active Interface 设计目标](./headless-active-interface.md)
-- [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
-- [原生界面前置模块边界](./native-ui-preparation.md)
-- [原生控件适配契约](./native-control-adapter-contracts.md)
-- [Application Use Case 收敛计划](./application-use-case-consolidation-plan.md)
-- [Application Use Case 边界检查清单](./application-use-case-boundary-checklist.md)
-- [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
-- [Web SPA 回归服务脚本](./web-spa-regression-server.md)
-- [前端命令与界面接口清单](./frontend-command-reference.md)
-- [主题作者选择器参考](./theme-author-selector-reference.md)
-- [rssr-web 服务端模式：与桌面 GUI 等价的自托管部署（已确认设计，实施中）](./rssr-web-server-mode.md)
+| 范围 | 入口 |
+| --- | --- |
+| 产品能力、阅读缓存、Rust / CSS 分工 | [功能设计哲学](./functional-design-philosophy.md) |
+| 七 crate、正式 Web、统一 SQLite、Pages | [v0.2 架构](./v0.2-architecture.md)（已在 v0.2.0 发布） |
+| Shell、命令、runtime、页面 session | [UI 分层](./ui-shell-bus-page-facade.md)、[前端命令接口](./frontend-command-reference.md) |
+| 目录独立浏览、自动跟随、文章窗口 | [目录交互](./entries-directory-follow.md)、[原生界面前置边界](./native-ui-preparation.md) |
+| 主题与稳定选择器 | [主题作者参考](./theme-author-selector-reference.md)、[CSS 分离检查](./css-separation-baseline-checklist.md) |
+| Penpot 与实际代码的对应关系 | [当前代码设计基准](./penpot-code-baseline.md) |
+| 应用服务职责 | [Use Case 收敛](./application-use-case-consolidation-plan.md)、[边界检查](./application-use-case-boundary-checklist.md) |
+| 正文解析、图片身份与后台调度 | [处理预算与职责](./reader-processing-budgets.md)（发布后工作分支实现） |
+| 资料库兼容与交付形态 | [SQLite 迁移兼容](./sqlite-migration-compatibility.md)、[GUI / CLI 分发](./cli-gui-distribution.md) |
 
-## 先读哪一份
+目录交互与文章级入口已在主线实现；平台未验收项仍见各契约。GUI / CLI 的独立分发已实施，Scoop 包仍是该文档列出的后续工作。
 
-如果你在做这些事，可以直接按下面选：
+## 长期方向与历史计划
 
-- 想理解界面为什么这样分层、Rust 和 CSS 的边界怎么划：
-  - [功能设计哲学](./functional-design-philosophy.md)
-- 想确认目前有哪些前端命令、页面接口和 `data-action` 可以长期依赖：
-  - [前端命令与界面接口清单](./frontend-command-reference.md)
-- 想理解为什么这次要往完全 headless 的活动接口转变，以及迁移门禁：
-  - [Headless Active Interface 设计目标](./headless-active-interface.md)
-- 想看当前 repo 里 `ui/shell + ui bus + page facade` 已经落成到什么程度，以及实际边界怎么划：
-  - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
-- 想按宪章 1.3.0 继续收敛 application use case：
-  - [Application Use Case 收敛计划](./application-use-case-consolidation-plan.md)
-- 想在修改 application service、runtime port、CLI 命令或 host capability 前做边界复核：
-  - [Application Use Case 边界检查清单](./application-use-case-boundary-checklist.md)
-- 想审计当前样式是不是还依赖 DOM 内部结构，以及下一轮该先收什么：
-  - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)
-- 想对静态 web 构建做本地 SPA 回归，避免 `/feeds` / `/settings` 直接 404：
-  - [Web SPA 回归服务脚本](./web-spa-regression-server.md)
-- 想手写主题，或把一份文档直接丢给 AI 生成 CSS：
-  - [主题作者选择器参考](./theme-author-selector-reference.md)
+- [Headless Active Interface](./headless-active-interface.md)：长期方向和重构门禁，不意味着已更换渲染器。
+- [v0.2 阶段 B2 契约](./v0.2-phase-b2-contracts.md)、[阶段 C 实施计划](./v0.2-phase-c-plan.md)：保留阶段决定与偏差记录；当前架构以 v0.2 架构和源码为准。
+- [服务器模式设计入口](./rssr-web-server-mode.md)：包含历史方案的入口；现行部署见 [Web 部署](../deployment/web.md)。
+- [静态 SPA 回归迁移](./web-spa-regression-server.md)：旧入口的退役说明；正式浏览器验收使用[同源服务器回归](../testing/server-web-regression.md)。
+- [Penpot 历史草模](./reading-workspace-penpot-contract.md)：v4–v8 草模与旧连线，不替代当前画板。
 
-## 两份文档分别解决什么问题
+新增或修改设计时应写清：已经实施的行为、尚未实施的方案、实际验证范围。不要只修改本索引中的状态而遗漏正文中的旧结论。
 
-### 功能设计哲学
-
-关注：
-
-- 产品功能边界为什么要收敛在订阅、阅读、基本设置和基础配置交换
-- 行为由 Rust 控制、样式由 CSS 控制
-- GUI / CLI / Docker Compose 形态如何保持同一产品边界
-- 正文缓存与图片本地化的边界
-
-适合：
-
-- 改交互边界
-- 改主题系统
-- 判断某类改动应该落在 UI、应用服务还是基础设施层
-
-### 前端命令与界面接口清单
-
-关注：
-
-- 当前有哪些前端命令应长期保持稳定
-- 哪些 `data-page` / `data-nav` / `data-action` 可公开依赖
-- 哪些组件 class 和状态接口适合主题和 AI 使用
-
-适合：
-
-- 对齐 UI 命令面
-- 检查某次改动有没有越过产品功能边界
-- 给 AI 或主题作者提供稳定接口约束
-
-### Headless Active Interface 设计目标
-
-关注：
-
-- 当前前端为什么还不是完全 headless
-- 命令层、查询层和视图壳应该如何分离
-- 为什么这会支持极端 CSS 重排
-- 每完成一个模块后如何用真实浏览器做视觉与体验等价验收
-
-适合：
-
-- 启动这次前端架构重构
-- 判断某次 UI 重构是否越过视觉等价边界
-- 设计 GUI / CLI 共用的统一命令面
-
-### UI Shell / Bus / Page Facade 边界
-
-关注：
-
-- 当前 `rssr-app` 里已经形成的 `ui/shell`、`UiCommand / runtime / UiIntent`、`page facade` 边界
-- 什么职责应留在 shell，什么职责应留在 bus，什么职责应留在 facade
-- 哪些反模式不应再回流到页面组件
-
-适合：
-
-- 继续推进 `headless active interface + CSS 完全分离 + infra`
-- 判断某次页面重构是否把职责放回错层
-- 对齐当前实现版架构，而不是只看目标愿景
-
-### 主题作者选择器参考
-
-关注：
-
-- 可以长期依赖的 `data-page` / `data-action` / `data-nav`
-- 稳定组件 class
-- 可覆写变量
-- AI 生成主题的约束与提示模板
-
-适合：
-
-- 写新主题
-- 让 AI 生成 CSS
-- 检查某份主题是否过度依赖内部 DOM 层级
-
-### CSS 完全分离基线检查
-
-关注：
-
-- 当前哪些样式仍然依赖深 DOM 层级
-- 哪些状态样式仍然绑在 modifier class 上
-- 哪些内容岛样式可以作为允许保留的例外
-- 下一轮 CSS 分离收口应该按什么顺序推进
-
-适合：
-
-- 做页面壳 / facade / shell 收口后的样式审计
-- 给下一轮 `data-state` / `data-variant` / `data-density` 改造排优先级
-- 判断一条样式规则是否仍在偷用页面内部结构
+- [原生控件适配契约](./native-control-adapter-contracts.md)：主线逐字段保存与页面/宿主生命周期的接入约束。

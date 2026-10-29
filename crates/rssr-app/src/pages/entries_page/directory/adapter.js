@@ -118,7 +118,9 @@ function align(command) {
             links.find(e => e.dataset.directoryAnchor === command.group && visible(e));
         if (target) {
             const r = rail.getBoundingClientRect(), t = target.getBoundingClientRect();
-            const top = r.top + rail.clientTop, bottom = top + rail.clientHeight;
+            const edge = r.top + rail.clientTop, bottom = edge + rail.clientHeight;
+            const heading = rail.querySelector('.directory-heading-row');
+            const top = Math.min(bottom, Math.max(edge, heading?.getBoundingClientRect().bottom || edge));
             if (t.top < top) rail.scrollTop += t.top - top;
             else if (t.bottom > bottom) rail.scrollTop += t.bottom - bottom;
         }

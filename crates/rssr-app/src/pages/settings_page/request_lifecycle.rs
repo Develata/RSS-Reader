@@ -1,133 +1,65 @@
-//! Page-local result ownership and a single gate for settings mutations.
-//! No settings values, tasks or platform capabilities are retained here.
+//! Stored settings, per-field overlays and the page write/read fence. No platform I/O.
+use rssr_application::SettingsPatch;
+use rssr_domain::UserSettings;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum SettingsWrite {
-    Save,
-    Download,
+/// The user's edits that are not stored yet.
+#[derive(Clone, Default, PartialEq)]
+pub(super) struct Edits {
+    /// Sent by the save in flight: stored by its reply, or edits again if it fails.
+    pub(super) submitted: Option<SettingsPatch>,
+    /// Made since (all of them while no save is in flight).
+    pub(super) pending: SettingsPatch,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct EditingRevision {
-    pub draft: u64,
-    pub preset: u64,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(super) struct LoadRequest {
-    revision: u64,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(super) struct WriteRequest {
-    revision: u64,
-    kind: SettingsWrite,
-    pub editing: EditingRevision,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct SettingsRequestLifecycle {
-    revision: u64,
-    editing: EditingRevision,
-    draft_replacement_revision: u64,
-    pending: Option<SettingsWrite>,
-}
-
-impl SettingsRequestLifecycle {
-    pub fn editing(&self) -> EditingRevision {
-        self.editing
+impl Edits {
+    pub(super) fn over(&self, stored: &UserSettings) -> UserSettings {
+        let submitted = self.submitted.as_ref().map(|patch| patch.applied(stored));
+        self.pending.applied(submitted.as_ref().unwrap_or(stored))
     }
 
-    pub fn edit_draft(&mut self) {
-        self.editing.draft = self.editing.draft.wrapping_add(1);
+    pub(super) fn numeric_edits(&self) -> [bool; 4] {
+        let fields = |patch: &SettingsPatch| {
+            [
+                patch.refresh_interval_minutes.is_some(),
+                patch.archive_after_months.is_some(),
+                patch.entries_page_size.is_some(),
+                patch.reader_font_scale.is_some(),
+            ]
+        };
+        let pending = fields(&self.pending);
+        let submitted = self.submitted.as_ref().map(fields).unwrap_or([false; 4]);
+        std::array::from_fn(|i| pending[i] || submitted[i])
     }
 
-    pub fn edit_preset(&mut self) {
-        self.editing.preset = self.editing.preset.wrapping_add(1);
+    pub(super) fn edit_custom_css(&self) -> bool {
+        self.pending.custom_css.is_some()
+            || self.submitted.as_ref().is_some_and(|patch| patch.custom_css.is_some())
     }
 
-    pub fn draft_replacement_revision(&self) -> u64 {
-        self.draft_replacement_revision
-    }
-
-    /// Accepted result projection retires old field feedback, even for equal values.
-    /// This is not a user edit and must not affect load/download admission.
-    pub fn note_draft_replacement(&mut self) {
-        self.draft_replacement_revision = self.draft_replacement_revision.wrapping_add(1);
-    }
-
-    pub fn pending(&self) -> Option<SettingsWrite> {
-        self.pending
-    }
-
-    pub fn begin_load(&mut self) -> Option<LoadRequest> {
-        if self.pending.is_some() {
-            return None;
-        }
-        self.revision = self.revision.wrapping_add(1);
-        Some(LoadRequest { revision: self.revision })
-    }
-
-    pub fn complete_load(&mut self, request: LoadRequest) -> bool {
-        if self.pending.is_some() || self.revision != request.revision {
-            return false;
-        }
-        self.revision = self.revision.wrapping_add(1);
-        true
-    }
-
-    pub fn begin_write(&mut self, kind: SettingsWrite) -> Option<WriteRequest> {
-        if self.pending.is_some() {
-            return None;
-        }
-        // A write supersedes older initial reads even if the write later fails.
-        self.revision = self.revision.wrapping_add(1);
-        self.pending = Some(kind);
-        Some(WriteRequest { revision: self.revision, kind, editing: self.editing })
-    }
-
-    pub fn complete_write(&mut self, request: WriteRequest) -> bool {
-        if self.revision != request.revision || self.pending != Some(request.kind) {
-            return false;
-        }
-        self.pending = None;
-        true
+    /// All of them: the ones a save in flight sent, then the ones made since (C4b item 4).
+    pub(super) fn unsaved(&self) -> Option<SettingsPatch> {
+        let all = match &self.submitted {
+            Some(submitted) => submitted.clone().followed_by(self.pending.clone()),
+            None => self.pending.clone(),
+        };
+        (!all.is_empty()).then_some(all)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn latest_load_is_consumed_once_and_edits_do_not_hide_persisted_results() {
-        let mut state = SettingsRequestLifecycle::default();
-        let old = state.begin_load().unwrap();
-        let new = state.begin_load().unwrap();
-        state.edit_draft();
-        state.edit_preset();
-        assert!(!state.complete_load(old));
-        assert!(state.complete_load(new));
-        assert!(!state.complete_load(new));
-        assert_eq!(state.editing(), EditingRevision { draft: 1, preset: 1 });
-    }
-
-    #[test]
-    fn mutations_share_one_gate_and_permanently_supersede_old_loads() {
-        for first in [SettingsWrite::Save, SettingsWrite::Download] {
-            let mut state = SettingsRequestLifecycle::default();
-            let load = state.begin_load().unwrap();
-            let write = state.begin_write(first).unwrap();
-            assert!(state.begin_load().is_none());
-            assert!(state.begin_write(SettingsWrite::Save).is_none());
-            assert!(state.begin_write(SettingsWrite::Download).is_none());
-            assert!(!state.complete_load(load));
-            assert!(state.complete_write(write));
-            assert!(!state.complete_load(load));
-            let next = state.begin_write(first).unwrap();
-            assert!(!state.complete_write(write));
-            assert_eq!(state.pending(), Some(first));
-            assert!(state.complete_write(next));
-        }
-    }
+/// The page's writes (saves, pulls) as its loads see them.
+#[derive(Clone, Default, PartialEq)]
+pub(super) struct Writes {
+    /// One write at a time: a pull replaces the stored settings a save in flight is measured
+    /// against, and a save would store over a pull it does not know of.
+    pub(super) in_flight: bool,
+    /// Writes whose reply carried the stored settings. A load issued before one of them may
+    /// predate it, so its reply is discarded.
+    pub(super) stored: u64,
+    /// A load answered while a write was in flight, with the app's count of applied settings when
+    /// it was issued and its read generation. It waits for the write: dropped if the write stores
+    /// settings or a later load was issued meanwhile (review C4B-B-R2-02), applied if not.
+    pub(super) held_load: Option<(UserSettings, u64, u64)>,
+    /// Loads issued: only the latest one's reply applies, whatever order the replies come in
+    /// (C4b item 2; review C4B-B-01).
+    pub(super) reads: u64,
 }

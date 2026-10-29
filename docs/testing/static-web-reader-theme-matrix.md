@@ -1,77 +1,16 @@
-# Static Web 阅读页 主题矩阵 Smoke
+# Web 阅读页主题矩阵 Smoke
 
-这份说明服务于静态 `rssr-app` Web 入口下，真实阅读页的多主题回归。
-
-它解决的是：
-
-- 不再手工进入设置页逐个切主题
-- 让 阅读页 的多主题检查变成固定入口
-- 直接复用同源 local auth helper 与 `reader-demo` seed
-
-默认截图矩阵不穷举浅色/深色/跟随系统、全部视口或键盘状态。主题变化时另补这些模式；准确路由为 `/entries/:entry_id`。
-
-## 脚本
-
-- [run_static_web_reader_theme_matrix.sh](../../scripts/run_static_web_reader_theme_matrix.sh)
-
-## 最短用法
+保留旧文件名以兼容引用。v0.2 C4c 起在真实 `rssr-web` 上运行，使用服务器夹具资料库和真实登录；统一入口见 [服务器浏览器回归](./server-web-regression.md)。
 
 ```bash
-bash scripts/run_static_web_reader_theme_matrix.sh
+bash scripts/run_server_web_regression.sh --suite theme-matrix
+bash scripts/run_server_web_regression.sh --suite theme-matrix --release --port 8103
 ```
 
-默认行为：
+默认依次检查默认主题、Atlas Sidebar、Newsprint、Amethyst Glass、Midnight Ledger 的真实 `/entries/2` 阅读页，保存 HTML、PNG、`assertions.json` 与 `summary.md`，以及构建、服务器与浏览器日志。默认产物位于 `target/server-web-regression/theme-matrix/<timestamp>/`。
 
-- 启动带 SPA fallback 的静态 Web 服务
-- 用 `reader-demo` seed 固定进入 `/entries/2`
-- 依次覆盖：
-  - 默认主题
-  - `Atlas Sidebar`
-  - `Newsprint`
-  - `Amethyst Glass`
-  - `Midnight Ledger`
-- 对每个主题产出：
-  - `*.html`
-  - `*.png`
+`--skip-build` 只复用已有页面；服务器与夹具工具仍会构建。三者应来自同一源码版本，页面请求标识必须与服务器完整相等；换 commit 或 feature 后重建页面。
 
-## 常用参数
+固定断言检查阅读页语义、标题与主题 CSS 已注入；人工复看标题、元信息、正文和底部栏是否可读、有无遮挡。默认矩阵不穷举浅/深色、跟随系统、全部视口或键盘状态；不能用结构断言代替视觉验收。
 
-```bash
-bash scripts/run_static_web_reader_theme_matrix.sh --skip-build
-bash scripts/run_static_web_reader_theme_matrix.sh --release
-bash scripts/run_static_web_reader_theme_matrix.sh --port 8103
-```
-
-## 验收重点
-
-- `/entries/2` 始终进入真实阅读页
-- DOM 中仍有：
-  - `data-page="reader"`
-  - `data-layout="reader-page"`
-  - 真实文章标题
-- 非默认主题下，`user-custom-css` 已真实注入
-- 不同主题下：
-  - 标题、元信息、正文区、底部栏仍可读
-  - 布局没有塌陷
-
-## 结果记录
-
-脚本会生成：
-
-- `target/static-web-reader-theme-matrix/<timestamp>/summary.md`
-
-建议直接在模板里补：
-
-- 各主题结果
-- 是否出现布局回退
-- 是否允许进入发布前总回归
-
-## 历史证据与本次验收
-
-- 2026-04-10 已完成一轮人工视觉验收：
-  - 产物目录：`target/static-web-reader-theme-matrix/20260410-213206/`
-  - 结论：默认主题、`Atlas Sidebar`、`Newsprint`、`Amethyst Glass`、`Midnight Ledger` 的 `/entries/2` 阅读页均可接受
-- 每次新构建都需复看当前产物；2026-04-10 结论只属于当时版本。2026-09-26 的运行记录见 [集成复验](../handoffs/2026-09-26-integration-revalidation.md)。
-- 本次验收条件：
-  - 标题、元信息、正文、底部栏可读
-  - 没有明显塌陷、遮挡或不可点击区域
+历史证据：2026-04-10 的五主题人工结论仅适用于当时构建（`target/static-web-reader-theme-matrix/20260410-213206/`）。后续记录见 [2026-09-26 集成复验](../handoffs/archive/2026-09/2026-09-26-integration-revalidation.md)；每次新构建都要检查自己的产物。

@@ -1,31 +1,30 @@
 use std::future::Future;
 
+use dioxus::prelude::*;
+
 use super::state::SettingsPageSaveState;
 use crate::{
     pages::settings_page::{
-        request_lifecycle::SettingsWrite,
-        save_policy::{SaveCompletion, prepare_save, saved_status_message},
+        save_policy::{SaveCompletion, normalize_submission, saved_status_message, validate_patch},
         session::SettingsPageSession,
     },
     status::{set_status_error, set_status_info},
-    ui::{SettingsCommand, UiCommand, UiIntent, execute_ui_command},
+    ui::{SettingsCommand, UiCommand, UiIntent, run_ui_command},
 };
-use dioxus::prelude::*;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSaveSession {
+    state: Signal<SettingsPageSaveState>,
     page: SettingsPageSession,
 }
 
 impl SettingsPageSaveSession {
-    pub(crate) fn new(page: SettingsPageSession) -> Self {
-        Self { page }
+    pub(crate) fn new(state: Signal<SettingsPageSaveState>, page: SettingsPageSession) -> Self {
+        Self { state, page }
     }
 
     pub(crate) fn snapshot(self) -> SettingsPageSaveState {
-        SettingsPageSaveState {
-            pending_save: self.page.pending_write() == Some(SettingsWrite::Save),
-        }
+        (self.state)()
     }
 
     pub(crate) fn save(self) {
@@ -34,67 +33,60 @@ impl SettingsPageSaveSession {
 
     pub(crate) fn save_with_message(self, success_message: impl Into<String>) {
         self.save_with(success_message.into(), |command| {
-            execute_ui_command(UiCommand::Settings(command))
+            run_ui_command(UiCommand::Settings(command))
         });
     }
 
     fn save_with<F: Future<Output = Vec<UiIntent>> + 'static>(
         self,
-        success_message: String,
+        mut success_message: String,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
         // Every entry point, including theme preset buttons, passes this synchronous gate.
-        if self.page.reject_pending_write() {
+        if self.state.peek().pending_save {
+            self.page
+                .set_status("上一份设置仍在保存；新修改已保留在草稿中，完成后请再次保存。", "info");
             return;
         }
-        let submitted_draft = self.page.draft().peek().clone();
-        let submitted_preset = self.page.preset_choice().peek().clone();
-        let prepared = match prepare_save(submitted_draft.clone(), success_message) {
-            Ok(prepared) => prepared,
-            Err(message) => {
-                set_status_error(
-                    self.page.status_signal(),
-                    self.page.status_tone_signal(),
-                    message,
-                );
-                return;
-            }
-        };
-
-        let Some(request) = self.page.begin_write(SettingsWrite::Save) else {
+        // Only the edited fields are sent, so a change saved elsewhere meanwhile (an import,
+        // another device) is not overwritten; the CSS is checked only when it is edited.
+        if let Err(err) = validate_patch(&self.page.pending_edits()) {
+            set_status_error(self.page.status_signal(), self.page.status_tone_signal(), err);
             return;
-        };
+        }
+
+        // One settings write at a time: a pull in flight replaces the stored settings.
+        if !self.page.begin_write() {
+            self.page.set_status(
+                "正在从 WebDAV 下载配置；修改已保留在草稿中，完成后请再次保存。",
+                "info",
+            );
+            return;
+        }
+        let mut state = self.state;
+        state.with_mut(|state| state.pending_save = true);
 
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
-        let saving = execute(SettingsCommand::SaveAppearance {
-            settings: prepared.settings,
-            success_message: prepared.success_message,
-        });
+        let submitted_preset = self.page.preset_choice().peek().clone();
+        let patch = normalize_submission(self.page.submit_edits(), &mut success_message);
+        let saving = execute(SettingsCommand::UpdateSettings { patch, success_message });
         spawn(async move {
             let intents = saving.await;
-            if !self.page.complete_write(request) {
-                return;
-            }
+            state.with_mut(|state| state.pending_save = false);
             match SaveCompletion::collect(
                 intents.into_iter().filter_map(UiIntent::into_settings_page_intent),
             ) {
                 SaveCompletion::Saved { settings, message } => {
-                    let has_unsaved_edits = self.page.apply_saved_settings(
-                        settings,
-                        &submitted_draft,
-                        &submitted_preset,
-                    );
-                    set_status_info(
-                        status,
-                        status_tone,
-                        saved_status_message(message, has_unsaved_edits),
-                    );
+                    let unsaved = self.page.apply_saved_settings(settings, &submitted_preset);
+                    set_status_info(status, status_tone, saved_status_message(message, unsaved));
                 }
-                SaveCompletion::Failed { message } => {
-                    set_status_error(status, status_tone, message);
+                SaveCompletion::Failed { message, tone } => {
+                    self.page.restore_submitted_edits();
+                    crate::status::set_status(status, status_tone, message, tone);
                 }
             }
+            self.page.end_write();
         });
     }
 }
@@ -104,14 +96,18 @@ mod tests {
     use std::{cell::Cell, rc::Rc};
 
     use super::*;
-    use crate::{pages::settings_page::intent::SettingsPageIntent, theme::ThemeController};
-    use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ThemeMode, UserSettings};
+    use crate::pages::settings_page::intent::SettingsPageIntent;
+    use crate::theme::ThemeController;
+    use crate::ui::AppShellState;
+    use rssr_application::SettingsPatch;
+    use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
-        let theme = ThemeController { settings: use_signal(UserSettings::default) };
+        let theme = crate::theme::use_theme_controller();
         let page = SettingsPageSession::new(theme);
-        use_context_provider(|| SettingsPageSaveSession::new(page));
+        let state = use_signal(SettingsPageSaveState::new);
+        use_context_provider(|| SettingsPageSaveSession::new(state, page));
         use_context_provider(|| theme);
         rsx! {}
     }
@@ -125,14 +121,24 @@ mod tests {
     }
 
     fn start_save(session: SettingsPageSaveSession) -> oneshot::Sender<bool> {
+        start_save_over(session, UserSettings::default())
+    }
+
+    /// Saves against a store holding `stored`: the reply is the patch applied to it.
+    fn start_save_over(
+        session: SettingsPageSaveSession,
+        stored: UserSettings,
+    ) -> oneshot::Sender<bool> {
         let (sender, receiver) = oneshot::channel();
         session.save_with("设置已保存。".into(), |command| async move {
-            let SettingsCommand::SaveAppearance { settings, success_message } = command else {
-                panic!("expected appearance save")
+            let SettingsCommand::UpdateSettings { patch, success_message } = command else {
+                panic!("expected a settings update")
             };
             if receiver.await.expect("controlled save completion") {
                 vec![
-                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(settings)),
+                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(
+                        patch.applied(&stored),
+                    )),
                     UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
                         message: success_message,
                         tone: "info".into(),
@@ -152,12 +158,12 @@ mod tests {
     fn save_keeps_later_edits_and_synchronously_gates_duplicate_requests() {
         let (mut dom, session, theme) = setup();
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Light;
+            session.page.edit(|draft| draft.theme = ThemeMode::Light);
             session.page.preset_choice().set("newsprint".into());
             let called = Rc::new(Cell::new(false));
             let check = Rc::clone(&called);
@@ -172,12 +178,13 @@ mod tests {
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
-            assert_eq!(session.page.draft().peek().theme, ThemeMode::Light);
+            assert_eq!(session.page.draft().theme, ThemeMode::Light);
             assert_eq!(session.page.preset_choice().peek().as_str(), "newsprint");
             assert!(session.page.status().contains("尚未保存"));
             assert!(!session.snapshot().pending_save);
         });
-        let retry = dom.in_scope(ScopeId::APP, || start_save(session));
+        let retry =
+            dom.in_scope(ScopeId::APP, || start_save_over(session, theme.settings.peek().clone()));
         retry.send(true).expect("save later draft");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
@@ -186,18 +193,67 @@ mod tests {
         });
     }
 
+    /// A save that fails, of any class, through the real runtime: the draft stays, the save ends,
+    /// the status has the class's tone (an unknown outcome is not called a failure) and says the
+    /// draft was kept (C4b item 1).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_save_keeps_the_draft_whatever_the_class() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        use rssr_api::{BackendError, ErrorCode};
+
+        let classes = [
+            (BackendError::new(ErrorCode::Network, "网络中断"), "error", true),
+            (BackendError::new(ErrorCode::OutcomeUnknown, "结果未知"), "unknown", false),
+            (BackendError::new(ErrorCode::Unauthenticated, "未登录"), "error", true),
+            (BackendError::new(ErrorCode::BuildMismatch, "版本不一致"), "error", true),
+        ];
+        for (error, tone, called_failed) in classes {
+            let backend = Scripted::over_new_library();
+            backend.fail("update_settings", error.clone());
+            let _host = test_host::install(backend.clone());
+            let (mut dom, session, theme) = setup();
+            dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+                session.save_with("设置已保存。".into(), |command| {
+                    crate::ui::execute_ui_command(UiCommand::Settings(command))
+                });
+            });
+            for _ in 0..200 {
+                let wait = dom.wait_for_work();
+                let _ = tokio::time::timeout(std::time::Duration::from_millis(20), wait).await;
+                dom.render_immediate_to_vec();
+                if !dom.in_scope(ScopeId::APP, || session.snapshot().pending_save) {
+                    break;
+                }
+            }
+            dom.in_scope(ScopeId::APP, || {
+                let status = session.page.status();
+                assert!(!session.snapshot().pending_save, "{}: the save ended", error.message);
+                assert_eq!(session.page.draft().theme, ThemeMode::Dark, "{}", error.message);
+                assert_eq!(theme.settings.peek().theme, UserSettings::default().theme);
+                assert_eq!(session.page.status_tone(), tone, "{}", error.message);
+                assert!(
+                    status.contains(&error.message) && status.contains("草稿已保留"),
+                    "{status}"
+                );
+                assert_eq!(status.contains("失败"), called_failed, "{status}");
+            });
+            assert_eq!(backend.calls("update_settings"), 1);
+        }
+    }
+
     #[test]
     fn failed_save_preserves_draft_and_can_be_retried() {
         let (mut dom, session, theme) = setup();
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().theme = ThemeMode::Dark;
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
         dom.render_immediate_to_vec();
         sender.send(false).expect("fail persistence");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(session.page.draft().peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().theme, ThemeMode::Dark);
             assert_eq!(theme.settings.peek().theme, UserSettings::default().theme);
             assert_eq!(session.page.status_tone(), "error");
             assert!(session.page.status().contains("草稿已保留"));
@@ -216,7 +272,7 @@ mod tests {
     fn unedited_submission_receives_normalized_value_without_losing_preset_selection() {
         let (mut dom, session, theme) = setup();
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().entries_page_size = 0;
+            session.page.edit(|draft| draft.entries_page_size = 0);
             start_save(session)
         });
         dom.render_immediate_to_vec();
@@ -226,146 +282,710 @@ mod tests {
         sender.send(true).expect("persist normalized value");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert_eq!(session.page.draft().peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
+            assert_eq!(session.page.draft().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
             assert_eq!(theme.settings.peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
             assert_eq!(session.page.preset_choice().peek().as_str(), "atlas-sidebar");
             assert!(!session.page.status().contains("尚未保存"));
         });
     }
 
+    /// Only edited fields are sent: a field changed elsewhere since the page loaded (here the
+    /// refresh interval) survives the save and reaches the draft, while an edit made during the
+    /// save stays in the draft.
     #[test]
-    fn invalid_css_never_starts_a_command_and_pending_gate_precedes_validation() {
+    fn save_sends_only_edited_fields_and_takes_the_rest_from_the_store() {
         let (mut dom, session, theme) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().custom_css = "}".into();
-            session.save_with("saved".into(), |_| -> std::future::Ready<Vec<UiIntent>> {
-                panic!("invalid input cannot construct a persistence command")
-            });
-            assert!(!session.snapshot().pending_save);
-            assert_eq!(session.page.status_tone(), "error");
-            assert!(session.page.status().starts_with("自定义 CSS 格式无效："));
-        });
+        let stored_elsewhere =
+            UserSettings { refresh_interval_minutes: 90, ..UserSettings::default() };
         let sender = dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().custom_css.clear();
-            let sender = start_save(session);
-            session.page.draft().write().custom_css = "}".into();
-            session.save_with("duplicate".into(), |_| -> std::future::Ready<Vec<UiIntent>> {
-                panic!("pending gate cannot construct a second command")
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            let (sender, receiver) = oneshot::channel::<()>();
+            let stored = stored_elsewhere.clone();
+            session.save_with("设置已保存。".into(), move |command| async move {
+                let SettingsCommand::UpdateSettings { patch, success_message } = command else {
+                    panic!("expected a settings update")
+                };
+                assert_eq!(
+                    patch,
+                    rssr_application::SettingsPatch {
+                        theme: Some(ThemeMode::Dark),
+                        ..Default::default()
+                    }
+                );
+                receiver.await.expect("controlled save completion");
+                vec![
+                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(
+                        patch.applied(&stored),
+                    )),
+                    UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
+                        message: success_message,
+                        tone: "info".into(),
+                    }),
+                ]
             });
-            assert!(session.snapshot().pending_save);
-            assert_eq!(session.page.status_tone(), "info");
-            assert!(session.page.status().starts_with("上一份设置仍在保存"));
             sender
         });
-        sender.send(true).unwrap();
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert!(!session.snapshot().pending_save);
-            assert_eq!(session.page.draft().peek().custom_css, "}");
-            assert_eq!(theme.settings.peek().custom_css, "");
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact)
+        });
+        sender.send(()).expect("complete save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let saved = theme.settings.peek().clone();
+            assert_eq!((saved.theme, saved.refresh_interval_minutes), (ThemeMode::Dark, 90));
+            let draft = session.page.draft();
+            assert_eq!(draft.refresh_interval_minutes, 90, "the stored field reaches the draft");
+            assert_eq!(draft.list_density, ListDensity::Compact, "the later edit stays");
             assert!(session.page.status().contains("尚未保存"));
         });
     }
 
-    #[test]
-    fn command_is_constructed_synchronously_after_pending_and_before_result_publication() {
-        let (mut dom, session, theme) = setup();
-        let called = Cell::new(false);
-        dom.in_scope(ScopeId::APP, || {
-            session.page.draft().write().entries_page_size = 0;
-            session.save_with("saved".into(), |command| {
-                called.set(true);
-                assert!(session.snapshot().pending_save);
-                assert_eq!(session.page.draft().peek().entries_page_size, 0);
-                let SettingsCommand::SaveAppearance { settings, success_message } = command else {
-                    panic!("expected appearance save")
-                };
-                assert_eq!(settings.entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
-                assert_eq!(success_message, "saved 文章页每页数量输入为 0，已回退为默认值 100。");
-                std::future::ready(vec![UiIntent::SettingsPage(
-                    SettingsPageIntent::SettingsLoaded(settings),
-                )])
-            });
-            assert!(called.get(), "executor construction must not be deferred into spawn");
-            assert!(session.snapshot().pending_save);
-            assert_eq!(session.page.draft().peek().entries_page_size, 0);
+    /// Issues the page's load; the reply is whatever the returned sender delivers.
+    fn start_load(session: SettingsPageSaveSession) -> oneshot::Sender<UserSettings> {
+        let (sender, receiver) = oneshot::channel();
+        session.page.load_with(|command| async move {
+            assert!(matches!(command, SettingsCommand::Load));
+            let settings = receiver.await.expect("controlled load completion");
+            vec![UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(settings))]
         });
+        sender
+    }
+
+    /// The patch a save of the current draft would send.
+    fn submitted_patch(session: SettingsPageSaveSession) -> SettingsPatch {
+        let seen = Rc::new(std::cell::RefCell::new(None));
+        let sink = Rc::clone(&seen);
+        session.save_with("设置已保存。".into(), move |command| {
+            let SettingsCommand::UpdateSettings { patch, .. } = command else {
+                panic!("expected a settings update")
+            };
+            *sink.borrow_mut() = Some(patch);
+            std::future::ready(Vec::new())
+        });
+        seen.take().expect("the save was submitted")
+    }
+
+    fn customized() -> UserSettings {
+        UserSettings {
+            theme: ThemeMode::Dark,
+            refresh_interval_minutes: 90,
+            custom_css: "body { color: red; }".into(),
+            ..UserSettings::default()
+        }
+    }
+
+    /// Opening the page before startup has read the settings: the app-wide settings arrive
+    /// first, then the page's own load. Saving without an edit sends nothing (B2-D4); measuring
+    /// the default draft against the app-wide settings would send the defaults over the stored
+    /// theme, interval and CSS.
+    #[test]
+    fn a_cold_start_save_without_edits_sends_nothing() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        dom.in_scope(ScopeId::APP, || {
+            let mut app_wide = theme.settings;
+            app_wide.set(customized());
+        });
+        load.send(customized()).expect("deliver the load");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            assert!(!session.snapshot().pending_save);
-            assert_eq!(session.page.draft().peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
-            assert_eq!(*theme.settings.peek(), *session.page.draft().peek());
-            assert_eq!(session.page.status(), "");
-            assert_eq!(session.page.status_tone(), "info");
+            assert_eq!(session.page.draft(), customized());
+            assert_eq!(submitted_patch(session), SettingsPatch::default());
         });
     }
 
+    /// Edits made while the load is in flight stay; the other fields come from the store.
     #[test]
-    fn completion_projects_global_status_and_ignores_other_page_results() {
-        use crate::pages::reader_page::intent::ReaderPageIntent;
-
+    fn a_load_reply_keeps_the_edits_made_while_it_was_in_flight() {
         let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
         dom.in_scope(ScopeId::APP, || {
-            session.save_with("saved".into(), |_| {
-                std::future::ready(vec![
-                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(
-                        UserSettings::default(),
-                    )),
-                    UiIntent::SettingsPage(SettingsPageIntent::SetStatus {
-                        message: "old status".into(),
-                        tone: "info".into(),
-                    }),
-                    UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(UserSettings {
-                        theme: ThemeMode::Dark,
-                        ..UserSettings::default()
-                    })),
-                    UiIntent::SetStatus { message: "last status".into(), tone: "error".into() },
-                    UiIntent::ReaderPage(ReaderPageIntent::SetStatus {
-                        message: "unrelated".into(),
-                        tone: "error".into(),
-                    }),
-                ])
-            });
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
         });
+        load.send(customized()).expect("deliver the load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let draft = session.page.draft();
+            assert_eq!(draft, UserSettings { list_density: ListDensity::Compact, ..customized() });
+            assert_eq!(*theme.settings.peek(), customized());
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { list_density: Some(ListDensity::Compact), ..Default::default() }
+            );
+        });
+    }
+
+    /// A load that overlaps a save may have read the store before the save; whether its reply
+    /// arrives during the save or after it, the save's reply is what the page keeps (B2-D4).
+    #[test]
+    fn a_load_that_overlaps_a_save_is_discarded() {
+        for reply_after_the_save in [false, true] {
+            let (mut dom, session, theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            let save = dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+                start_save(session)
+            });
+            dom.render_immediate_to_vec();
+            if reply_after_the_save {
+                save.send(true).expect("complete the save");
+                dom.render_immediate_to_vec();
+                load.send(customized()).expect("deliver the load");
+            } else {
+                load.send(customized()).expect("deliver the load");
+                dom.render_immediate_to_vec();
+                save.send(true).expect("complete the save");
+            }
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                let saved = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+                assert_eq!(*theme.settings.peek(), saved, "after the save: {reply_after_the_save}");
+                assert_eq!(session.page.draft(), saved);
+                assert_eq!(submitted_patch(session), SettingsPatch::default());
+            });
+        }
+    }
+
+    /// Changing a field back while its save is pending is an edit like any other: it stays in
+    /// the draft over the saved value, even with a load in flight.
+    #[test]
+    fn an_edit_reverted_during_its_save_stays_in_the_draft() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            start_save(session)
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || session.page.edit(|draft| draft.theme = ThemeMode::System));
+        load.send(UserSettings { theme: ThemeMode::Light, ..UserSettings::default() })
+            .expect("deliver the load");
+        dom.render_immediate_to_vec();
+        save.send(true).expect("complete the save");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
-            assert_eq!(session.page.draft().peek().theme, ThemeMode::Dark);
-            assert_eq!(session.page.status(), "last status");
-            assert_eq!(session.page.status_tone(), "info");
-            assert!(!session.snapshot().pending_save);
+            assert_eq!(session.page.draft().theme, ThemeMode::System);
+            assert!(session.page.status().contains("尚未保存"));
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() }
+            );
         });
     }
 
+    /// A load overlapped by a save that stores nothing (here it fails) still applies, whether
+    /// it is answered during the save or after it: no write superseded the read, and nothing
+    /// else would show the stored settings.
     #[test]
-    fn disposing_the_page_drops_its_pending_save_future() {
-        let (mut dom, session, _) = setup();
-        let sender = dom.in_scope(ScopeId::APP, || start_save(session));
-        dom.render_immediate_to_vec();
-        assert!(!sender.is_closed(), "save is still pending in this page scope");
-        drop(dom);
-        assert!(sender.is_closed(), "page disposal cancels its task, not an external write");
+    fn a_load_overlapped_by_a_failed_save_still_applies() {
+        for reply_after_the_save in [false, true] {
+            let (mut dom, session, theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            let save = dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+                start_save(session)
+            });
+            dom.render_immediate_to_vec();
+            if reply_after_the_save {
+                save.send(false).expect("fail the save");
+                dom.render_immediate_to_vec();
+                load.send(customized()).expect("deliver the load");
+            } else {
+                load.send(customized()).expect("deliver the load");
+                dom.render_immediate_to_vec();
+                save.send(false).expect("fail the save");
+            }
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                let edited = UserSettings { list_density: ListDensity::Compact, ..customized() };
+                assert_eq!(session.page.draft(), edited, "after: {reply_after_the_save}");
+                assert_eq!(*theme.settings.peek(), customized());
+                assert_eq!(
+                    submitted_patch(session),
+                    SettingsPatch {
+                        list_density: Some(ListDensity::Compact),
+                        ..Default::default()
+                    }
+                );
+            });
+        }
     }
 
+    /// One settings write at a time: a save while a pull is in flight is not sent, so the two
+    /// replies are never merged against a baseline the other one changed.
     #[test]
-    fn pending_download_rejects_save_before_validation_and_allows_explicit_retry() {
-        let (mut dom, session, theme) = setup();
-        let sender = dom.in_scope(ScopeId::APP, || {
-            let download = session.page.begin_write(SettingsWrite::Download).unwrap();
-            session.page.update_draft(|draft| draft.custom_css = "}".into());
-            session.save_with("save".into(), |_| -> std::future::Ready<Vec<UiIntent>> {
-                panic!("busy save must not construct a command")
+    fn a_save_is_not_sent_while_a_pull_is_in_flight() {
+        let (dom, session, _theme) = setup();
+        dom.in_scope(ScopeId::APP, || {
+            let _ = session.page.begin_write();
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            let called = Rc::new(Cell::new(false));
+            let check = Rc::clone(&called);
+            session.save_with("设置已保存。".into(), move |_| {
+                called.set(true);
+                std::future::ready(Vec::new())
             });
-            assert!(session.page.status().starts_with("配置仍在下载"));
+            assert!(!check.get(), "the save must wait for the pull");
             assert!(!session.snapshot().pending_save);
-            assert_eq!(session.page.pending_write(), Some(SettingsWrite::Download));
-            assert!(session.page.complete_write(download));
-            session.page.update_draft(|draft| draft.custom_css = "/* retry */".into());
+            assert!(session.page.status().contains("WebDAV"));
+
+            // The pull stores other settings; the draft keeps its edit, which a save now sends.
+            let pulled = UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
+            session.page.dispatch(SettingsPageIntent::SettingsLoaded(pulled.clone()));
+            session.page.end_write();
+            assert_eq!(session.page.draft(), UserSettings { theme: ThemeMode::Dark, ..pulled });
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() }
+            );
+        });
+    }
+
+    /// A pull waits for a save in flight, as a save waits for a pull.
+    #[test]
+    fn a_pull_cannot_start_while_a_save_is_in_flight() {
+        let (mut dom, session, theme) = setup();
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             start_save(session)
         });
-        sender.send(true).unwrap();
         dom.render_immediate_to_vec();
-        assert_eq!(theme.settings.peek().custom_css, "/* retry */");
-        assert!(!session.snapshot().pending_save);
+        dom.in_scope(ScopeId::APP, || assert!(!session.page.begin_write()));
+        save.send(true).expect("complete the save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert!(session.page.begin_write(), "the save has ended");
+        });
+    }
+
+    /// A load overlapped by a pull that finds no remote configuration applies when the pull
+    /// ends; one overlapped by a pull that stores settings is dropped.
+    #[test]
+    fn a_load_overlapped_by_a_pull_applies_only_if_the_pull_stored_nothing() {
+        for pull_stores in [false, true] {
+            let (mut dom, session, _theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            dom.in_scope(ScopeId::APP, || assert!(session.page.begin_write()));
+            load.send(customized()).expect("deliver the load");
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(session.page.draft(), UserSettings::default(), "held");
+                let pulled =
+                    UserSettings { refresh_interval_minutes: 45, ..UserSettings::default() };
+                if pull_stores {
+                    session.page.dispatch(SettingsPageIntent::SettingsLoaded(pulled.clone()));
+                } else {
+                    session.page.dispatch(SettingsPageIntent::SetStatus {
+                        message: "远端配置不存在。".into(),
+                        tone: "info".into(),
+                    });
+                }
+                session.page.end_write();
+                let expected = if pull_stores { pulled } else { customized() };
+                assert_eq!(session.page.draft(), expected, "pull stores: {pull_stores}");
+                assert_eq!(submitted_patch(session), SettingsPatch::default());
+            });
+        }
+    }
+
+    /// An edit reverted during a save that then fails is still an edit: the load the save
+    /// overlapped (answered during the save or after it) takes the stored value only for the
+    /// untouched fields.
+    #[test]
+    fn an_edit_reverted_during_a_failed_save_survives_the_overlapped_load() {
+        for reply_after_the_save in [false, true] {
+            let (mut dom, session, theme) = setup();
+            let load = dom.in_scope(ScopeId::APP, || start_load(session));
+            let save = dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+                start_save(session)
+            });
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                session.page.edit(|draft| draft.theme = ThemeMode::System)
+            });
+            let stored = UserSettings { theme: ThemeMode::Light, ..customized() };
+            if reply_after_the_save {
+                save.send(false).expect("fail the save");
+                dom.render_immediate_to_vec();
+                load.send(stored.clone()).expect("deliver the load");
+            } else {
+                load.send(stored.clone()).expect("deliver the load");
+                dom.render_immediate_to_vec();
+                save.send(false).expect("fail the save");
+            }
+            dom.render_immediate_to_vec();
+            dom.in_scope(ScopeId::APP, || {
+                assert_eq!(*theme.settings.peek(), stored, "after: {reply_after_the_save}");
+                assert_eq!(
+                    session.page.draft(),
+                    UserSettings { theme: ThemeMode::System, ..stored.clone() },
+                    "after: {reply_after_the_save}"
+                );
+                assert_eq!(
+                    submitted_patch(session),
+                    SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() }
+                );
+            });
+        }
+    }
+
+    /// Edits are tracked, not inferred: a field set back to the value it had is still an edit
+    /// and stays over a load that brings another stored value; a field never set takes it.
+    #[test]
+    fn a_field_set_back_to_its_value_is_still_an_edit() {
+        let (mut dom, session, _theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            session.page.edit(|draft| draft.theme = ThemeMode::System);
+            session.page.edit(|draft| draft.list_density = ListDensity::Comfortable);
+        });
+        load.send(UserSettings { theme: ThemeMode::Light, ..customized() }).expect("load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(
+                session.page.draft(),
+                UserSettings { theme: ThemeMode::System, ..customized() }
+            );
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::System), ..Default::default() },
+                "setting a field to the value it shows is no edit"
+            );
+        });
+    }
+
+    /// An edit made during a save stays pending even when its value is the one the save stored
+    /// (changed away and back): the status says so, as the edit is still sent by the next save.
+    #[test]
+    fn an_edit_matching_the_saved_value_is_still_reported_unsaved() {
+        let (mut dom, session, theme) = setup();
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            start_save(session)
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Light);
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+        });
+        save.send(true).expect("complete the save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().theme, ThemeMode::Dark);
+            assert!(session.page.status().contains("尚未保存"), "{}", session.page.status());
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() }
+            );
+        });
+    }
+
+    /// The page with the app's shell, which keeps its draft (C4b item 4).
+    fn shell_harness() -> Element {
+        let shell = crate::ui::use_app_shell_state();
+        let theme = crate::theme::use_theme_controller();
+        use_context_provider(|| shell);
+        use_context_provider(|| theme);
+        let page = SettingsPageSession::new(theme);
+        let state = use_signal(SettingsPageSaveState::new);
+        use_context_provider(|| SettingsPageSaveSession::new(state, page));
+        rsx! {}
+    }
+
+    /// A draft kept before a reload is taken once when the page opens: it is the pending edits
+    /// over the settings the page reads, shown, and not saved by itself (C4b item 4).
+    #[test]
+    fn a_kept_draft_is_restored_once_over_the_read_settings_and_not_saved() {
+        let kept = SettingsPatch {
+            list_density: Some(ListDensity::Compact),
+            custom_css: Some("body { color: blue; }".into()),
+            ..Default::default()
+        };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let (mut dom, session, theme) = setup();
+        dom.render_immediate_to_vec();
+        assert_eq!(crate::ui::drafts::peek(), None, "taken once");
+        let load = dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.page.pending_edits(), kept);
+            assert_eq!(session.page.draft().list_density, ListDensity::Compact);
+            assert_eq!(session.page.status(), "已恢复重新加载前未保存的设置修改，尚未保存。");
+            start_load(session)
+        });
+        load.send(customized()).expect("deliver the load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), customized(), "the store's settings");
+            assert_eq!(session.page.draft(), kept.applied(&customized()), "the draft over them");
+            assert_eq!(session.page.pending_edits(), kept, "still to be saved");
+            assert!(!session.snapshot().pending_save, "not saved by itself");
+        });
+    }
+
+    /// The draft the shell keeps holds every edit not stored: during a save, what it sent and
+    /// what was edited since; after the save fails because the session ended (the page then
+    /// leaves to sign in), the same. A stored save leaves only the later edits; leaving the page
+    /// leaves none (C4b item 4; advisor's case of the failing write being the save).
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_kept_draft_holds_a_save_that_failed_because_the_session_ended() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        use rssr_api::{BackendError, ErrorCode};
+
+        let backend = Scripted::over_new_library();
+        backend.fail("update_settings", BackendError::new(ErrorCode::Unauthenticated, "未登录"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(shell_harness);
+        dom.rebuild_in_place();
+        let (session, shell) = dom.in_scope(ScopeId::APP, || {
+            (consume_context::<SettingsPageSaveSession>(), consume_context::<AppShellState>())
+        });
+        let (sender, receiver) = oneshot::channel::<()>();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.theme = ThemeMode::Dark);
+            session.save_with("设置已保存。".into(), |command| async move {
+                receiver.await.expect("let the save answer");
+                crate::ui::run_ui_command(UiCommand::Settings(command)).await
+            });
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+        });
+        let both = SettingsPatch {
+            theme: Some(ThemeMode::Dark),
+            list_density: Some(ListDensity::Compact),
+            ..Default::default()
+        };
+        assert_eq!(shell.settings_draft(), Some(both.clone()), "in flight");
+
+        sender.send(()).expect("answer");
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if !dom.in_scope(ScopeId::APP, || session.snapshot().pending_save) {
+                break;
+            }
+        }
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(
+                *crate::ui::recovery::APP_RECOVERY.peek(),
+                Some(crate::ui::recovery::AppRecovery::SignIn)
+            );
+        });
+        assert_eq!(shell.settings_draft(), Some(both.clone()), "after the failure");
+        crate::ui::drafts::keep(shell.settings_draft().as_ref()).expect("kept");
+        assert_eq!(crate::ui::drafts::peek(), Some(both));
+
+        backend.heal("update_settings");
+        dom.in_scope(ScopeId::APP, || {
+            session.save_with("设置已保存。".into(), |command| {
+                crate::ui::run_ui_command(UiCommand::Settings(command))
+            });
+            session.page.edit(|draft| draft.reader_font_scale = 1.5);
+        });
+        for _ in 0..100 {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(20), dom.wait_for_work())
+                .await;
+            dom.render_immediate_to_vec();
+            if !dom.in_scope(ScopeId::APP, || session.snapshot().pending_save) {
+                break;
+            }
+        }
+        assert_eq!(
+            shell.settings_draft(),
+            Some(SettingsPatch { reader_font_scale: Some(1.5), ..Default::default() }),
+            "the stored edits are no longer a draft"
+        );
+        dom.in_scope(ScopeId::APP, || shell.set_settings_page_open(false));
+        assert_eq!(shell.settings_draft(), None, "the page was left");
+    }
+
+    /// Two loads, their replies in either order: the later load's reply is what the page and the
+    /// app keep (review C4B-B-01). In order, the later reply is not mistaken for one overtaken by
+    /// the earlier one's application.
+    #[test]
+    fn loads_answering_in_order_keep_the_later_reply() {
+        let (mut dom, session, theme) = setup();
+        let (first, second) =
+            dom.in_scope(ScopeId::APP, || (start_load(session), start_load(session)));
+        let newer = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        first.send(UserSettings::default()).expect("the earlier load");
+        dom.render_immediate_to_vec();
+        second.send(newer.clone()).expect("the later load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.page.draft(), newer);
+            assert_eq!(*theme.settings.peek(), newer);
+        });
+    }
+
+    #[test]
+    fn an_earlier_load_answering_last_does_not_replace_a_later_one() {
+        let (mut dom, session, theme) = setup();
+        let (first, second) =
+            dom.in_scope(ScopeId::APP, || (start_load(session), start_load(session)));
+        let newer = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        second.send(newer.clone()).expect("the later load");
+        dom.render_immediate_to_vec();
+        first.send(UserSettings::default()).expect("the earlier load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(session.page.draft(), newer);
+            assert_eq!(*theme.settings.peek(), newer);
+        });
+    }
+
+    /// Settings the app applied from the library while a load was on its way (an import that
+    /// ended after its page was left) are not undone by the load's older reply: the page shows
+    /// them, and the app keeps them (review C4B-B-03).
+    #[test]
+    fn a_load_issued_before_an_import_applied_does_not_undo_it() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || start_load(session));
+        let imported = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        dom.in_scope(ScopeId::APP, || theme.store(imported.clone()));
+        load.send(UserSettings::default()).expect("the load read before the import");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), imported, "the app keeps the import's");
+            assert_eq!(session.page.draft(), imported, "the page shows them");
+            assert_eq!(theme.stored_count(), 1, "not applied again");
+        });
+    }
+
+    /// A restored draft stays stored until the page has handed it to the shell: leaving before
+    /// that (a sign-in raised in the same pass) keeps it for the next page (review C4B-B-09).
+    #[test]
+    fn a_restored_draft_stays_stored_until_the_shell_has_it() {
+        let kept = SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let mut dom = VirtualDom::new(shell_harness);
+        dom.rebuild_in_place();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
+        // Mounted, its effects not run yet: not handed over. Leaving now keeps nothing new, and
+        // the stored draft stays.
+        assert_eq!(shell.settings_draft(), None, "not handed over yet");
+        crate::ui::drafts::keep(shell.settings_draft().as_ref()).expect("nothing to keep");
+        assert_eq!(crate::ui::drafts::peek(), Some(kept.clone()), "still stored");
+        dom.render_immediate_to_vec();
+        assert_eq!(shell.settings_draft(), Some(kept), "the shell has it");
+        assert_eq!(crate::ui::drafts::peek(), None, "then it leaves the storage");
+    }
+
+    /// A load answered during a save is held; a later load issued meanwhile supersedes it: when
+    /// the save fails, the held reply is not applied, and the later reply is (review
+    /// C4B-B-R2-02).
+    #[test]
+    fn a_held_reply_superseded_by_a_later_load_is_dropped() {
+        let (mut dom, session, theme) = setup();
+        let (save, first) = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+            (start_save(session), start_load(session))
+        });
+        first.send(UserSettings::default()).expect("the earlier load, held");
+        dom.render_immediate_to_vec();
+        let second = dom.in_scope(ScopeId::APP, || start_load(session));
+        save.send(false).expect("the save fails");
+        dom.render_immediate_to_vec();
+        let newer = UserSettings { theme: ThemeMode::Dark, ..UserSettings::default() };
+        second.send(newer.clone()).expect("the later load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), newer);
+            assert_eq!(session.page.draft().theme, ThemeMode::Dark);
+            assert_eq!(session.page.draft().list_density, ListDensity::Compact, "the edit stays");
+        });
+    }
+
+    #[component]
+    fn LeavingSettingsPage() -> Element {
+        let theme = use_context::<ThemeController>();
+        let _page = SettingsPageSession::new(theme);
+        rsx! {}
+    }
+
+    /// The app leaves to sign in while the settings page opens with a restored draft: the notice
+    /// (above the page) leaves first, before the page hands the draft to the shell; the draft
+    /// stays stored for the page after the sign-in (review C4B-B-R2-01).
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_draft_restored_as_the_app_leaves_to_sign_in_stays_stored() {
+        use crate::components::app_notices::AppNotices;
+        use crate::ui::recovery::{APP_RECOVERY, AppRecovery};
+
+        fn app() -> Element {
+            let shell = crate::ui::use_app_shell_state();
+            let theme = crate::theme::use_theme_controller();
+            use_context_provider(|| shell);
+            use_context_provider(|| theme);
+            use_hook(|| *APP_RECOVERY.write() = Some(AppRecovery::SignIn));
+            rsx! {
+                AppNotices {}
+                LeavingSettingsPage {}
+            }
+        }
+
+        let kept = SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dom.render_immediate_to_vec();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
+        assert_eq!(shell.settings_draft(), Some(kept.clone()), "the page handed it over");
+        assert_eq!(
+            crate::ui::drafts::peek(),
+            Some(kept.clone()),
+            "still stored for after the sign-in"
+        );
+
+        // The navigation may land at any time: the stored draft follows the page's edits, and
+        // goes with the page (review C4C2-01, C4C2-02).
+        let more = SettingsPatch { list_density: Some(ListDensity::Compact), ..kept };
+        shell.set_settings_draft(Some(more.clone()));
+        assert_eq!(crate::ui::drafts::peek(), Some(more), "follows the edits");
+        shell.set_settings_page_open(false);
+        assert_eq!(crate::ui::drafts::peek(), None, "gone with the page");
+    }
+
+    /// Later edits that cannot be kept while the app leaves to sign in: the departure stops and
+    /// the notice says the draft could not be kept, as when the first edits could not (C4b item
+    /// 4; review C4C2-R2-01).
+    #[tokio::test(flavor = "current_thread")]
+    async fn later_edits_that_cannot_be_kept_keep_the_app_here() {
+        use crate::components::app_notices::AppNotices;
+        use crate::ui::recovery::{APP_RECOVERY, AppRecovery, DRAFT_NOT_KEPT};
+
+        fn app() -> Element {
+            let shell = crate::ui::use_app_shell_state();
+            let theme = crate::theme::use_theme_controller();
+            use_context_provider(|| shell);
+            use_context_provider(|| theme);
+            use_hook(|| *APP_RECOVERY.write() = Some(AppRecovery::SignIn));
+            rsx! {
+                AppNotices {}
+                LeavingSettingsPage {}
+            }
+        }
+
+        let kept = SettingsPatch { theme: Some(ThemeMode::Dark), ..Default::default() };
+        crate::ui::drafts::keep(Some(&kept)).expect("kept");
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dom.render_immediate_to_vec();
+        let shell = dom.in_scope(ScopeId::APP, consume_context::<AppShellState>);
+        assert_eq!(dom.in_scope(ScopeId::APP, || *DRAFT_NOT_KEPT.peek()), None, "left, kept");
+
+        crate::ui::drafts::platform::refuse_writes(true);
+        let more = SettingsPatch { list_density: Some(ListDensity::Compact), ..kept };
+        dom.in_scope(ScopeId::APP, || shell.set_settings_draft(Some(more)));
+        assert!(crate::ui::drafts::platform::stopped(), "the departure stopped");
+        assert_eq!(crate::ui::drafts::peek(), None, "the stale draft went");
+        assert_eq!(
+            dom.in_scope(ScopeId::APP, || *DRAFT_NOT_KEPT.peek()),
+            Some(AppRecovery::SignIn),
+            "the notice says the draft could not be kept"
+        );
     }
 }

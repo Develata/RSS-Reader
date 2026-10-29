@@ -1,47 +1,48 @@
-use dioxus::prelude::*;
-use rssr_domain::UserSettings;
+use super::request_lifecycle::{Edits, Writes};
 use std::future::Future;
 
-use super::{
-    browser::open_repository_url,
-    intent::SettingsPageIntent,
-    request_lifecycle::{EditingRevision, SettingsRequestLifecycle, SettingsWrite, WriteRequest},
-    save_policy::saved_draft_update,
-    themes::detect_preset_key,
-};
+use dioxus::prelude::*;
+use rssr_application::SettingsPatch;
+use rssr_domain::UserSettings;
+
+use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
-    status::{set_status_error, set_status_info},
     theme::ThemeController,
-    ui::{SettingsCommand, UiCommand, UiIntent, execute_ui_command},
+    ui::{
+        AppShellState, SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, drafts,
+        run_ui_command,
+    },
 };
+
+/// The settings page shows the stored settings with the user's edits on top (B2-D4).
+///
+/// Edits are tracked, not inferred: every field the form sets through [`Self::edit`] is an edit
+/// with its latest value until a save stores it, even when it is set back to the value it had.
+/// A save sends exactly these fields; a reply carrying stored settings replaces the rest. The
+/// stored settings are the page's own: the app-wide [`ThemeController`] signal, which startup
+/// and other pages also set whenever their replies arrive, only renders the settings.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct SettingsPageSession {
+    theme: ThemeController,
+    theme_import_revision: Signal<u64>,
+    numeric_revisions: Signal<[u64; 4]>,
+    stored: Signal<UserSettings>,
+    edits: Signal<Edits>,
+    /// `stored` with the edits on top; what the form shows.
+    draft: Signal<UserSettings>,
+    writes: Signal<Writes>,
+    preset_choice: Signal<String>,
+    status: Signal<String>,
+    status_tone: Signal<String>,
+    /// The app's shell, which keeps the edits not stored yet across a reload or a sign-in
+    /// (C4b item 4); none in tests of the page alone.
+    shell: Option<AppShellState>,
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct ThemeImportRequest(u64);
 
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) struct SettingsPageSession {
-    theme: ThemeController,
-    draft: Signal<UserSettings>,
-    preset_choice: Signal<String>,
-    status: Signal<String>,
-    status_tone: Signal<String>,
-    theme_import_revision: Signal<u64>,
-    requests: Signal<SettingsRequestLifecycle>,
-}
-
 impl SettingsPageSession {
-    pub(crate) fn new(theme: ThemeController) -> Self {
-        let draft = use_signal(|| (theme.settings)());
-        let preset_choice =
-            use_signal(|| detect_preset_key(&(theme.settings)().custom_css).to_string());
-        let status = use_signal(String::new);
-        let status_tone = use_signal(|| "info".to_string());
-        let theme_import_revision = use_signal(|| 0);
-        let requests = use_signal(SettingsRequestLifecycle::default);
-
-        Self { theme, draft, preset_choice, status, status_tone, theme_import_revision, requests }
-    }
-
     /// Start at picker opening, before any await. Even a later cancellation supersedes old reads.
     pub(crate) fn begin_theme_import(mut self) -> ThemeImportRequest {
         self.theme_import_revision.with_mut(|revision| {
@@ -69,30 +70,160 @@ impl SettingsPageSession {
         })
     }
 
-    pub(crate) fn update_draft(mut self, update: impl FnOnce(&mut UserSettings)) {
-        self.note_draft_edit();
-        let mut next = (self.draft)();
-        update(&mut next);
-        self.draft.set(next);
-    }
-
     pub(crate) fn set_preset_choice(mut self, value: impl Into<String>) {
         self.invalidate_theme_import();
-        self.requests.with_mut(SettingsRequestLifecycle::edit_preset);
         self.preset_choice.set(value.into());
     }
 
-    pub(crate) fn note_draft_edit(mut self) {
+    pub(crate) fn numeric_revisions(self) -> [u64; 4] {
+        (self.numeric_revisions)()
+    }
+
+    /// Only fields supplied by stored settings retire parse feedback. Fields with
+    /// submitted/pending edits still overlay the stored value and keep their feedback.
+    fn note_numeric_projection(mut self) {
+        let edited = self.edits.peek().numeric_edits();
+        self.numeric_revisions.with_mut(|revisions| {
+            for (revision, edited) in revisions.iter_mut().zip(edited) {
+                if !edited {
+                    *revision = revision.wrapping_add(1);
+                }
+            }
+        });
+    }
+
+    /// A draft kept before a reload or a sign-in becomes the pending edits, over the settings the
+    /// page then reads; it is not saved by itself (C4b item 4). It leaves the storage only once
+    /// the shell has it (review C4B-B-09).
+    pub(crate) fn new(theme: ThemeController) -> Self {
+        let stored = use_signal(|| theme.settings.peek().clone());
+        let edits =
+            use_signal(|| Edits { submitted: None, pending: drafts::peek().unwrap_or_default() });
+        let restored = !edits.peek().pending.is_empty();
+        let draft = use_signal(|| edits.peek().over(&stored.peek()));
+        let writes = use_signal(Writes::default);
+        let theme_import_revision = use_signal(|| 0);
+        let numeric_revisions = use_signal(|| [0; 4]);
+        let preset_choice = use_signal(|| detect_preset_key(&draft.peek().custom_css).to_string());
+        let status = use_signal(|| {
+            if restored {
+                "已恢复重新加载前未保存的设置修改，尚未保存。".to_string()
+            } else {
+                String::new()
+            }
+        });
+        let status_tone = use_signal(|| "info".to_string());
+        let shell = try_consume_context::<AppShellState>();
+
+        let session = Self {
+            theme,
+            stored,
+            edits,
+            draft,
+            writes,
+            preset_choice,
+            status,
+            status_tone,
+            shell,
+            theme_import_revision,
+            numeric_revisions,
+        };
+        // A restored draft is the shell's to keep from now on; then it leaves the storage.
+        use_effect(move || {
+            session.publish_draft();
+            if restored {
+                drafts::forget();
+            }
+        });
+        session
+    }
+
+    /// Tells the shell the edits not stored yet, after every change of them (C4b item 4).
+    fn publish_draft(self) {
+        if let Some(shell) = self.shell {
+            shell.set_settings_draft(self.edits.peek().unsaved());
+        }
+    }
+
+    /// What the form shows (a reactive read).
+    pub(crate) fn draft(self) -> UserSettings {
+        (self.draft)()
+    }
+
+    /// The one way the form changes the draft: the fields `change` sets become edits.
+    pub(crate) fn edit(mut self, change: impl FnOnce(&mut UserSettings)) {
         self.invalidate_theme_import();
-        self.requests.with_mut(SettingsRequestLifecycle::edit_draft);
+        let mut next = self.draft.peek().clone();
+        change(&mut next);
+        let changed = SettingsPatch::between(&self.draft.peek(), &next);
+        if changed.is_empty() {
+            return;
+        }
+        self.edits.with_mut(|edits| {
+            edits.pending = std::mem::take(&mut edits.pending).followed_by(changed);
+        });
+        self.draft.set(next);
+        self.publish_draft();
     }
 
-    pub(crate) fn draft(self) -> Signal<UserSettings> {
-        self.draft
+    /// The edits a save would send.
+    pub(crate) fn pending_edits(self) -> SettingsPatch {
+        self.edits.peek().pending.clone()
     }
 
-    pub(crate) fn draft_replacement_revision(self) -> u64 {
-        (self.requests)().draft_replacement_revision()
+    /// Hands the pending edits to a save; call after [`Self::begin_write`] succeeded.
+    pub(crate) fn submit_edits(mut self) -> SettingsPatch {
+        let submitted = {
+            let mut edits = self.edits.write();
+            let submitted = std::mem::take(&mut edits.pending);
+            edits.submitted = Some(submitted.clone());
+            submitted
+        };
+        self.publish_draft();
+        submitted
+    }
+
+    /// The save failed: what it sent is an edit again, under the ones made since.
+    pub(crate) fn restore_submitted_edits(mut self) {
+        {
+            let mut edits = self.edits.write();
+            if let Some(submitted) = edits.submitted.take() {
+                edits.pending = submitted.followed_by(std::mem::take(&mut edits.pending));
+            }
+        }
+        self.publish_draft();
+    }
+
+    /// Starts a write whose reply may carry the stored settings (a save, a pull). Returns false,
+    /// changing nothing, while another write is in flight.
+    pub(crate) fn begin_write(mut self) -> bool {
+        if self.writes.peek().in_flight {
+            return false;
+        }
+        self.writes.write().in_flight = true;
+        true
+    }
+
+    /// Ends the write started by [`Self::begin_write`], after its reply has been applied. A load
+    /// answered meanwhile applies now unless the write stored settings.
+    pub(crate) fn end_write(mut self) {
+        let held_load = {
+            let mut writes = self.writes.write();
+            writes.in_flight = false;
+            writes.held_load.take()
+        };
+        if let Some((settings, applied, read)) = held_load
+            && read == self.writes.peek().reads
+        {
+            self.apply_load(settings, applied);
+        }
+    }
+
+    /// Records that a write stored settings: loads issued before it are stale.
+    fn note_stored(mut self) {
+        let mut writes = self.writes.write();
+        writes.stored += 1;
+        writes.held_load = None;
     }
 
     pub(crate) fn preset_choice(self) -> Signal<String> {
@@ -116,143 +247,140 @@ impl SettingsPageSession {
     }
 
     pub(crate) fn load(self) {
-        self.load_with(|command| execute_ui_command(UiCommand::Settings(command)));
+        self.load_with(|command| run_ui_command(UiCommand::Settings(command)));
     }
 
-    fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
+    /// Reads the stored settings. Only the latest load's reply applies (an earlier one may have
+    /// read before it). A write of the page that stores settings after the load was issued
+    /// supersedes it: the read may predate the write, so the whole reply is discarded. A reply
+    /// that arrives while a write is in flight waits for the write to end. Settings the app
+    /// applied from the library after the load was issued (an import or a download that ended
+    /// after its page was left, the shell's start) are not older than the read: the page takes
+    /// them instead (C4b item 2, R2-03; reviews C4B-B-01, C4B-B-03).
+    pub(super) fn load_with<F: Future<Output = Vec<UiIntent>> + 'static>(
         mut self,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
-        let Some(request) = self.requests.with_mut(SettingsRequestLifecycle::begin_load) else {
-            return;
+        let (issued, read) = {
+            let mut writes = self.writes.write();
+            writes.reads = writes.reads.wrapping_add(1);
+            (writes.stored, writes.reads)
         };
+        let applied = self.theme.stored_count();
         let loading = execute(SettingsCommand::Load);
         spawn(async move {
             let intents = loading.await;
-            if self.requests.with_mut(|state| state.complete_load(request)) {
-                // Initial loading never discards an edit made since this page was mounted,
-                // including one made before its load effect got to run.
-                self.apply_load_result(intents, EditingRevision::default());
+            let writes = self.writes.peek();
+            if writes.stored != issued || writes.reads != read {
+                return;
             }
-        });
-    }
-
-    pub(super) fn pending_write(self) -> Option<SettingsWrite> {
-        (self.requests)().pending()
-    }
-
-    pub(super) fn reject_pending_write(self) -> bool {
-        let Some(pending) = self.requests.peek().pending() else {
-            return false;
-        };
-        self.set_status(
-            match pending {
-                SettingsWrite::Save => {
-                    "上一份设置仍在保存；新修改已保留在草稿中，完成后请再次操作。"
+            drop(writes);
+            apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
+                match intent {
+                    SettingsPageIntent::SettingsLoaded(settings) => {
+                        self.receive_load(settings, applied, read)
+                    }
+                    status => self.dispatch(status),
                 }
-                SettingsWrite::Download => "配置仍在下载；新修改已保留在草稿中，完成后请再次操作。",
-            },
-            "info",
-        );
-        true
-    }
-
-    pub(super) fn begin_write(mut self, kind: SettingsWrite) -> Option<WriteRequest> {
-        self.requests.with_mut(|state| state.begin_write(kind))
-    }
-
-    pub(super) fn complete_write(mut self, request: WriteRequest) -> bool {
-        self.requests.with_mut(|state| state.complete_write(request))
-    }
-
-    pub(super) fn apply_load_result(self, intents: Vec<UiIntent>, editing: EditingRevision) {
-        let mut settings = None;
-        let mut status = None;
-        for intent in intents.into_iter().filter_map(UiIntent::into_settings_page_intent) {
-            match intent {
-                SettingsPageIntent::SettingsLoaded(value) => settings = Some(value),
-                SettingsPageIntent::SetStatus { message, tone } => status = Some((message, tone)),
-            }
-        }
-        let unsaved = settings.is_some_and(|value| self.apply_loaded_settings(value, editing));
-        if unsaved {
-            let (mut message, tone) =
-                status.unwrap_or_else(|| ("设置已载入。".into(), "info".into()));
-            message.push_str(" 加载期间的修改仍保留在草稿中，尚未保存。");
-            self.set_status(message, tone);
-        } else if let Some((message, tone)) = status {
-            self.set_status(message, tone);
-        }
-    }
-
-    fn apply_loaded_settings(mut self, settings: UserSettings, editing: EditingRevision) -> bool {
-        let current = self.requests.peek().editing();
-        let replace_draft = current.draft == editing.draft;
-        let preset = (current.preset == editing.preset).then(|| {
-            if replace_draft {
-                detect_preset_key(&settings.custom_css)
-            } else {
-                detect_preset_key(&self.draft.peek().custom_css)
-            }
+            });
         });
-        if (replace_draft && *self.draft.peek() != settings)
-            || preset.is_some_and(|value| *self.preset_choice.peek() != value)
-        {
+    }
+
+    fn receive_load(mut self, settings: UserSettings, applied: u64, read: u64) {
+        if self.writes.peek().in_flight {
+            self.writes.write().held_load = Some((settings, applied, read));
+        } else {
+            self.apply_load(settings, applied);
+        }
+    }
+
+    /// A load's settings, unless the app applied settings from the library since the load was
+    /// issued (`applied` was its count then): the page then shows those, without applying them
+    /// again. They are a write's (an import, a download), which the load may predate, or the
+    /// shell's start read; either way nothing written is undone, and the next re-read brings
+    /// anything newer.
+    fn apply_load(self, settings: UserSettings, applied: u64) {
+        if self.theme.stored_count() == applied {
+            self.apply_stored_settings(settings);
+        } else {
+            self.show_stored_settings(self.theme.settings.peek().clone());
+        }
+    }
+
+    /// Applies an intent from a reply other than a load's: statuses, and the settings a pull
+    /// stored.
+    pub(crate) fn dispatch(self, intent: SettingsPageIntent) {
+        match intent {
+            SettingsPageIntent::SettingsLoaded(settings) => {
+                self.note_stored();
+                self.apply_stored_settings(settings);
+            }
+            SettingsPageIntent::SetStatus { message, tone } => self.set_status(message, tone),
+            SettingsPageIntent::Failed(failure) => {
+                self.set_status(failure.message(), failure.tone())
+            }
+        }
+    }
+
+    /// Settings that were read or pulled are the stored ones; the edits stay on top. The preset
+    /// follows the stored CSS unless the CSS is edited.
+    fn apply_stored_settings(self, settings: UserSettings) {
+        self.show_stored_settings(settings.clone());
+        self.theme.store(settings);
+    }
+
+    /// The page's view of the stored settings, with the edits on top.
+    fn show_stored_settings(mut self, settings: UserSettings) {
+        self.note_numeric_projection();
+        let draft = self.edits.peek().over(&settings);
+        if draft.custom_css != self.draft.peek().custom_css {
             self.invalidate_theme_import();
         }
-        if let Some(preset) = preset {
-            self.preset_choice.set(preset.to_string());
+        if !self.edits.peek().edit_custom_css() {
+            self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
-        if replace_draft {
-            self.draft.set(settings.clone());
-            self.requests.with_mut(SettingsRequestLifecycle::note_draft_replacement);
-        }
-        let unsaved = *self.draft.peek() != settings;
-        self.theme.settings.set(settings);
-        unsaved
+        self.draft.set(draft);
+        self.stored.set(settings);
     }
 
-    /// Persisted settings and editable input are different snapshots while a save is pending.
-    /// Keep subsequent edits, including a newly selected preset, for the next explicit save.
+    /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset
+    /// follows the stored CSS unless one was chosen during the save. Returns whether edits are
+    /// still pending (even ones whose value is the stored one: the next save sends them).
     pub(crate) fn apply_saved_settings(
         mut self,
         settings: UserSettings,
-        submitted_draft: &UserSettings,
         submitted_preset: &str,
     ) -> bool {
-        let update = saved_draft_update(
-            &settings,
-            submitted_draft,
-            submitted_preset,
-            &self.draft.peek(),
-            &self.preset_choice.peek(),
-        );
-        // A prior save returning identical values is not a newer editing intent.
-        // Actual normalization/replacement must still invalidate outstanding file reads.
-        if (update.replace_draft && *self.draft.peek() != settings)
-            || update.preset_choice.is_some_and(|preset| *self.preset_choice.peek() != preset)
-        {
+        self.note_stored();
+        self.edits.write().submitted = None;
+        self.publish_draft();
+        self.note_numeric_projection();
+        let draft = self.edits.peek().over(&settings);
+        if draft.custom_css != self.draft.peek().custom_css {
             self.invalidate_theme_import();
         }
-        if update.replace_draft {
-            self.draft.set(settings.clone());
-            self.requests.with_mut(SettingsRequestLifecycle::note_draft_replacement);
+        if self.preset_choice.peek().as_str() == submitted_preset {
+            self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
-        if let Some(preset) = update.preset_choice {
-            self.preset_choice.set(preset.to_string());
-        }
-        self.theme.settings.set(settings);
-        update.has_unsaved_edits
+        let has_unsaved_edits = !self.edits.peek().pending.is_empty();
+        self.draft.set(draft);
+        self.stored.set(settings.clone());
+        self.theme.store(settings);
+        has_unsaved_edits
+    }
+
+    /// Whether the page (this instance) is still open: its state is dropped with it.
+    pub(crate) fn is_open(self) -> bool {
+        self.status.try_peek().is_ok()
+    }
+
+    /// Applies settings the library stored to the app (its theme), with the page gone.
+    pub(crate) fn store_theme(self, settings: UserSettings) {
+        self.theme.store(settings);
     }
 
     pub(crate) fn set_status(self, message: impl Into<String>, tone: impl Into<String>) {
-        let message = message.into();
-        let tone = tone.into();
-        if tone == "error" {
-            set_status_error(self.status, self.status_tone, message);
-        } else {
-            set_status_info(self.status, self.status_tone, message);
-        }
+        crate::status::set_status(self.status, self.status_tone, message, tone);
     }
 
     pub(crate) fn open_repository(self) {
@@ -265,321 +393,103 @@ impl SettingsPageSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::oneshot;
-
     fn harness() -> Element {
-        let theme = ThemeController { settings: use_signal(UserSettings::default) };
-        let session = SettingsPageSession::new(theme);
-        use_context_provider(|| session);
+        let page = SettingsPageSession::new(crate::theme::use_theme_controller());
+        use_context_provider(|| page);
         rsx! {}
     }
-
     fn setup() -> (VirtualDom, SettingsPageSession) {
         let mut dom = VirtualDom::new(harness);
         dom.rebuild_in_place();
-        let session = dom.in_scope(ScopeId::APP, consume_context);
-        (dom, session)
-    }
-
-    fn start_load(session: SettingsPageSession) -> oneshot::Sender<Vec<UiIntent>> {
-        let (sender, receiver) = oneshot::channel();
-        session.load_with(|command| {
-            assert!(matches!(command, SettingsCommand::Load));
-            async move { receiver.await.unwrap() }
-        });
-        sender
-    }
-
-    fn loaded(css: &str) -> Vec<UiIntent> {
-        vec![UiIntent::SettingsPage(SettingsPageIntent::SettingsLoaded(UserSettings {
-            custom_css: css.into(),
-            ..Default::default()
-        }))]
+        let page = dom.in_scope(ScopeId::APP, consume_context);
+        (dom, page)
     }
 
     #[test]
-    fn accepted_backfills_retire_feedback_even_for_equal_values_and_round_trips() {
-        let (dom, session) = setup();
+    fn stored_projection_retires_only_unedited_numeric_fields_even_for_equal_values() {
+        let (dom, page) = setup();
         dom.in_scope(ScopeId::APP, || {
-            let original = UserSettings::default();
-            let invalid_revision = session.draft_replacement_revision();
-            let import = session.begin_theme_import();
-            session.apply_loaded_settings(original.clone(), EditingRevision::default());
-            assert_ne!(session.draft_replacement_revision(), invalid_revision);
-            assert!(
-                session.complete_theme_import(import),
-                "equal backfill is not a new import intent"
-            );
-
-            let replaced = session.draft_replacement_revision();
-            let changed = UserSettings {
-                refresh_interval_minutes: 60,
-                archive_after_months: 6,
-                entries_page_size: 50,
-                reader_font_scale: 1.2,
-                ..original.clone()
-            };
-            session.apply_loaded_settings(changed, EditingRevision::default());
-            session.apply_loaded_settings(original.clone(), EditingRevision::default());
-            assert_ne!(session.draft_replacement_revision(), replaced);
-            assert_ne!(session.draft_replacement_revision(), invalid_revision);
-            assert_eq!(*session.draft.peek(), original);
-            assert_eq!(session.requests.peek().editing(), EditingRevision::default());
-        });
-    }
-
-    #[test]
-    fn later_unparsed_edits_keep_feedback_when_initial_or_download_backfill_is_rejected() {
-        let (dom, session) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            let invalid_revision = session.draft_replacement_revision();
-            session.note_draft_edit();
-            session.apply_loaded_settings(UserSettings::default(), EditingRevision::default());
-            assert_eq!(session.draft_replacement_revision(), invalid_revision);
-
-            let request = session.begin_write(SettingsWrite::Download).unwrap();
-            session.note_draft_edit();
-            let changed = UserSettings { entries_page_size: 50, ..Default::default() };
-            assert!(session.complete_write(request));
-            session.apply_loaded_settings(changed.clone(), request.editing);
-            assert_eq!(session.draft_replacement_revision(), invalid_revision);
-            assert_eq!(*session.draft.peek(), UserSettings::default());
-            assert_eq!(*session.theme.settings.peek(), changed);
-        });
-    }
-
-    #[test]
-    fn save_feedback_replacement_keeps_value_equality_instead_of_edit_revision() {
-        let (dom, session) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            session.update_draft(|draft| draft.entries_page_size = 0);
-            let submitted = session.draft.peek().clone();
-            let saved = UserSettings::default();
-            let first_revision = session.draft_replacement_revision();
-            let editing = session.requests.peek().editing();
-            session.apply_saved_settings(saved.clone(), &submitted, "none");
-            let normalized_revision = session.draft_replacement_revision();
-            assert_ne!(normalized_revision, first_revision);
-            assert_eq!(session.requests.peek().editing(), editing);
-
-            session.update_draft(|draft| draft.entries_page_size = 51);
-            session.apply_saved_settings(saved.clone(), &submitted, "none");
-            assert_eq!(session.draft_replacement_revision(), normalized_revision);
-            session.update_draft(|draft| draft.entries_page_size = 0);
-            session.note_draft_edit(); // A later parse failure still retains the same submitted value.
-            let editing = session.requests.peek().editing();
-            session.apply_saved_settings(saved.clone(), &submitted, "none");
-            assert_ne!(session.draft_replacement_revision(), normalized_revision);
-            assert_eq!(session.requests.peek().editing(), editing);
-            assert_eq!(*session.draft.peek(), saved);
-        });
-    }
-
-    #[test]
-    fn initial_load_preserves_edits_before_or_after_start_including_same_value_events() {
-        for before_start in [false, true] {
-            for edit_back in [false, true] {
-                let (mut dom, session) = setup();
-                let edit = || {
-                    session.update_draft(|draft| draft.custom_css = "/* later */".into());
-                    if edit_back {
-                        session.update_draft(|draft| draft.custom_css.clear());
-                    }
-                    session.set_preset_choice("newsprint");
-                    session.set_preset_choice("none");
-                };
-                let sender = dom.in_scope(ScopeId::APP, || {
-                    if before_start {
-                        edit();
-                    }
-                    let sender = start_load(session);
-                    if !before_start {
-                        edit();
-                    }
-                    sender
-                });
-                sender.send(loaded("/* persisted */")).unwrap();
-                dom.render_immediate_to_vec();
-                dom.in_scope(ScopeId::APP, || {
-                    assert_eq!(
-                        session.draft.peek().custom_css,
-                        if edit_back { "" } else { "/* later */" }
-                    );
-                    assert_eq!(*session.preset_choice.peek(), "none");
-                    assert_eq!(session.theme.settings.peek().custom_css, "/* persisted */");
-                    assert!(session.status().contains("尚未保存"));
-                });
-            }
-        }
-    }
-
-    #[test]
-    fn unparsed_edit_preserves_last_valid_draft_without_blocking_loaded_theme() {
-        let (mut dom, session) = setup();
-        let sender = dom.in_scope(ScopeId::APP, || {
-            let sender = start_load(session);
-            session.note_draft_edit();
-            sender
-        });
-        sender.send(loaded("/* persisted */")).unwrap();
-        dom.render_immediate_to_vec();
-        assert_eq!(*session.draft.peek(), UserSettings::default());
-        assert_eq!(session.theme.settings.peek().custom_css, "/* persisted */");
-    }
-
-    #[test]
-    fn latest_load_accepts_persisted_values_and_rejects_old_success_and_error() {
-        for fail in [false, true] {
-            let (mut dom, session) = setup();
-            let (old, new) =
-                dom.in_scope(ScopeId::APP, || (start_load(session), start_load(session)));
-            new.send(loaded("/* latest */")).unwrap();
-            dom.render_immediate_to_vec();
-            old.send(if fail {
-                vec![UiIntent::SetStatus { message: "old error".into(), tone: "error".into() }]
-            } else {
-                loaded("/* obsolete */")
-            })
-            .unwrap();
-            dom.render_immediate_to_vec();
-            assert_eq!(session.draft.peek().custom_css, "/* latest */");
-            assert_eq!(*session.preset_choice.peek(), "custom");
-            assert_eq!(session.theme.settings.peek().custom_css, "/* latest */");
-            assert!(session.status.peek().is_empty());
-        }
-    }
-
-    #[test]
-    fn admitted_write_supersedes_initial_load_even_after_failure_or_no_result() {
-        for kind in [SettingsWrite::Save, SettingsWrite::Download] {
-            let (mut dom, session) = setup();
-            let sender = dom.in_scope(ScopeId::APP, || {
-                let sender = start_load(session);
-                let write = session.begin_write(kind).unwrap();
-                session.load_with(|_| -> std::future::Ready<Vec<UiIntent>> {
-                    panic!("initial read cannot start during a settings write")
-                });
-                assert!(session.complete_write(write));
-                session.set_status("write failed; draft kept", "error");
-                sender
+            page.edit(|draft| draft.entries_page_size = 80);
+            let before = page.numeric_revisions();
+            page.apply_stored_settings(UserSettings::default());
+            let after = page.numeric_revisions();
+            assert_eq!(after[2], before[2], "edited page size stays over the stored value");
+            assert_eq!(after[0], before[0] + 1, "equal unedited values still retire feedback");
+            assert_eq!(page.draft().entries_page_size, 80);
+            page.apply_stored_settings(UserSettings {
+                refresh_interval_minutes: 90,
+                ..Default::default()
             });
-            sender.send(loaded("/* obsolete */")).unwrap();
-            dom.render_immediate_to_vec();
-            assert_eq!(*session.draft.peek(), UserSettings::default());
-            assert_eq!(*session.theme.settings.peek(), UserSettings::default());
-            assert_eq!(*session.status.peek(), "write failed; draft kept");
-        }
-    }
-
-    #[test]
-    fn current_load_error_keeps_edits_and_disposal_drops_the_pending_read() {
-        let (mut dom, session) = setup();
-        let sender = dom.in_scope(ScopeId::APP, || {
-            let sender = start_load(session);
-            session.update_draft(|draft| draft.custom_css = "/* draft */".into());
-            sender
-        });
-        sender
-            .send(vec![UiIntent::SetStatus { message: "load failed".into(), tone: "error".into() }])
-            .unwrap();
-        dom.render_immediate_to_vec();
-        assert_eq!(session.draft.peek().custom_css, "/* draft */");
-        assert_eq!(*session.status.peek(), "load failed");
-        assert_eq!(*session.status_tone.peek(), "error");
-        let sender = dom.in_scope(ScopeId::APP, || start_load(session));
-        dom.render_immediate_to_vec();
-        assert!(!sender.is_closed());
-        drop(dom);
-        assert!(sender.is_closed());
-    }
-
-    #[test]
-    fn only_the_latest_import_can_be_completed_once() {
-        let (dom, session) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            let old = session.begin_theme_import();
-            let new = session.begin_theme_import();
-            assert!(!session.complete_theme_import(old));
-            assert!(session.complete_theme_import(new));
-            assert!(!session.complete_theme_import(old));
-            assert!(!session.complete_theme_import(new));
+            page.apply_stored_settings(UserSettings::default());
+            assert_eq!(
+                page.numeric_revisions()[0],
+                after[0] + 2,
+                "A-B-A cannot revive an old hint"
+            );
         });
     }
 
     #[test]
-    fn edits_and_preset_events_invalidate_even_after_values_return_to_the_original() {
-        let (dom, session) = setup();
+    fn saved_projection_keeps_later_field_edits_and_retires_acknowledged_fields() {
+        let (dom, page) = setup();
         dom.in_scope(ScopeId::APP, || {
-            let request = session.begin_theme_import();
-            session.update_draft(|draft| draft.custom_css = "/* changed */".into());
-            session.update_draft(|draft| draft.custom_css.clear());
-            assert!(!session.complete_theme_import(request));
-            let same_value = session.begin_theme_import();
-            session.update_draft(|_| {});
-            assert!(!session.complete_theme_import(same_value));
-            let preset = session.begin_theme_import();
-            session.set_preset_choice("newsprint");
-            session.set_preset_choice("none");
-            assert!(!session.complete_theme_import(preset));
+            page.edit(|draft| {
+                draft.entries_page_size = 0;
+                draft.refresh_interval_minutes = 90;
+            });
+            assert!(page.begin_write());
+            let submitted = page.submit_edits();
+            page.edit(|draft| draft.refresh_interval_minutes = 60);
+            let before = page.numeric_revisions();
+            let mut saved = submitted.applied(&UserSettings::default());
+            saved.entries_page_size = 100;
+            assert!(page.apply_saved_settings(saved, "none"));
+            page.end_write();
+            assert_eq!(page.draft().refresh_interval_minutes, 60);
+            assert_eq!(page.draft().entries_page_size, 100);
+            assert_eq!(
+                page.numeric_revisions()[0],
+                before[0],
+                "later edit still owns its feedback"
+            );
+            assert_eq!(
+                page.numeric_revisions()[2],
+                before[2] + 1,
+                "normalization retires the acknowledged field"
+            );
         });
     }
 
     #[test]
-    fn only_actual_loaded_settings_changes_supersede_a_pending_import() {
-        let (dom, session) = setup();
+    fn failed_save_and_held_load_keep_submitted_edits_and_their_feedback() {
+        let (dom, page) = setup();
         dom.in_scope(ScopeId::APP, || {
-            let request = session.begin_theme_import();
-            session.set_status("feedback only", "info");
-            assert!(session.is_theme_import_current(request));
-            session.apply_loaded_settings(UserSettings::default(), EditingRevision::default());
-            assert!(session.is_theme_import_current(request));
-            let changed = UserSettings { custom_css: "/* loaded */".into(), ..Default::default() };
-            session.apply_loaded_settings(changed.clone(), EditingRevision::default());
-            assert!(!session.complete_theme_import(request));
-
-            // A loaded preset reset also changes the active editing context.
-            session.set_preset_choice("newsprint");
-            let request = session.begin_theme_import();
-            let editing = session.requests.peek().editing();
-            session.apply_loaded_settings(changed, editing);
-            assert!(!session.complete_theme_import(request));
+            page.edit(|draft| draft.entries_page_size = 80);
+            assert!(page.begin_write());
+            page.submit_edits();
+            let before = page.numeric_revisions();
+            page.receive_load(UserSettings::default(), page.theme.stored_count(), 0);
+            page.restore_submitted_edits();
+            page.end_write();
+            assert_eq!(page.draft().entries_page_size, 80);
+            assert_eq!(page.numeric_revisions()[2], before[2]);
+            assert_eq!(page.pending_edits().entries_page_size, Some(80));
         });
     }
 
     #[test]
-    fn identical_prior_save_completion_preserves_a_newer_import() {
-        let (dom, session) = setup();
+    fn stored_css_change_invalidates_an_older_file_read_without_discarding_field_edits() {
+        let (dom, page) = setup();
         dom.in_scope(ScopeId::APP, || {
-            let submitted = session.draft.peek().clone();
-            let request = session.begin_theme_import();
-            session.apply_saved_settings(submitted.clone(), &submitted, "none");
-            assert!(session.complete_theme_import(request));
-        });
-    }
-
-    #[test]
-    fn actual_save_normalization_invalidates_a_pending_import() {
-        let (dom, session) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            session.update_draft(|draft| draft.entries_page_size = 0);
-            let submitted = session.draft.peek().clone();
-            let request = session.begin_theme_import();
-            session.apply_saved_settings(UserSettings::default(), &submitted, "none");
-            assert!(!session.complete_theme_import(request));
-        });
-    }
-
-    #[test]
-    fn save_completion_that_preserves_later_edits_also_preserves_their_import() {
-        let (dom, session) = setup();
-        dom.in_scope(ScopeId::APP, || {
-            let submitted = session.draft.peek().clone();
-            session.update_draft(|draft| draft.custom_css = "/* later draft */".into());
-            session.set_preset_choice("custom");
-            let request = session.begin_theme_import();
-            session.apply_saved_settings(submitted.clone(), &submitted, "none");
-            assert!(session.complete_theme_import(request));
-            assert_eq!(session.draft.peek().custom_css, "/* later draft */");
+            page.edit(|draft| draft.entries_page_size = 80);
+            let request = page.begin_theme_import();
+            page.apply_stored_settings(UserSettings {
+                custom_css: "/* remote */".into(),
+                ..Default::default()
+            });
+            assert!(!page.complete_theme_import(request));
+            assert_eq!(page.draft().entries_page_size, 80);
+            assert_eq!(page.draft().custom_css, "/* remote */");
         });
     }
 }

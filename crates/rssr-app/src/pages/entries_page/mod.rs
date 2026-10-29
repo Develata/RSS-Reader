@@ -12,22 +12,22 @@ pub(crate) mod intent;
 mod preferences_policy;
 mod presenter;
 mod pull_refresh;
-mod reducer;
+pub(crate) mod reducer;
 mod request_lifecycle;
 mod session;
-mod state;
+pub(crate) mod state;
+mod write_feedback;
 mod write_lifecycle;
 
 use dioxus::prelude::*;
 
 use self::cards::render_entry_card_at;
-use self::clock::current_time_utc;
+use self::clock::{current_time_utc, use_sampled_clock};
 use self::controls::{render_entry_controls, render_entry_pagination_controls};
 use self::{
     facade::EntriesPageFacade,
     presenter::{EntriesPagePresenter, EntriesPresenterInput},
-    session::EntriesPageSession,
-    state::EntriesPageState,
+    session::use_entries_page_session,
 };
 use crate::{
     app::AppNav,
@@ -71,19 +71,22 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
     let mut directory_collapsed = use_signal(|| false);
     let mut mobile_directory_open = use_signal(|| false);
     let source_filter_open = use_signal(|| false);
-    use_mobile_back_navigation_with_dismiss(feed_id.map(|_| AppRoute::FeedsPage {}), move || {
-        let mut source_filter_open = source_filter_open;
-        let mut mobile_directory_open = mobile_directory_open;
-        if *source_filter_open.peek() {
-            source_filter_open.set(false);
-            true
-        } else if *mobile_directory_open.peek() {
-            mobile_directory_open.set(false);
-            true
-        } else {
-            false
-        }
-    });
+    let exit_hint = use_mobile_back_navigation_with_dismiss(
+        feed_id.map(|_| AppRoute::FeedsPage {}),
+        move || {
+            let mut source_filter_open = source_filter_open;
+            let mut mobile_directory_open = mobile_directory_open;
+            if *source_filter_open.peek() {
+                source_filter_open.set(false);
+                true
+            } else if *mobile_directory_open.peek() {
+                mobile_directory_open.set(false);
+                true
+            } else {
+                false
+            }
+        },
+    );
     let mut directory_was_open = use_signal(|| false);
     use_effect(move || {
         let open = mobile_directory_open();
@@ -237,13 +240,16 @@ fn entries_page_content(feed_id: Option<i64>) -> Element {
             }
         }
         { pagination }
+        // Android 首页按一次返回后的提示（use_mobile_back_navigation）；与翻页条一样放在页面
+        // 面板之外。
+        if exit_hint() {
+            p { "data-layout": "exit-hint", role: "status", "再按一次返回键退出" }
+        }
     }
 }
 
 fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> EntriesPageFacade {
-    let state = use_signal(EntriesPageState::new);
-    let requests = use_signal(request_lifecycle::EntriesRequestLifecycle::default);
-    let session = EntriesPageSession::new(feed_id, state, requests);
+    let session = use_entries_page_session(feed_id);
     let state_snapshot = Arc::new(session.snapshot());
     // memo 链：先把状态收窄成 presenter 真正依赖的投影，再由它推导 presenter。
     //
@@ -258,47 +264,33 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         // `presenter_input()` 会克隆整份投影；`with` 直接借用（`from_input` 是纯函数）。
         presenter_input.with(|input| Arc::new(EntriesPagePresenter::from_input(input)))
     });
-    let facade =
-        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
+    // The page's read-only refresh follows the shell's (C4b item 2).
+    let library_revision = ui.library_revision();
     let entry_search = ui.entry_search();
     let query_search = (!entry_search.trim().is_empty()).then_some(entry_search);
-    let query_scope = state_snapshot.entry_query_scope(feed_id, query_search.clone());
     let preferences_loaded = state_snapshot.preferences_load.is_loaded();
     let entries_ready = state_snapshot.preferences_load.can_load_entries();
-    let refresh_revision = ui.refresh_revision();
     let reload_revision = state_snapshot.reload_revision;
-    let grouping_mode = state::grouping_mode_preference(state_snapshot.grouping_mode);
-    let show_archived = state_snapshot.show_archived;
-    let read_filter = state_snapshot.read_filter;
-    let starred_filter = state_snapshot.starred_filter;
-    let selected_feed_urls = state_snapshot.selected_feed_urls.clone();
-    // Fix the archive clock for a query lifetime. In particular, checking a row
-    // or collapsing the directory must not cause a fresh query a second later.
-    let query_request = (
-        query_scope,
-        show_archived,
-        state_snapshot.archive_after_months,
-        refresh_revision,
-        reload_revision,
+    let requery_revision = state_snapshot.requery_revision;
+    let workspace = state_snapshot.workspace();
+    // 归档分界的“现在”只在挂载、手动刷新完成与查询条件变化时采样；状态提示、查询结果这类
+    // 普通重渲染不读时钟，否则 `EntryQuery` 每跨一秒就变化并重发查询（审计 A4）。
+    let query_now = use_sampled_clock(
+        state_snapshot.query_clock_trigger(feed_id, query_search.clone(), library_revision),
+        current_time_utc,
     );
-    let entry_query = use_memo(use_reactive!(|(query_request)| {
-        let (mut query, show_archived, months, ..) = query_request.clone();
-        if !show_archived {
-            query.archive_filter =
-                rssr_domain::ArchiveFilter::exclude_archived(current_time_utc(), months);
-        }
-        query
-    }))
-    .cloned();
+    let facade =
+        EntriesPageFacade::new(ui, session, Arc::clone(&state_snapshot), presenter.cloned());
+    let entry_query = state_snapshot.entry_query(feed_id, query_search.clone(), query_now);
 
     use_reactive_side_effect(
         (
             feed_id,
             query_search.clone(),
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls.clone(),
+            workspace.show_archived,
+            workspace.read_filter,
+            workspace.starred_filter,
+            workspace.selected_feed_urls.clone(),
         ),
         move |_| {
             session.dispatch(intent::EntriesPageIntent::CancelBulk);
@@ -314,44 +306,33 @@ fn use_entries_page_workspace(feed_id: Option<i64>, ui: AppShellState) -> Entrie
         }
     });
 
-    use_reactive_task((feed_id, refresh_revision), move |_| session.bootstrap());
+    use_reactive_task((feed_id, library_revision), move |_| session.bootstrap_or_reread());
+    // Once per opened subscription, not per refresh.
+    use_reactive_task(feed_id, move |feed_id| {
+        if let Some(feed_id) = feed_id {
+            session.remember_opened_feed(feed_id);
+        }
+    });
 
     use_reactive_task(
-        (feed_id, entries_ready, entry_query.clone(), refresh_revision, reload_revision),
-        move |(_, entries_ready, entry_query, _, _)| {
+        (
+            feed_id,
+            entries_ready,
+            entry_query.clone(),
+            library_revision,
+            reload_revision,
+            requery_revision,
+        ),
+        move |(_, entries_ready, entry_query, _, _, _)| {
             if entries_ready {
                 session.load_entries_query(entry_query);
             }
         },
     );
 
-    use_reactive_side_effect(
-        (
-            preferences_loaded,
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls,
-        ),
-        move |(
-            preferences_loaded,
-            grouping_mode,
-            show_archived,
-            read_filter,
-            starred_filter,
-            selected_feed_urls,
-        )| {
-            session.save_browsing_preferences_with(
-                preferences_loaded,
-                grouping_mode,
-                show_archived,
-                read_filter,
-                starred_filter,
-                selected_feed_urls,
-            );
-        },
-    );
+    use_reactive_side_effect((preferences_loaded, workspace), move |(loaded, workspace)| {
+        session.save_browsing_preferences(loaded, workspace);
+    });
 
     facade
 }

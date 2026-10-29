@@ -1,0 +1,252 @@
+{
+  "platform": "windows",
+  "source": "67e1c2c299cf942ae972f1c5cab10d7f10bb98fe",
+  "sha256": "C2B972DBBB500A91B8FC4DCDE7E0146D6F44B843B5376CDD26AD1B60C8E47877",
+  "checks": [
+    {
+      "name": "list respects the 2000-entry query cap for a 5000-entry fixture",
+      "ok": true
+    },
+    {
+      "name": "mark-read persists after leaving Entries",
+      "ok": true,
+      "evidence": {
+        "entry": "4999",
+        "storageHeld": true
+      }
+    },
+    {
+      "name": "toggle-starred persists after leaving Entries",
+      "ok": true,
+      "evidence": {
+        "entry": "4998",
+        "storageHeld": true
+      }
+    },
+    {
+      "name": "mark-selected-read persists after leaving Entries",
+      "ok": true,
+      "evidence": {
+        "entry": "4997",
+        "storageHeld": true
+      }
+    },
+    {
+      "name": "directory glyphs are 6px / 5px",
+      "ok": true,
+      "evidence": {
+        "parent": "6px",
+        "parentRight": "19px",
+        "branch": "5px",
+        "branchBox": {
+          "x": 1106.5,
+          "y": 388.375,
+          "width": 44,
+          "height": 44,
+          "top": 388.375,
+          "right": 1150.5,
+          "bottom": 432.375,
+          "left": 1106.5
+        },
+        "branchParent": {
+          "x": 990.5,
+          "y": 388.375,
+          "width": 160,
+          "height": 44,
+          "top": 388.375,
+          "right": 1150.5,
+          "bottom": 432.375,
+          "left": 990.5
+        },
+        "indent": "8px",
+        "rowHeight": 46.375,
+        "rowPadding": "4px",
+        "mounted": 16
+      }
+    },
+    {
+      "name": "branch arrow is on trailing edge",
+      "ok": true
+    },
+    {
+      "name": "article indent is 8px with 4px vertical padding and 44px hit height",
+      "ok": true
+    },
+    {
+      "name": "large directory window keeps mounted article rows bounded",
+      "ok": true,
+      "evidence": 16
+    },
+    {
+      "name": "directory branch collapses and reopens",
+      "ok": true
+    },
+    {
+      "name": "directory close keeps Entries active",
+      "ok": true
+    },
+    {
+      "name": "unread filter survives pending save and navigation",
+      "ok": true
+    },
+    {
+      "name": "saved filter excludes read entries",
+      "ok": true
+    },
+    {
+      "name": "grouping survives navigation",
+      "ok": true
+    },
+    {
+      "name": "source dialog back/Escape closes without leaving Entries",
+      "ok": true
+    },
+    {
+      "name": "reader 0 loads cached long content",
+      "ok": true,
+      "evidence": {
+        "p": 129,
+        "images": [
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ]
+        ],
+        "top": 0
+      }
+    },
+    {
+      "name": "Reader star write survives immediate return",
+      "ok": true,
+      "evidence": {
+        "storageHeld": true
+      }
+    },
+    {
+      "name": "reader 1 loads cached long content",
+      "ok": true,
+      "evidence": {
+        "p": 129,
+        "images": [
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ]
+        ],
+        "top": 0
+      }
+    },
+    {
+      "name": "reader 1 restores session position",
+      "ok": true,
+      "evidence": {
+        "before": 0,
+        "after": 0
+      }
+    },
+    {
+      "name": "Reader F shortcut applies to the open article",
+      "ok": true
+    },
+    {
+      "name": "reader 1 scrolls real content",
+      "ok": true,
+      "evidence": 650
+    },
+    {
+      "name": "reader 1 returns to the search scope",
+      "ok": true
+    },
+    {
+      "name": "reader 2 loads cached long content",
+      "ok": true,
+      "evidence": {
+        "p": 129,
+        "images": [
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ],
+          [
+            true,
+            640
+          ]
+        ],
+        "top": 650
+      }
+    },
+    {
+      "name": "reader 2 restores session position",
+      "ok": true,
+      "evidence": {
+        "before": 650,
+        "after": 650
+      }
+    },
+    {
+      "name": "reader 2 scrolls real content",
+      "ok": true,
+      "evidence": 650
+    },
+    {
+      "name": "reader 2 returns to the search scope",
+      "ok": true
+    },
+    {
+      "name": "final list retains the capped fixture scope",
+      "ok": true
+    },
+    {
+      "name": "no uncaught WebView errors",
+      "ok": true,
+      "evidence": []
+    }
+  ],
+  "errors": [],
+  "status": "pass",
+  "boundaries": [
+    "Actual native WebView with CDP input; system IME and foreground performance excluded.",
+    "Windows write races held by a real SQLite transaction; Android uses rapid touch/back without an artificial storage delay."
+  ],
+  "environment": {
+    "url": "http://dioxus.index.html/",
+    "viewport": [
+      1280,
+      900,
+      1
+    ],
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0"
+  }
+}

@@ -2,59 +2,48 @@ use std::time::Duration;
 
 use anyhow::Context;
 use reqwest::{header, redirect};
+use url::Url;
 
-use crate::{feed_body::read_feed_text, outbound::OutboundPolicy};
+use crate::feed_body::read_feed_text;
+use crate::outbound::OutboundPolicy;
 
 use super::feed_response::{
     FeedResponseStatus, classify_feed_response_status, http_metadata_from_headers,
 };
 
-/// feed 抓取的超时分三层。停住的连接由空闲读超时尽快判死；仍在持续传输的大 feed 只受
-/// 整体上限约束，所以慢链路上的数 MB 全文 feed 不会因为固定的短总时长失败，而一个
-/// 涓流般吐字节的源也不能让整轮刷新永久等待。
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct FeedTimeouts {
-    pub(crate) connect: Duration,
-    /// 两次成功读之间（含等待响应头）允许的最长间隔。
-    pub(crate) read_idle: Duration,
-    /// 从开始连接到响应体读完的总时长。
-    pub(crate) total: Duration,
+#[cfg(test)]
+#[path = "feed_http_tests.rs"]
+mod tests;
+
+/// 持续传输的慢速 feed 可超过空闲时限；停滞由读空闲时限结束，涓流由总时限结束。
+const FEED_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+const FEED_READ_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
+const FEED_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// 订阅抓取、订阅探测与 WebDAV 请求共用的 User-Agent（RFC 9110 §10.1.5：客户端 SHOULD 发送）。
+/// 版本取发布构建注入的 `RELEASE_TAG`（与 CLI 一致），本地构建回落到 crate 版本。
+pub(crate) fn user_agent() -> String {
+    let version = option_env!("RELEASE_TAG").unwrap_or(env!("CARGO_PKG_VERSION")).trim();
+    let version = version.strip_prefix('v').unwrap_or(version);
+    format!("RSS-Reader/{version} (+https://github.com/Develata/RSS-Reader)")
 }
 
-pub(crate) const FEED_TIMEOUTS: FeedTimeouts = FeedTimeouts {
-    connect: Duration::from_secs(10),
-    read_idle: Duration::from_secs(30),
-    total: Duration::from_secs(120),
-};
-
-/// 订阅抓取与订阅探测共用的原生 HTTP client。
-///
-/// 重定向沿用 reqwest 默认的 10 跳上限，另外每一跳都按 `outbound` 检查目标地址。
-/// 构建失败只可能来自 TLS 后端初始化，此时 `reqwest::Client::new()` 同样会 panic；
-/// 这里不退回默认 client，否则会悄悄丢掉出站策略。
-pub(crate) fn feed_http_client(
-    timeouts: FeedTimeouts,
-    outbound: OutboundPolicy,
-) -> reqwest::Client {
-    outbound
-        .configure(reqwest::Client::builder())
-        .connect_timeout(timeouts.connect)
-        .read_timeout(timeouts.read_idle)
-        .timeout(timeouts.total)
-        .redirect(redirect::Policy::custom(move |attempt| {
-            if !outbound.redirect_allowed(attempt.url()) {
-                return attempt.error("feed redirect target is not allowed by the outbound policy");
-            }
-            redirect::Policy::limited(10).redirect(attempt)
-        }))
-        .build()
-        .expect("build feed HTTP client")
+/// 订阅抓取与订阅探测共用的客户端配置：同一个 UA、连接、读空闲与总时限；地址解析与每一跳重定向
+/// 按出站策略检查（`crate::outbound`）。
+pub(crate) fn feed_client_builder(policy: &OutboundPolicy) -> reqwest::ClientBuilder {
+    policy
+        .client_builder()
+        .user_agent(user_agent())
+        .timeout(FEED_REQUEST_TIMEOUT)
+        .read_timeout(FEED_READ_IDLE_TIMEOUT)
+        .connect_timeout(FEED_CONNECT_TIMEOUT)
+        .redirect(policy.redirect(|attempt| redirect::Policy::default().redirect(attempt)))
 }
 
 #[derive(Debug, Clone)]
 pub struct FetchClient {
     inner: reqwest::Client,
-    outbound: OutboundPolicy,
+    policy: OutboundPolicy,
 }
 
 impl Default for FetchClient {
@@ -83,24 +72,23 @@ pub enum FetchResult {
 }
 
 impl FetchClient {
+    /// Unrestricted, as on desktop: a client that cannot be built falls back to the default one.
     pub fn new() -> Self {
-        Self::with_outbound(OutboundPolicy::Unrestricted)
+        let policy = OutboundPolicy::Unrestricted;
+        let inner = feed_client_builder(&policy).build().unwrap_or_else(|_| reqwest::Client::new());
+        Self { inner, policy }
     }
 
-    pub fn with_outbound(outbound: OutboundPolicy) -> Self {
-        Self::with_options(FEED_TIMEOUTS, outbound)
-    }
-
-    pub(crate) fn with_options(timeouts: FeedTimeouts, outbound: OutboundPolicy) -> Self {
-        Self { inner: feed_http_client(timeouts, outbound), outbound }
+    /// Under `policy`: a client that cannot be built is an error, never a default client.
+    pub fn with_policy(policy: OutboundPolicy) -> anyhow::Result<Self> {
+        let inner = feed_client_builder(&policy).build().context("创建 feed 抓取客户端失败")?;
+        Ok(Self { inner, policy })
     }
 
     pub async fn fetch(&self, request: &FetchRequest) -> anyhow::Result<FetchResult> {
-        // 解析失败的地址交给 reqwest 报错，与原先一致。
-        if let Ok(url) = url::Url::parse(&request.url) {
-            self.outbound.check_url(&url)?;
-        }
-        let mut builder = self.inner.get(&request.url).header(
+        let url = Url::parse(&request.url).context("feed 地址无效")?;
+        self.policy.check_url(&url)?;
+        let mut builder = self.inner.get(url).header(
             header::ACCEPT,
             "application/atom+xml, application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1",
         );
@@ -112,124 +100,24 @@ impl FetchClient {
             builder = builder.header(header::IF_MODIFIED_SINCE, last_modified);
         }
 
-        let response = builder.send().await.context("发送 feed 抓取请求失败")?;
+        // reqwest errors carry the request URL (on a redirect, the previous hop's): never in the
+        // error chain, which reaches diagnostics.
+        let response = builder
+            .send()
+            .await
+            .map_err(reqwest::Error::without_url)
+            .context("发送 feed 抓取请求失败")?;
         let metadata = http_metadata_from_headers(response.headers());
         if classify_feed_response_status(response.status()) == FeedResponseStatus::NotModified {
             return Ok(FetchResult::NotModified(metadata));
         }
 
-        let response = response.error_for_status().context("feed 抓取返回非成功状态")?;
+        let response = response
+            .error_for_status()
+            .map_err(reqwest::Error::without_url)
+            .context("feed 抓取返回非成功状态")?;
         let body = read_feed_text(response).await?;
 
         Ok(FetchResult::Fetched { body, metadata })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::{Duration, Instant};
-
-    use tokio::{
-        io::{AsyncReadExt, AsyncWriteExt},
-        net::TcpListener,
-        task::JoinHandle,
-    };
-
-    use super::{FeedTimeouts, FetchClient, FetchRequest, FetchResult};
-    use crate::outbound::OutboundPolicy;
-
-    const TIMEOUTS: FeedTimeouts = FeedTimeouts {
-        connect: Duration::from_secs(1),
-        read_idle: Duration::from_millis(300),
-        total: Duration::from_secs(5),
-    };
-
-    /// 先回响应头，再每隔 `interval` 写一个 `chunk`；`chunks` 为 `None` 时一直写下去，
-    /// 写完后保持连接不关，让停滞只能由客户端的超时结束。
-    async fn trickle_server(
-        content_length: Option<usize>,
-        chunk: &'static [u8],
-        chunks: Option<usize>,
-        interval: Duration,
-    ) -> (String, JoinHandle<()>) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("http://{}/feed.xml", listener.local_addr().unwrap());
-        let task = tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut request = [0; 4096];
-            let _ = socket.read(&mut request).await.unwrap();
-            let length = content_length
-                .map(|length| format!("Content-Length: {length}\r\n"))
-                .unwrap_or_default();
-            let head = format!("HTTP/1.1 200 OK\r\nConnection: close\r\n{length}\r\n");
-            socket.write_all(head.as_bytes()).await.unwrap();
-            let mut sent = 0;
-            while chunks.is_none_or(|limit| sent < limit) {
-                tokio::time::sleep(interval).await;
-                if socket.write_all(chunk).await.is_err() {
-                    return;
-                }
-                sent += 1;
-            }
-            std::future::pending::<()>().await;
-        });
-        (url, task)
-    }
-
-    async fn fetch(url: String) -> anyhow::Result<FetchResult> {
-        FetchClient::with_options(TIMEOUTS, OutboundPolicy::Unrestricted)
-            .fetch(&FetchRequest { url, etag: None, last_modified: None })
-            .await
-    }
-
-    #[tokio::test]
-    async fn steady_body_may_outlast_the_idle_timeout() {
-        // 8 × 100ms = 800ms，超过 300ms 的空闲读超时，但每次读之间都不空闲。
-        let (url, server) =
-            trickle_server(Some(8), b"x", Some(8), Duration::from_millis(100)).await;
-        let started = Instant::now();
-        let result = fetch(url).await;
-        server.abort();
-
-        assert!(started.elapsed() > TIMEOUTS.read_idle);
-        assert!(matches!(result, Ok(FetchResult::Fetched { ref body, .. }) if body == "xxxxxxxx"));
-    }
-
-    #[tokio::test]
-    async fn stalled_body_fails_on_the_idle_timeout_not_the_total() {
-        let (url, server) = trickle_server(Some(8), b"x", Some(1), Duration::ZERO).await;
-        let started = Instant::now();
-        let result = fetch(url).await;
-        server.abort();
-
-        assert!(result.is_err());
-        assert!(started.elapsed() < TIMEOUTS.total / 2, "stall took {:?}", started.elapsed());
-    }
-
-    #[tokio::test]
-    async fn endless_trickle_is_cut_off_by_the_total_timeout() {
-        let timeouts = FeedTimeouts { total: Duration::from_millis(800), ..TIMEOUTS };
-        let (url, server) = trickle_server(None, b"x", None, Duration::from_millis(100)).await;
-        let started = Instant::now();
-        let result = FetchClient::with_options(timeouts, OutboundPolicy::Unrestricted)
-            .fetch(&FetchRequest { url, etag: None, last_modified: None })
-            .await;
-        server.abort();
-
-        assert!(result.is_err());
-        assert!(started.elapsed() >= timeouts.total);
-        assert!(started.elapsed() < timeouts.total * 3, "took {:?}", started.elapsed());
-    }
-
-    #[tokio::test]
-    async fn public_only_policy_refuses_a_loopback_feed_before_connecting() {
-        let (url, server) = trickle_server(Some(1), b"x", Some(1), Duration::ZERO).await;
-        let result = FetchClient::with_options(TIMEOUTS, OutboundPolicy::PublicOnly)
-            .fetch(&FetchRequest { url, etag: None, last_modified: None })
-            .await;
-        server.abort();
-
-        let error = result.expect_err("loopback feed must be refused");
-        assert!(format!("{error:#}").contains("内网或本地地址"), "unexpected error: {error:#}");
     }
 }

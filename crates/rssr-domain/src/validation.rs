@@ -14,7 +14,7 @@ use crate::{
     DomainError,
     feed::normalize_feed_url,
     settings::{
-        ConfigPackage, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE,
+        ConfigPackage, MAX_ARCHIVE_AFTER_MONTHS, MAX_CUSTOM_CSS_BYTES, MAX_ENTRIES_PAGE_SIZE,
         MAX_REFRESH_INTERVAL_MINUTES, UserSettings,
     },
 };
@@ -53,7 +53,34 @@ pub fn validate_user_settings(settings: &UserSettings) -> crate::Result<()> {
             "阅读字号缩放必须在 {MIN_READER_FONT_SCALE} 到 {MAX_READER_FONT_SCALE} 之间"
         )));
     }
+    if settings.custom_css.len() > MAX_CUSTOM_CSS_BYTES {
+        return Err(invalid(format!("自定义 CSS 不能超过 {} KiB", MAX_CUSTOM_CSS_BYTES / 1024)));
+    }
 
+    Ok(())
+}
+
+/// 校验文章查询：归档分界必须是整秒（原生端按 RFC3339 文本比较，非整秒会与浏览器端的时间值
+/// 比较不一致）。列表、计数、批量已读的预览与确认共用这一条规则。
+pub fn validate_entry_query(query: &crate::EntryQuery) -> crate::Result<()> {
+    match query.archive_filter {
+        crate::ArchiveFilter::ExcludeArchived { cutoff }
+        | crate::ArchiveFilter::OnlyArchived { cutoff }
+            if cutoff.nanosecond() != 0 =>
+        {
+            Err(invalid("归档分界必须是整秒"))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// 校验批量已读的确认：查询同 [`validate_entry_query`]；存储给出的预览不会超过
+/// [`crate::MAX_MARK_READ_SELECTION`]，超过的预览不是存储给出的，不进存储就拒绝。
+pub fn validate_mark_read_preview(preview: &crate::MarkReadPreview) -> crate::Result<()> {
+    validate_entry_query(&preview.query)?;
+    if preview.unread_entry_ids.len() > crate::MAX_MARK_READ_SELECTION {
+        return Err(crate::mark_read_selection_too_large());
+    }
     Ok(())
 }
 
@@ -149,6 +176,9 @@ pub fn validate_config_package(package: &ConfigPackage) -> crate::Result<()> {
 
 /// 解析并归一化一个 feed URL，失败时给出带原始输入的错误。
 pub fn parse_feed_url(raw: &str) -> crate::Result<Url> {
+    if !crate::untrusted_url_is_parseable(raw) {
+        return Err(invalid("feed URL 超过长度或路径复杂度上限"));
+    }
     let url =
         Url::parse(raw).map_err(|error| invalid(format!("无效的 feed URL：{raw}（{error}）")))?;
     if !matches!(url.scheme(), "http" | "https") {
@@ -169,7 +199,7 @@ mod tests {
         CONFIG_PACKAGE_VERSION, parse_feed_url, validate_config_package, validate_custom_css,
         validate_user_settings,
     };
-    use crate::settings::{ConfigFeed, ConfigPackage, UserSettings};
+    use crate::settings::{ConfigFeed, ConfigPackage, MAX_CUSTOM_CSS_BYTES, UserSettings};
 
     fn package(feeds: Vec<ConfigFeed>, settings: UserSettings) -> ConfigPackage {
         ConfigPackage {
@@ -205,12 +235,24 @@ mod tests {
             (UserSettings { entries_page_size: 0, ..UserSettings::default() }, "文章页每页数量"),
             (UserSettings { entries_page_size: 201, ..UserSettings::default() }, "文章页每页数量"),
             (UserSettings { reader_font_scale: 0.1, ..UserSettings::default() }, "阅读字号缩放"),
+            (
+                UserSettings {
+                    custom_css: "a".repeat(MAX_CUSTOM_CSS_BYTES + 1),
+                    ..UserSettings::default()
+                },
+                "自定义 CSS",
+            ),
         ];
 
         for (settings, expected) in cases {
             let error = validate_user_settings(&settings).expect_err("expected rejection");
             assert!(error.to_string().contains(expected), "expected `{expected}` in `{error}`");
         }
+        let largest = UserSettings {
+            custom_css: "a".repeat(MAX_CUSTOM_CSS_BYTES),
+            ..UserSettings::default()
+        };
+        assert!(validate_user_settings(&largest).is_ok());
     }
 
     #[test]
@@ -301,6 +343,22 @@ mod tests {
             let error = parse_feed_url(raw).expect_err("unsupported scheme must fail");
             assert!(error.to_string().contains("HTTP 或 HTTPS"), "{error}");
         }
+    }
+
+    #[test]
+    fn imported_feed_urls_are_bounded_before_parsing() {
+        for raw in [
+            format!("https://e.test/{}", "a".repeat(crate::MAX_UNTRUSTED_URL_BYTES)),
+            format!("https://e.test/{}feed.xml", "%2\ne%2\re/".repeat(40)),
+        ] {
+            let input = package(vec![feed(&raw)], UserSettings::default());
+            let error = validate_config_package(&input).expect_err("input must be refused");
+            assert!(error.to_string().contains("长度或路径复杂度"), "{error}");
+        }
+        assert_eq!(
+            parse_feed_url("https://e.test/a/../feed.xml").unwrap().as_str(),
+            "https://e.test/feed.xml"
+        );
     }
 
     #[test]

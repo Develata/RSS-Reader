@@ -1,0 +1,1492 @@
+{
+  "base": "e4c4a8260d5890a4da99713deb69185cad4cd2bf",
+  "reviewed_base": "b749514209d10397287792ada4e35cbbb858f856",
+  "review_overlay": "2026-10-23-integration-review.md; local scoped fixes and phase D documentation correction",
+  "per_commit_rationale": "docs/handoffs/2026-10-22-branch-integration.md",
+  "merge_strategy": "Two explicit ancestry merges, retaining the independently reviewed and already ported v0.2 tree.",
+  "sources": [
+    {
+      "branch": "main",
+      "sha": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+      "path_count": 98,
+      "paths": [
+        {
+          "path": ".dockerignore",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            ".dockerignore"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            ".github/workflows/ci.yml"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": ".github/workflows/release.yml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            ".github/workflows/release.yml"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "AGENTS.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "AGENTS.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "CLAUDE.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "CLAUDE.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "Cargo.lock",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "Cargo.lock"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "Cargo.toml"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "Dockerfile",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "Dockerfile"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "README.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "README.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "crates/rssr-app/Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap",
+            "crates/rssr-app/src/ui/runtime"
+          ],
+          "reason": "Current facade/runtime calls the single Backend; preserve v0.2 failure and recovery semantics."
+        },
+        {
+          "path": "crates/rssr-app/src/bootstrap.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap",
+            "crates/rssr-app/src/ui/runtime"
+          ],
+          "reason": "Current facade/runtime calls the single Backend; preserve v0.2 failure and recovery semantics."
+        },
+        {
+          "path": "crates/rssr-app/src/bootstrap/native.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap",
+            "crates/rssr-app/src/ui/runtime"
+          ],
+          "reason": "Current facade/runtime calls the single Backend; preserve v0.2 failure and recovery semantics."
+        },
+        {
+          "path": "crates/rssr-app/src/bootstrap/refresh_flight.rs",
+          "source_change": "D",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-app/src/bootstrap/web.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap",
+            "crates/rssr-app/src/ui/runtime"
+          ],
+          "reason": "Current facade/runtime calls the single Backend; preserve v0.2 failure and recovery semantics."
+        },
+        {
+          "path": "crates/rssr-app/src/bootstrap/web/AGENTS.md",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap",
+            "crates/rssr-app/src/ui/runtime"
+          ],
+          "reason": "Current facade/runtime calls the single Backend; preserve v0.2 failure and recovery semantics."
+        },
+        {
+          "path": "crates/rssr-app/src/bootstrap/web/refresh.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap/web.rs",
+            "crates/rssr-app/src/ui/runtime/backend.rs",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Same-origin formal Web uses a fixed HttpBackend; authentication and refresh ownership stay at the server."
+        },
+        {
+          "path": "crates/rssr-app/src/ui/runtime/services.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap/web.rs",
+            "crates/rssr-app/src/ui/runtime/backend.rs",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Same-origin formal Web uses a fixed HttpBackend; authentication and refresh ownership stay at the server."
+        },
+        {
+          "path": "crates/rssr-app/src/web_auth.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-app/src/bootstrap/web.rs",
+            "crates/rssr-app/src/ui/runtime/backend.rs",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Same-origin formal Web uses a fixed HttpBackend; authentication and refresh ownership stay at the server."
+        },
+        {
+          "path": "crates/rssr-application/Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/entries_list_service.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/entries_workspace_service.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/feeds_snapshot_service.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/import_export_service.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/reader_service.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/settings_sync_service.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-application/src/import_export_service.rs",
+            "crates/rssr-app/src/ui/runtime/settings.rs"
+          ],
+          "reason": "RemoteConfigPullOutcome now carries imported settings atomically; UI consumes that result instead of a separate reload through SettingsSyncService."
+        },
+        {
+          "path": "crates/rssr-application/src/startup_service.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-application/src/subscription_discovery.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-domain/src/entry.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-domain/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-domain/src/feed.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-domain/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-host/Cargo.toml",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/client.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/lib.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/native.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/protocol.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/refresh_flight.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/server.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-host/src/services.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-api/src/lib.rs",
+            "crates/rssr-infra/src/local_backend"
+          ],
+          "reason": "Host capabilities move through the accepted Backend/LocalBackend architecture; no old host crate."
+        },
+        {
+          "path": "crates/rssr-infra/Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/application_adapters/browser/feed.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-infra/src/store",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Shared rusqlite store plus HttpBackend; BrowserStore and sqlx paths retired."
+        },
+        {
+          "path": "crates/rssr-infra/src/application_adapters/browser/feed_request.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-infra/src/store",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Shared rusqlite store plus HttpBackend; BrowserStore and sqlx paths retired."
+        },
+        {
+          "path": "crates/rssr-infra/src/application_adapters/browser/feed_response.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-infra/src/store",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Shared rusqlite store plus HttpBackend; BrowserStore and sqlx paths retired."
+        },
+        {
+          "path": "crates/rssr-infra/src/composition.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/config_sync/webdav.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/db/sqlite_native.rs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-infra/src/store",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Shared rusqlite store plus HttpBackend; BrowserStore and sqlx paths retired."
+        },
+        {
+          "path": "crates/rssr-infra/src/fetch/client.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/fetch/client/body_asset_localizer.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/fetch/client/feed_http.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/lib.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/outbound.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/subscription_probe.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/tests/test_outbound_policy.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-web/Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-web/src",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Current API/auth preserves server mode, Origin/CSRF, limits, private storage and explicit build matching."
+        },
+        {
+          "path": "crates/rssr-web/src/api.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-web/src",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Current API/auth preserves server mode, Origin/CSRF, limits, private storage and explicit build matching."
+        },
+        {
+          "path": "crates/rssr-web/src/auth.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-web/src",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Current API/auth preserves server mode, Origin/CSRF, limits, private storage and explicit build matching."
+        },
+        {
+          "path": "crates/rssr-web/src/library.rs",
+          "source_change": "A",
+          "disposition": "superseded",
+          "current_targets": [
+            "crates/rssr-infra/src/local_backend",
+            "crates/rssr-web/src/main.rs"
+          ],
+          "reason": "Server uses the shared LocalBackend and explicit close; no separate old host library."
+        },
+        {
+          "path": "crates/rssr-web/src/main.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-web/src",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Current API/auth preserves server mode, Origin/CSRF, limits, private storage and explicit build matching."
+        },
+        {
+          "path": "crates/rssr-web/src/proxy.rs",
+          "source_change": "D",
+          "disposition": "retired",
+          "current_targets": [
+            "crates/rssr-web/src/main.rs",
+            "docs/deployment/web.md"
+          ],
+          "reason": "Feed proxy is retired in both integration paths; do not restore old proxy adapters or tests."
+        },
+        {
+          "path": "crates/rssr-web/src/proxy/isolation_tests.rs",
+          "source_change": "D",
+          "disposition": "retired",
+          "current_targets": [
+            "crates/rssr-web/src/main.rs",
+            "docs/deployment/web.md"
+          ],
+          "reason": "Feed proxy is retired in both integration paths; do not restore old proxy adapters or tests."
+        },
+        {
+          "path": "docker-compose.yml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "docker-compose.yml"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "docs/README.en.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/README.en.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/README.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/README.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/agent-handoff.md",
+          "source_change": "M",
+          "disposition": "history_with_current_pointer",
+          "current_targets": [
+            "docs/agent-handoff.md",
+            "docs/design/v0.2-architecture.md"
+          ],
+          "reason": "Keep original historical scope and dates; current behavior comes from the marked v0.2 pointer, not rewritten old architecture."
+        },
+        {
+          "path": "docs/deployment/rssr-web.service",
+          "source_change": "A",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/deployment/rssr-web.service"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/deployment/web.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/deployment/web.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/design/README.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/design/README.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/design/application-use-case-boundary-checklist.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/design/application-use-case-boundary-checklist.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/design/rssr-web-server-mode.md",
+          "source_change": "A",
+          "disposition": "archived",
+          "current_targets": [
+            "docs/design/rssr-web-server-mode.md",
+            "docs/design/archive/2026-10-20-rssr-web-server-mode.md",
+            "docs/design/v0.2-architecture.md"
+          ],
+          "reason": "Old parallel server design archived; original path redirects to the accepted v0.2 contract."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-feed-fetch-idle-timeout.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-feed-fetch-idle-timeout.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-retire-feed-proxy.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-retire-feed-proxy.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-rssr-host-extraction.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-rssr-host-extraction.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-rssr-web-release.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-rssr-web-release.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-rssr-web-remote-ui.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-rssr-web-remote-ui.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-rssr-web-server-api.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-rssr-web-server-api.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-rssr-web-server-mode-design.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-rssr-web-server-mode-design.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/testing/README.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/README.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/contract-harness-rebuild-plan.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/contract-harness-rebuild-plan.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/environment-limitations.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/environment-limitations.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/mainline-validation-matrix.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/mainline-validation-matrix.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/release-ui-coverage-matrix.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/release-ui-coverage-matrix.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/release-ui-regression-checklist.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/release-ui-regression-checklist.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/release-ui-runner.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/release-ui-runner.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/rssr-web-browser-feed-smoke.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/rssr-web-browser-feed-smoke.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/rssr-web-browser-smoke.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/testing/rssr-web-browser-smoke.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/testing/rssr-web-proxy-feed-smoke.md",
+          "source_change": "D",
+          "disposition": "retired",
+          "current_targets": [
+            "crates/rssr-web/src/main.rs",
+            "docs/deployment/web.md"
+          ],
+          "reason": "Feed proxy is retired in both integration paths; do not restore old proxy adapters or tests."
+        },
+        {
+          "path": "docs/user-guide.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/user-guide.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "scripts/browser/feed_proxy_isolation.mjs",
+          "source_change": "D",
+          "disposition": "retired",
+          "current_targets": [
+            "crates/rssr-web/src/main.rs",
+            "docs/deployment/web.md"
+          ],
+          "reason": "Feed proxy is retired in both integration paths; do not restore old proxy adapters or tests."
+        },
+        {
+          "path": "scripts/browser/rssr_refresh_cost_acceptance.cjs",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "scripts/run_server_web_regression.sh",
+            "scripts/browser/rssr_server_acceptance.mjs"
+          ],
+          "reason": "Retired browser-library harness replaced by real server scenarios and the documented current manual route."
+        },
+        {
+          "path": "scripts/browser/rssr_small_viewport_assertions.mjs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/browser/rssr_small_viewport_assertions.mjs"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/release-ui/main.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/release-ui/main.rs"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/release-ui/plan.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/release-ui/plan.rs"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/release-ui/tests/acceptance.py",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/release-ui/tests/acceptance.py"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/release-ui/tests/fixture.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/release-ui/tests/fixture.rs"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/release-ui/web_auth.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/release-ui/web_auth.rs"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/run_rssr_web_browser_feed_smoke.sh",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "scripts/run_server_web_regression.sh",
+            "scripts/browser/rssr_server_acceptance.mjs"
+          ],
+          "reason": "Retired browser-library harness replaced by real server scenarios and the documented current manual route."
+        },
+        {
+          "path": "scripts/run_rssr_web_browser_smoke.sh",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "scripts/run_rssr_web_browser_smoke.sh"
+          ],
+          "reason": "Current real-server regression driver/CLI preserves coverage and failure propagation; no obsolete proxy or BrowserStore fixtures."
+        },
+        {
+          "path": "scripts/run_rssr_web_proxy_feed_smoke.sh",
+          "source_change": "D",
+          "disposition": "retired",
+          "current_targets": [
+            "crates/rssr-web/src/main.rs",
+            "docs/deployment/web.md"
+          ],
+          "reason": "Feed proxy is retired in both integration paths; do not restore old proxy adapters or tests."
+        },
+        {
+          "path": "scripts/run_windows_chrome_visible_regression.sh",
+          "source_change": "M",
+          "disposition": "superseded",
+          "current_targets": [
+            "scripts/run_server_web_regression.sh",
+            "scripts/browser/rssr_server_acceptance.mjs"
+          ],
+          "reason": "Retired browser-library harness replaced by real server scenarios and the documented current manual route."
+        },
+        {
+          "path": "specs/001-minimal-rss-reader/plan.md",
+          "source_change": "M",
+          "disposition": "history_with_current_pointer",
+          "current_targets": [
+            "specs/001-minimal-rss-reader/plan.md",
+            "docs/design/v0.2-architecture.md"
+          ],
+          "reason": "Keep original historical scope and dates; current behavior comes from the marked v0.2 pointer, not rewritten old architecture."
+        }
+      ]
+    },
+    {
+      "branch": "mathml",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "path_count": 58,
+      "paths": [
+        {
+          "path": "Cargo.lock",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "Cargo.lock"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "Cargo.toml"
+          ],
+          "reason": "Preserve accepted workspace, vendored URL patch, C6 matching artifacts, current CI/release conditions and agent-directory exclusions."
+        },
+        {
+          "path": "README.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "README.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "assets/styles/reader.css",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-application/src/subscription_discovery.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-application/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-domain/src/lib.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-domain/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-domain/src/url_guard.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-domain/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-domain/src/validation.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-domain/src"
+          ],
+          "reason": "Equivalent shared use cases, wire-model bounds and URL guard remain in current application/domain contracts."
+        },
+        {
+          "path": "crates/rssr-infra/Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/composition.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/feed_normalization.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/feed_structure_guard.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/feed_structure/preflight.rs",
+            "crates/rssr-infra/src/feed_structure.rs"
+          ],
+          "reason": "Structural pre-scan adapted before NsReader; retain current UTF-8 and model guards."
+        },
+        {
+          "path": "crates/rssr-infra/src/fetch/client.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/fetch/client/feed_http.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/html.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/src/html/live_display.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/src/html/math.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/src/html/parse_budget.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/src/html/plain_text.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/src/html/reader.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/src/lib.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/subscription_probe.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/src/subscription_probe/html.rs",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/tests/test_feed_structure_guard.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src"
+          ],
+          "reason": "Current composition, outbound policy, 10/30/120-second timeout, feed/model pre-scan and tests; see per-commit handoff."
+        },
+        {
+          "path": "crates/rssr-infra/tests/test_reader_html_corpus.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/tests/test_reader_html_stress.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs",
+          "source_change": "A",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-infra/src/html",
+            "assets/styles/reader.css",
+            "crates/rssr-infra/tests/wasm_reader_html_contract_harness.rs"
+          ],
+          "reason": "MathML/KaTeX, parse/normalization budgets and tests ported; current image policy and numbered-row fix retained."
+        },
+        {
+          "path": "crates/rssr-web/Cargo.toml",
+          "source_change": "M",
+          "disposition": "adapted",
+          "current_targets": [
+            "crates/rssr-web/src",
+            "crates/rssr-infra/src/http_backend.rs"
+          ],
+          "reason": "Current API/auth preserves server mode, Origin/CSRF, limits, private storage and explicit build matching."
+        },
+        {
+          "path": "crates/rssr-web/src/proxy.rs",
+          "source_change": "M",
+          "disposition": "retired",
+          "current_targets": [
+            "crates/rssr-web/src/main.rs",
+            "docs/deployment/web.md"
+          ],
+          "reason": "Feed proxy is retired in both integration paths; do not restore old proxy adapters or tests."
+        },
+        {
+          "path": "docs/README.en.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/README.en.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/design/functional-design-philosophy.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/design/functional-design-philosophy.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "docs/handoffs/2026-10-19-reader-mathml.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-19-reader-mathml.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-feed-fetch-idle-timeout.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-feed-fetch-idle-timeout-reader-mathml.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-live-display-normalize-bounds.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-live-display-normalize-bounds.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-reader-deep-nesting-investigation.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-reader-deep-nesting-investigation.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-20-reader-parse-budget.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-20-reader-parse-budget.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/handoffs/2026-10-21-untrusted-url-guard.md",
+          "source_change": "A",
+          "disposition": "history_retained",
+          "current_targets": [
+            "docs/handoffs/2026-10-21-untrusted-url-guard.md"
+          ],
+          "reason": "Source-dated historical receipt retained with provenance; not relabeled as current validation."
+        },
+        {
+          "path": "docs/upstream-drafts/feed-rs-xml-base-clone.md",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "docs/upstream-drafts/feed-rs-xml-base-clone.md"
+          ],
+          "reason": "Upstream report and exact patch provenance retained."
+        },
+        {
+          "path": "docs/upstream-drafts/rust-url-dot-segments.md",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "docs/upstream-drafts/rust-url-dot-segments.md"
+          ],
+          "reason": "Upstream report and exact patch provenance retained."
+        },
+        {
+          "path": "docs/user-guide.md",
+          "source_change": "M",
+          "disposition": "current_documentation",
+          "current_targets": [
+            "docs/user-guide.md"
+          ],
+          "reason": "Current v0.2/phase D and C6 instructions supersede obsolete host, browser storage or proxy references; explicit historical sections stay dated."
+        },
+        {
+          "path": "vendor/url/Cargo.toml",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/Cargo.toml"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/Cargo.toml.orig",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/Cargo.toml.orig"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/LICENSE-APACHE",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/LICENSE-APACHE"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/LICENSE-MIT",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/LICENSE-MIT"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/PATCH.md",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/PATCH.md"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/README.md",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/README.md"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/host.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/host.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/lib.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/lib.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/origin.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/origin.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/parser.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/parser.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/path_segments.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/path_segments.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/quirks.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/quirks.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/src/slicing.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/src/slicing.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/tests/expected_failures.txt",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/tests/expected_failures.txt"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/tests/setters_tests.json",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/tests/setters_tests.json"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/tests/unit.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/tests/unit.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/tests/urltestdata.json",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/tests/urltestdata.json"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        },
+        {
+          "path": "vendor/url/tests/wpt.rs",
+          "source_change": "A",
+          "disposition": "preserved",
+          "current_targets": [
+            "vendor/url/tests/wpt.rs"
+          ],
+          "reason": "Same vendored url 2.5.8 source and one-function patch."
+        }
+      ]
+    }
+  ]
+}

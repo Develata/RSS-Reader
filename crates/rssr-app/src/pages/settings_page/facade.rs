@@ -28,19 +28,19 @@ impl SettingsPageFacade {
     }
 
     pub(crate) fn draft(&self) -> UserSettings {
-        (self.page.draft())()
+        self.page.draft()
     }
 
     pub(crate) fn update_draft(&self, update: impl FnOnce(&mut UserSettings)) {
-        self.page.update_draft(update);
+        self.page.edit(update);
     }
 
     pub(crate) fn note_draft_edit(&self) {
-        self.page.note_draft_edit();
+        self.page.invalidate_theme_import();
     }
 
-    pub(crate) fn draft_replacement_revision(&self) -> u64 {
-        self.page.draft_replacement_revision()
+    pub(crate) fn numeric_revisions(&self) -> [u64; 4] {
+        self.page.numeric_revisions()
     }
 
     pub(crate) fn begin_theme_import(&self) -> ThemeImportRequest {

@@ -1,97 +1,14 @@
-# Windows Chrome 可见窗口回归
+# Windows Chrome 可见窗口检查
 
-这份说明固定 Windows 原生 Chrome 可见窗口的本地回归入口。
+v0.2 C4c 已退役旧可见窗口脚本和静态 SPA helper；保留本文件名以兼容链接。当前自动化入口是 [服务器浏览器回归](./server-web-regression.md)，使用 headless Chrome；不能把自动化结果写成用户看过页面。
 
-它用于需要观察 Windows Chrome 实际窗口的场景。以下限制可能随机器配置变化：
+需要观察真实 Windows Chrome 窗口时：
 
-- WSLg/Linux Chrome 窗口可能不可见、最小化或呈现异常。
-- 若 MCP 会话连接 WSL 侧端口，未必能直接接管 Windows localhost 的 DevTools；此脚本通过 Windows Node/CDP 控制。
+1. 用 Git Bash 运行 `bash scripts/run_rssr_web_browser_smoke.sh`，创建隔离资料库并取得登录地址和测试凭据。
+2. 在独立的 Windows Chrome profile 中打开该地址，真实登录。
+3. 按 [手工回归清单](./manual-regression.md) 检查页面、主题与小视口，保存本次截图、环境、commit 与结论。
+4. 只关闭本次启动的窗口和服务；不要修改日常浏览器资料或借用他人的进程作为通过证据。
 
-## 固定入口
+Chrome MCP 或其他 CDP 工具只是操作方式，连接失败不等于产品失败，也不能由此宣称已手工验收。需要固定的自动断言时，运行服务器回归的 regression、theme-matrix、feed-smoke 与 acceptance 套件；不再使用旧静态数据注入流程。
 
-- [run_windows_chrome_visible_regression.sh](../../scripts/run_windows_chrome_visible_regression.sh)
-- [rssr_visible_regression.mjs](../../scripts/browser/rssr_visible_regression.mjs)
-
-## 最短用法
-
-```bash
-bash scripts/run_windows_chrome_visible_regression.sh --skip-build
-```
-
-默认行为：
-
-- 启动带 SPA fallback 的静态 Web 服务，默认端口 `8112`
-- 启动 `rssr-web` smoke helper，默认端口 `18098`
-- 通过 PowerShell 启动 Windows 原生 Chrome 可见窗口，默认 CDP 端口 `9225`
-- 在 Windows Node 中运行 repo 内的 CDP runner
-- 生成 `target/windows-chrome-visible-regression/<timestamp>/summary.md`
-
-如果静态服务和 `rssr-web` 已经运行，可以只跑浏览器动作：
-
-```bash
-bash scripts/run_windows_chrome_visible_regression.sh \
-  --use-existing-servers \
-  --keep-browser-open \
-  --slow-ms 150
-```
-
-## `~/codex-browser-check`
-
-脚本默认使用 `~/codex-browser-check` 作为 Windows Node 的工作目录。
-
-这个目录不承载项目逻辑；项目逻辑保留在 repo 内的 `scripts/browser/rssr_visible_regression.mjs`。这样做的边界是：
-
-- repo 负责测试动作和断言
-- `~/codex-browser-check` 负责提供一个稳定的本机浏览器检查工作目录
-- Windows Chrome 由 PowerShell 启动，浏览器控制通过 Windows localhost CDP 完成
-
-## 覆盖范围
-
-当前 runner 覆盖：
-
-- 静态 `/entries`
-- 静态 `/feeds`
-- settings 主题实验室到 `/entries/2` 阅读页的主题矩阵
-- 小视口 `360×800` / DPR 3 下的 `/entries`、`/feeds`、`/settings`、`/entries/2`
-- `rssr-web` 的 `__codex/browser-feed-smoke` 浏览器态 helper
-
-断言策略：
-
-- 页面与布局存在性优先检查 `data-page`、`data-layout`、`data-field`、`data-action`、`data-nav`、`data-state`。
-- 主题矩阵通过 `data-theme-preset`、`data-state="active"` 和 `#user-custom-css` 确认主题写入，而不是依赖按钮文案。
-- `rssr-web` feed smoke 通过 `data-smoke="rssr-web-browser-feed-smoke"` 和 `data-result="pass"` 确认结果。
-
-## 和 Chrome MCP 的区别
-
-Chrome MCP 路径：
-
-```text
-Codex -> mcp__chrome -> MCP server -> WSL DevTools endpoint
-```
-
-Windows 可见窗口路径：
-
-```text
-Codex -> bash -> PowerShell -> Windows Chrome -> Windows Node/CDP
-```
-
-后者不是 MCP 工具直连。它的目标是稳定复现用户可见的 Windows Chrome 浏览器回归。
-
-如果后续必须让 `mcp__chrome` 工具直接接管 Windows Chrome，需要单独建立 WSL `9222` 到 Windows `9225` 的 CDP bridge，或在 Windows 侧启动 MCP server。
-
-## 成功标准
-
-脚本成功时应打印：
-
-- `static entries: pass`
-- `static feeds: pass`
-- `theme reader <preset>: pass`
-- `small viewport <url>: pass`
-- `rssr-web browser feed smoke: pass`
-- `Windows Chrome visible regression passed`
-
-## 已知边界
-
-- 这不是像素级视觉回归。
-- 这不是外网真实 feed 长链路压力测试。
-- 当前主路径已经迁到 `data-*` 语义接口；后续如果扩展交互覆盖，应继续保持 selector-first，不再新增文案驱动断言。
+Windows 原生 WebView2 与 Windows Chrome 是不同平台证据。WebView2 的显式 target 连接、应用复制与数据目录隔离见 [原生隔离说明](./manual-regression.md#验收准备与-windows-原生隔离)。Android / macOS 的真实设备交互另行验收。

@@ -7,7 +7,7 @@ use super::{intent::EntriesPageIntent, state::EntriesPageState};
 
 pub(super) enum WriteEffect {
     Publish(EntriesPageIntent),
-    RefreshSources,
+    Reread,
 }
 
 pub(super) struct EntryWrite {
@@ -40,8 +40,8 @@ impl EntryWrite {
             if let Some(finished) = finished.take() {
                 return Some(WriteEffect::Publish(finished));
             }
-            // Both success and failure unlock the row before any summary refresh.
-            std::mem::take(&mut refresh_sources).then_some(WriteEffect::RefreshSources)
+            // Both success and failure unlock the row before any read recovery.
+            std::mem::take(&mut refresh_sources).then_some(WriteEffect::Reread)
         })
     }
 }
@@ -78,7 +78,7 @@ impl BulkWrite {
         let accepted = (self.generation == state.bulk_generation).then_some(intents);
         accepted.into_iter().flatten().flat_map(|intent| {
             let refresh = matches!(&intent, EntriesPageIntent::SelectionApplied { .. });
-            [Some(WriteEffect::Publish(intent)), refresh.then_some(WriteEffect::RefreshSources)]
+            [Some(WriteEffect::Publish(intent)), refresh.then_some(WriteEffect::Reread)]
                 .into_iter()
                 .flatten()
         })
@@ -109,6 +109,7 @@ mod tests {
                     })
                     .collect(),
                 archived_count: 0,
+                truncated: false,
             },
         );
         state
@@ -125,7 +126,7 @@ mod tests {
         for effect in effects {
             match effect {
                 WriteEffect::Publish(intent) => reduce(state, intent),
-                WriteEffect::RefreshSources => refreshes += 1,
+                WriteEffect::Reread => refreshes += 1,
             }
         }
         refreshes
@@ -172,7 +173,7 @@ mod tests {
                 WriteEffect::Publish(EntriesPageIntent::SetStatus { .. }),
                 WriteEffect::Publish(EntriesPageIntent::PatchEntryFlags { .. }),
                 WriteEffect::Publish(EntriesPageIntent::EntryWriteFinished(1)),
-                WriteEffect::RefreshSources,
+                WriteEffect::Reread,
             ]
         ));
         assert_eq!(apply(&mut state, effects.into_iter()), 1);
@@ -247,7 +248,7 @@ mod tests {
             let _current = start_bulk(&mut state, true);
             let before = state.clone();
             let result = if failed {
-                EntriesPageIntent::BulkFailed("old failure".into())
+                EntriesPageIntent::BulkFailed(crate::ui::failure::plain("old failure"))
             } else {
                 EntriesPageIntent::SelectionApplied {
                     ids: vec![1],
@@ -266,11 +267,12 @@ mod tests {
         let mut state = state();
         reduce(&mut state, EntriesPageIntent::ToggleSelected(1));
         let request = start_bulk(&mut state, true);
-        let effects = request.complete(&state, [EntriesPageIntent::BulkFailed("failed".into())]);
+        let effects = request
+            .complete(&state, [EntriesPageIntent::BulkFailed(crate::ui::failure::plain("failed"))]);
         assert_eq!(apply(&mut state, effects), 0);
         assert_eq!(state.selected_entry_ids.iter().copied().collect::<Vec<_>>(), [1]);
         assert!(BulkWrite::can_start(&state));
-        assert_eq!(state.status, "failed");
+        assert_eq!(state.status, "测试失败：failed");
         assert_eq!(state.flags_revision, 0);
         assert_eq!(state.reload_revision, 0);
     }
@@ -296,7 +298,7 @@ mod tests {
             effects.as_slice(),
             [
                 WriteEffect::Publish(EntriesPageIntent::SelectionApplied { .. }),
-                WriteEffect::RefreshSources,
+                WriteEffect::Reread,
                 WriteEffect::Publish(EntriesPageIntent::SetStatus { .. }),
             ]
         ));

@@ -1,0 +1,142 @@
+//! Coalesce overlapping all-subscription requests, including the host's auto-refresh.
+//! Only an in-flight result is retained; no feed payloads or completed-batch cache.
+use std::{future::Future, sync::Mutex};
+
+use tokio::sync::watch;
+
+use rssr_api::{BackendError, ErrorCode};
+use rssr_application::RefreshAllExecutionOutcome;
+
+type SharedResult = Result<RefreshAllExecutionOutcome, BackendError>;
+type Receiver = watch::Receiver<Option<SharedResult>>;
+
+#[derive(Default)]
+pub(crate) struct RefreshFlight {
+    current: Mutex<Option<Receiver>>,
+}
+
+impl RefreshFlight {
+    pub(crate) async fn run(
+        &self,
+        refresh: impl Future<Output = anyhow::Result<RefreshAllExecutionOutcome>>,
+    ) -> SharedResult {
+        let (mut receiver, sender) = {
+            let mut slot = self.current.lock().unwrap_or_else(|error| error.into_inner());
+            match slot.as_ref().filter(|receiver| receiver.has_changed().is_ok()) {
+                Some(receiver) => (receiver.clone(), None),
+                None => {
+                    let (sender, receiver) = watch::channel(None);
+                    *slot = Some(receiver.clone());
+                    (receiver, Some(sender))
+                }
+            }
+        };
+        if let Some(sender) = sender {
+            // If the owner is dropped, closing the channel wakes waiters and lets the next
+            // call replace the closed slot. No in-flight bit can remain stuck on cancellation.
+            // Classified once, so every waiter gets the same code and message.
+            let result = refresh.await.map_err(BackendError::from);
+            sender.send_replace(Some(result.clone()));
+            *self.current.lock().unwrap_or_else(|error| error.into_inner()) = None;
+            result
+        } else {
+            receiver
+                .wait_for(Option::is_some)
+                .await
+                .map_err(|_| BackendError::new(ErrorCode::Unavailable, "刷新任务已中断，请重试"))?
+                .as_ref()
+                .expect("wait_for requires a completed result")
+                .clone()
+        }
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[tokio::test]
+    async fn overlapping_calls_share_success_and_failure_then_allow_a_new_batch() {
+        for failed in [false, true] {
+            let flight = RefreshFlight::default();
+            let calls = AtomicUsize::new(0);
+            let request = || async {
+                calls.fetch_add(1, Ordering::SeqCst);
+                tokio::task::yield_now().await;
+                if failed {
+                    return Err(rssr_domain::DomainError::Unavailable("fixture".into()).into());
+                }
+                Ok(RefreshAllExecutionOutcome {
+                    inserted_count: 0,
+                    total_count: 0,
+                    failed_count: 0,
+                    failures: Vec::new(),
+                    failures_truncated: false,
+                })
+            };
+            let (first, second) = tokio::join!(flight.run(request()), flight.run(request()));
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            if failed {
+                // Every waiter gets the classified error, with its kind.
+                assert_eq!(first.as_ref().unwrap_err().code, ErrorCode::Unavailable);
+                assert_eq!(second.as_ref().unwrap_err().code, ErrorCode::Unavailable);
+            }
+            assert_eq!(first.map_err(|e| e.to_string()), second.map_err(|e| e.to_string()));
+            let _ = flight.run(request()).await;
+            assert_eq!(calls.load(Ordering::SeqCst), 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelled_owner_does_not_leave_refresh_permanently_busy() {
+        let flight = Arc::new(RefreshFlight::default());
+        let started = Arc::new(tokio::sync::Notify::new());
+        let owner = {
+            let flight = Arc::clone(&flight);
+            let started = Arc::clone(&started);
+            tokio::spawn(async move {
+                flight
+                    .run(async {
+                        started.notify_one();
+                        std::future::pending().await
+                    })
+                    .await
+            })
+        };
+        started.notified().await;
+        let waiter = flight.run(async { panic!("a joined request must not execute") });
+        tokio::pin!(waiter);
+        std::future::poll_fn(|cx| {
+            assert!(waiter.as_mut().poll(cx).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        owner.abort();
+        assert!(owner.await.unwrap_err().is_cancelled());
+        let error = tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+            .await
+            .expect("waiter must wake on cancellation")
+            .unwrap_err();
+        assert!(error.to_string().contains("已中断"));
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            flight.run(async {
+                Ok(RefreshAllExecutionOutcome {
+                    inserted_count: 0,
+                    total_count: 0,
+                    failed_count: 0,
+                    failures: Vec::new(),
+                    failures_truncated: false,
+                })
+            }),
+        )
+        .await
+        .expect("retry must not hang")
+        .expect("retry succeeds");
+        assert!(result.failures.is_empty());
+    }
+}

@@ -7,7 +7,7 @@ async function main() {
   const repo = path.resolve(__dirname, '../..');
   const output = path.resolve(process.env.ARTIFACT_DIR || 'target/directory-window-20261026/web');
   await fs.mkdir(output, {recursive:true});
-  const browser = await chromium.launch({channel:'chrome',headless:true});
+  const browser = await chromium.launch({executablePath:process.env.CHROME_BIN,channel:process.env.CHROME_BIN?undefined:'chrome',headless:true});
   const context = await browser.newContext({viewport:{width:1440,height:900}});
   await fixture.install(context, repo);
   await context.addInitScript(()=>{
@@ -46,6 +46,13 @@ async function main() {
     await idle();
     const stats = await page.locator('[data-virtual-articles]').evaluateAll(es=>es.map(e=>({total:Number(e.dataset.virtualCount),mounted:e.querySelectorAll('button').length})));
     check('600 logical articles have a bounded mounted window', stats.length === 1 && stats[0].total === 600 && stats[0].mounted > 0 && stats[0].mounted < 60, stats);
+    const headingBox = () => page.locator('.directory-heading-row').boundingBox();
+    const focusedVisible = () => page.locator(rail).evaluate(e => {
+      const r=e.getBoundingClientRect(), h=e.querySelector('.directory-heading-row').getBoundingClientRect();
+      const f=document.activeElement.getBoundingClientRect();
+      return {visible:f.top>=h.bottom-1 && f.bottom<=r.bottom+1, top:f.top, headerBottom:h.bottom, bottom:f.bottom, railBottom:r.bottom};
+    });
+    const initialHeading = await headingBox();
     await page.screenshot({path:path.join(output,'source-initial.png')});
     await page.locator('[data-action="select-entry"]').first().check();
     await page.locator('[data-position-entry]').first().evaluate(e=>window.__windowTestCard=e);
@@ -53,8 +60,13 @@ async function main() {
     await page.keyboard.press('End');
     await focused(599); await idle();
     check('End reaches the unmounted last article without mounting the full branch',await mounted()<60,await mounted());
+    const scrolledHeading = await headingBox(), endFocus = await focusedVisible();
+    check('directory heading stays fixed at the end of a long branch',Math.abs(initialHeading.y-scrolledHeading.y)<1,{initialHeading,scrolledHeading});
+    check('End focus is visible below the fixed heading',endFocus.visible,endFocus);
     check('directory navigation preserves selected article and main list identity',await page.evaluate(()=>document.querySelector('[data-action="select-entry"]').checked && window.__windowTestCard===document.querySelector('[data-position-entry]')));
     await page.keyboard.press('Home'); await focused(0); await idle();
+    const homeFocus = await focusedVisible();
+    check('Home focus is visible below the fixed heading',homeFocus.visible,homeFocus);
     const initialEnd = await page.locator(rows).evaluateAll(es=>Math.max(...es.map(e=>Number(e.dataset.virtualIndex))));
     for(let i=1;i<=initialEnd+2;i++){await page.keyboard.press('Tab');await focused(i);}
     await idle();
@@ -99,7 +111,7 @@ async function main() {
     const mainTarget = await page.locator('#entry-card-580').boundingBox();
     await page.mouse.move(400,350);await page.mouse.wheel(0,mainTarget.y-80);
     await page.waitForFunction(()=>document.querySelector('[data-directory-consumer="rail"]')?.dataset.directoryCurrentLeaf==='entry-card-580');await idle();
-    const following = await page.locator(rail).evaluate(e=>{const t=e.querySelector('[data-directory-anchor="entry-card-580"]'), r=e.getBoundingClientRect(), b=t?.getBoundingClientRect();return {mode:e.dataset.directoryMode,visible:!!b&&b.top>=r.top-1&&b.bottom<=r.bottom+1};});
+    const following = await page.locator(rail).evaluate(e=>{const t=e.querySelector('[data-directory-anchor="entry-card-580"]'), r=e.getBoundingClientRect(), h=e.querySelector('.directory-heading-row').getBoundingClientRect(), b=t?.getBoundingClientRect();return {mode:e.dataset.directoryMode,visible:!!b&&b.top>=h.bottom-1&&b.bottom<=r.bottom+1};});
     check('main-list wheel reveals the previously unmounted article and resumes following',following.mode==='follow'&&following.visible,following);
     check('resuming follow does not clear same-page selection',await page.locator('[data-action="select-entry"]').first().isChecked());
     await page.addStyleTag({content:'#reading-directory [data-directory-level="article"] [data-slot="entry-directory-title"] {font-size:20px; -webkit-line-clamp:unset;}'});await idle();
@@ -114,6 +126,14 @@ async function main() {
       await page.keyboard.press('End');await focused(599);await idle();
       check('window bridge continues after '+fault,await mounted()<60);
     }
+    await page.setViewportSize({width:1440,height:360});await idle();
+    await page.keyboard.press('Home');await focused(0);
+    await page.waitForFunction(()=>[...document.querySelectorAll('[data-virtual-articles]')].every(e=>e.__rssrVirtualWindow?.idle),null,{timeout:5000});await idle();
+    const oversized = await page.locator(rail).evaluate(e=>{
+      const h=e.querySelector('.directory-heading-row').getBoundingClientRect(), r=e.getBoundingClientRect(), f=document.activeElement.getBoundingClientRect();
+      return {rowHeight:f.height,viewport:r.bottom-h.bottom,top:f.top,headerBottom:h.bottom};
+    });
+    check('a row taller than the viewport settles with its start visible',oversized.rowHeight>oversized.viewport && Math.abs(oversized.top-oversized.headerBottom)<1,oversized);
     check('no unhandled page errors',errors.length === 0,errors);
   } catch (error) {
     console.log('failure state',await page.evaluate(()=>({focus:{tag:document.activeElement?.tagName,index:document.activeElement?.dataset.virtualIndex}, windows:[...document.querySelectorAll('[data-virtual-articles]')].map(e=>({rev:e.dataset.windowRevision,idle:e.__rssrVirtualWindow?.idle,rows:[...e.querySelectorAll('[data-virtual-index]')].map(r=>r.dataset.virtualIndex)})),top:document.querySelector('[data-directory-consumer="rail"]')?.scrollTop})).catch(()=>null));

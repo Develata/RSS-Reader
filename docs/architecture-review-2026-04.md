@@ -74,7 +74,7 @@
 ### 如何阅读这份报告
 
 - 想看最初的问题定义、分步路线图和长期判断：继续阅读本报告正文。
-- 想看当前已经删除了哪些 façade、保留了哪些 use case：结合 [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md) 与 `docs/handoffs/2026-04-13-*.md` 一起看。
+- 想看当时已经删除了哪些 façade、保留了哪些 use case：结合 [Application Use Case 收敛计划](./design/application-use-case-consolidation-plan.md) 与[历史索引](./handoffs/archive/README.md)中的 2026 年 4 月记录一起看。
 
 ## 2. 当前架构概览
 

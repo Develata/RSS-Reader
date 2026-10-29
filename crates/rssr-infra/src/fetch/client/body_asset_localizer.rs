@@ -6,17 +6,15 @@ use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::Semaphore;
 use url::Url;
 
-use crate::{
-    html::{LocalizableImageDocument, normalize_html_for_live_display},
-    outbound::OutboundPolicy,
-};
+use crate::html::{LocalizableImageDocument, normalize_html_for_live_display};
+use crate::outbound::OutboundPolicy;
 
 #[derive(Debug, Clone)]
 pub struct BodyAssetLocalizer {
     inner: reqwest::Client,
+    policy: OutboundPolicy,
     image_request_slots: Arc<Semaphore>,
     budget: LocalizationBudget,
-    outbound: OutboundPolicy,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,6 +26,17 @@ struct LocalizationBudget {
     max_html_bytes: usize,
     max_images_per_entry: usize,
     max_concurrent_image_requests: usize,
+}
+
+/// [`BodyAssetLocalizer::localize_html_images_reporting`] 的结果。
+#[derive(Debug)]
+pub struct LocalizedHtml {
+    pub html: String,
+    /// 是否至少发起过一次图片请求（不论成败）。
+    pub requested_images: bool,
+    /// 换成本地副本的图片数；为 0 时 `html` 只是规范化后的原文，阅读页显示时本来就会做同样
+    /// 的规范化，不值得写回。
+    pub localized_images: usize,
 }
 
 #[derive(Debug)]
@@ -69,42 +78,49 @@ impl BodyAssetLocalizer {
 
     pub fn new() -> Self {
         Self::with_budget(Self::BACKGROUND_BUDGET, OutboundPolicy::Unrestricted)
+            .expect("build image client with safe redirect policy")
     }
 
     pub fn for_reader_entry() -> Self {
         Self::with_budget(Self::READER_BUDGET, OutboundPolicy::Unrestricted)
+            .expect("build image client with safe redirect policy")
     }
 
-    /// 同一份预算，换成按 `outbound` 限制图片地址的客户端。
-    pub fn with_outbound(self, outbound: OutboundPolicy) -> Self {
-        Self::with_budget(self.budget, outbound)
+    /// Background localization under `policy`.
+    pub fn background(policy: OutboundPolicy) -> anyhow::Result<Self> {
+        Self::with_budget(Self::BACKGROUND_BUDGET, policy)
     }
 
-    fn with_budget(budget: LocalizationBudget, outbound: OutboundPolicy) -> Self {
-        Self {
-            inner: outbound
-                .configure(reqwest::Client::builder())
-                .connect_timeout(Duration::from_secs(3))
-                // reqwest otherwise replaces our Referer with the previous image URL,
-                // including its query, on every redirect.
-                .referer(false)
-                .redirect(redirect::Policy::custom(move |attempt| {
-                    if !outbound.redirect_allowed(attempt.url())
-                        || !attempt
-                            .previous()
-                            .last()
-                            .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
-                    {
-                        return attempt.error("unsafe image redirect");
-                    }
-                    redirect::Policy::limited(10).redirect(attempt)
-                }))
-                .build()
-                .expect("build image client with safe redirect policy"),
+    /// Reader-page localization under `policy`.
+    pub fn reader(policy: OutboundPolicy) -> anyhow::Result<Self> {
+        Self::with_budget(Self::READER_BUDGET, policy)
+    }
+
+    fn with_budget(budget: LocalizationBudget, policy: OutboundPolicy) -> anyhow::Result<Self> {
+        let inner = policy
+            .client_builder()
+            .connect_timeout(Duration::from_secs(3))
+            // reqwest otherwise replaces our Referer with the previous image URL,
+            // including its query, on every redirect.
+            .referer(false)
+            .redirect(policy.redirect(|attempt| {
+                if !attempt
+                    .previous()
+                    .last()
+                    .is_some_and(|previous| image_redirect_allowed(previous, attempt.url()))
+                {
+                    return attempt.error("unsafe image redirect");
+                }
+                redirect::Policy::limited(10).redirect(attempt)
+            }))
+            .build()
+            .context("创建正文图片客户端失败")?;
+        Ok(Self {
+            inner,
+            policy,
             image_request_slots: Arc::new(Semaphore::new(budget.max_concurrent_image_requests)),
             budget,
-            outbound,
-        }
+        })
     }
 
     pub fn max_images_per_entry(&self) -> usize {
@@ -115,22 +131,44 @@ impl BodyAssetLocalizer {
         self.budget.image_request_timeout
     }
 
+    /// Avoid loading a body the background localizer would immediately refuse.
+    pub(crate) fn max_html_bytes(&self) -> usize {
+        self.budget.max_html_bytes
+    }
+
     pub async fn localize_html_images(
         &self,
         html: &str,
         base_url: Option<&Url>,
     ) -> anyhow::Result<String> {
+        Ok(self.localize_html_images_reporting(html, base_url).await.html)
+    }
+
+    /// 同 [`Self::localize_html_images`]，另外报告是否为这篇正文发起过图片请求：无图、正文超出
+    /// 预算或图片地址都无法解析时不发请求，结果却与“图片全部失败”一样是原文，调用方据此区分
+    /// （后台本地化只为发过请求的文章计尝试次数，审计 C2）。
+    pub async fn localize_html_images_reporting(
+        &self,
+        html: &str,
+        base_url: Option<&Url>,
+    ) -> LocalizedHtml {
         let normalized_html = normalize_html_for_live_display(html, base_url);
         let Some(plan) = self.build_localization_plan(&normalized_html, base_url) else {
-            return Ok(normalized_html);
+            return LocalizedHtml {
+                html: normalized_html,
+                requested_images: false,
+                localized_images: 0,
+            };
         };
         let localized = self.localize_sources(&plan.document, base_url).await;
 
-        if localized.is_empty() {
-            return Ok(normalized_html);
-        }
-
-        Ok(plan.document.rewrite_html(&normalized_html, &localized))
+        let localized_images = localized.len();
+        let html = if localized.is_empty() {
+            normalized_html
+        } else {
+            plan.document.rewrite_html(&normalized_html, &localized)
+        };
+        LocalizedHtml { html, requested_images: true, localized_images }
     }
 
     async fn fetch_image_as_data_url(
@@ -139,9 +177,9 @@ impl BodyAssetLocalizer {
         referer: Option<&Url>,
         max_bytes: usize,
     ) -> Result<(String, usize), FetchImageError> {
-        self.outbound
+        self.policy
             .check_url(url)
-            .map_err(|error| FetchImageError::Request(error.to_string()))?;
+            .map_err(|refused| FetchImageError::Request(refused.to_string()))?;
         let mut request = self
             .inner
             .get(url.clone())
@@ -200,7 +238,7 @@ impl BodyAssetLocalizer {
                 reason = "html_too_large",
                 html_len = html.len(),
                 max_html_bytes = self.budget.max_html_bytes,
-                entry_url = ?base_url,
+                entry_url = ?base_url.map(crate::outbound::redacted),
                 "正文 HTML 超过图片本地化预算，跳过当前文章"
             );
             return None;
@@ -217,7 +255,7 @@ impl BodyAssetLocalizer {
                 profile = self.budget.profile,
                 reason = "unsupported_pattern",
                 unsupported_slot_count = document.unsupported_slot_count(),
-                entry_url = ?base_url,
+                entry_url = ?base_url.map(crate::outbound::redacted),
                 "正文中存在未命中的图片模式，保留原始地址"
             );
         }
@@ -226,7 +264,7 @@ impl BodyAssetLocalizer {
                 profile = self.budget.profile,
                 reason = "resolve_failed",
                 unresolved_slot_count = document.unresolved_slot_count(),
-                entry_url = ?base_url,
+                entry_url = ?base_url.map(crate::outbound::redacted),
                 "正文图片地址无法基于当前上下文解析"
             );
         }
@@ -256,7 +294,7 @@ impl BodyAssetLocalizer {
                         tracing::warn!(
                             profile = self.budget.profile,
                             reason = "too_large_total",
-                            asset_url = %slot.resolved_url(),
+                            asset_url = %crate::outbound::redacted(slot.resolved_url()),
                             byte_len,
                             total_localized_bytes,
                             max_total_image_bytes = self.budget.max_total_image_bytes,
@@ -271,7 +309,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "timeout",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         timeout_secs = self.budget.image_request_timeout.as_secs(),
                         "正文图片抓取超时，保留远端地址"
                     );
@@ -280,7 +318,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "http_status",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         status,
                         "正文图片返回非成功状态，保留远端地址"
                     );
@@ -289,7 +327,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "non_image_content_type",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         content_type = content_type.as_deref().unwrap_or("<missing>"),
                         "正文图片地址返回了非图片内容，保留远端地址"
                     );
@@ -298,7 +336,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "too_large",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         byte_len,
                         max_bytes,
                         "正文图片体积超过单图预算，保留远端地址"
@@ -308,7 +346,7 @@ impl BodyAssetLocalizer {
                     tracing::warn!(
                         profile = self.budget.profile,
                         reason = "request_failed",
-                        asset_url = %slot.resolved_url(),
+                        asset_url = %crate::outbound::redacted(slot.resolved_url()),
                         error = %error,
                         "正文图片本地化失败，保留远端地址"
                     );

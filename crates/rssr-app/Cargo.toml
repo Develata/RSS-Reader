@@ -7,20 +7,20 @@ authors.workspace = true
 build = "build.rs"
 
 [features]
-# Public, offline demonstration of the real Web app; never enabled by default.
-pages-demo = []
+# Public, offline demonstration of the real Web app; never enabled by default. It keeps its library
+# in a private memory SQLite library; the formal Web build talks to the server instead.
+pages-demo = ["rssr-infra/memory-store"]
 
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
 dioxus-router.workspace = true
+rssr-api = { path = "../rssr-api" }
 rssr-application = { path = "../rssr-application" }
 rssr-domain = { path = "../rssr-domain" }
-rssr-host = { path = "../rssr-host" }
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 time.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -45,13 +45,12 @@ webbrowser.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
-urlencoding.workspace = true
 dioxus = { workspace = true, features = ["web"] }
 gloo-file = { version = "0.3", features = ["futures"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 js-sys = "0.3"
 reqwest.workspace = true
-rssr-infra = { path = "../rssr-infra" }
+rssr-infra = { path = "../rssr-infra", features = ["http-backend"] }
 tracing-wasm = "0.2"
 uuid = { version = "1", features = ["js"] }
 wasm-bindgen-futures = "0.4"

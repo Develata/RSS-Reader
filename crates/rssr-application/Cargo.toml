@@ -11,6 +11,7 @@ async-trait.workspace = true
 rssr-domain = { path = "../rssr-domain" }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 url.workspace = true

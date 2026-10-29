@@ -1,23 +1,52 @@
-use super::config::AuthConfig;
-
 const APP_NAME: &str = "RSS-Reader";
 const WEB_LOGIN_MARKUP: &str = include_str!("../../../../assets/branding/rssr-mark.svg");
 
-pub(crate) fn render_login_page(
-    config: &AuthConfig,
-    next: &str,
-    error_code: Option<&str>,
-) -> String {
-    let error_message = login_error_message(error_code);
-    let secure_note = secure_cookie_note(config);
+pub(crate) fn render_login_page(secure: bool, next: &str, error_code: Option<&str>) -> String {
+    let content = format!(
+        r#"<h1>登录 {APP_NAME}</h1>
+    <p>这个 Web 部署启用了登录保护。输入部署者提供的用户名和密码后，才能进入阅读器。</p>
+    <div class="error">{}</div>
+    <form method="post" action="/login" autocomplete="on">
+      <input type="hidden" name="next" value="{}">
+      <label for="login-username">用户名
+        <input id="login-username" name="username" type="text" autocomplete="username" required>
+      </label>
+      <label for="login-password">密码
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit">登录</button>
+    </form>
+    <p class="note">{}</p>"#,
+        login_error_message(error_code),
+        html_escape(next),
+        secure_cookie_note(secure)
+    );
+    page(&format!("{APP_NAME} 登录"), &content)
+}
 
+/// 退出登录的确认页：表单带上本会话的 CSRF 令牌，提交即 `POST /logout`。
+pub(crate) fn render_logout_page(csrf_token: &str) -> String {
+    let content = format!(
+        r#"<h1>退出登录</h1>
+    <p>退出后，这个浏览器需要重新登录才能继续阅读。</p>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{}">
+      <button type="submit">退出登录</button>
+    </form>
+    <p class="note"><a href="/">返回阅读器</a></p>"#,
+        html_escape(csrf_token)
+    );
+    page(&format!("{APP_NAME} 退出登录"), &content)
+}
+
+fn page(title: &str, content: &str) -> String {
     format!(
         r#"<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{} 登录</title>
+  <title>{}</title>
   <style>
     /* 与应用默认主题的 token 对齐（assets/styles/tokens.css）：
      * 登录页是用户进入阅读器前看到的第一屏，配色必须一致。 */
@@ -139,6 +168,7 @@ pub(crate) fn render_login_page(
     }}
     .error {{ min-height: 22px; color: var(--danger); font-weight: 600; }}
     .note {{ margin-top: 14px; font-size: 0.92rem; }}
+    .note a {{ color: var(--accent); }}
   </style>
 </head>
 <body>
@@ -147,35 +177,15 @@ pub(crate) fn render_login_page(
       <div class="brand-mark">{}</div>
       <p class="brand-name">{}</p>
     </div>
-    <h1>登录 {}</h1>
-    <p>这个 Web 部署启用了登录保护。输入部署者提供的用户名和密码后，才能进入阅读器。</p>
-    <div class="error">{}</div>
-    <form method="post" action="/login" autocomplete="on">
-      <input type="hidden" name="next" value="{}">
-      <label for="login-username">用户名
-        <input id="login-username" name="username" type="text" autocomplete="username" required>
-      </label>
-      <label for="login-password">密码
-        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
-      </label>
-      <button type="submit">登录</button>
-    </form>
-    <p class="note">{}</p>
+    {}
   </main>
 </body>
 </html>"#,
-        APP_NAME,
+        html_escape(title),
         WEB_LOGIN_MARKUP,
         APP_NAME,
-        APP_NAME,
-        error_message,
-        html_escape(next),
-        secure_note
+        content
     )
-}
-
-pub(crate) fn render_login_failure(error: impl AsRef<str>) -> String {
-    format!("登录失败：{}", html_escape(error))
 }
 
 pub(crate) fn html_escape(raw: impl AsRef<str>) -> String {
@@ -192,15 +202,16 @@ fn login_error_message(error_code: Option<&str>) -> &'static str {
         Some("invalid_credentials") => "用户名或密码错误。",
         Some("session_expired") => "登录已过期，请重新登录。",
         Some("rate_limited") => "登录尝试过于频繁，请稍后再试。",
+        Some("unavailable") => "服务暂时无法完成登录，请稍后再试。",
         _ => "",
     }
 }
 
-fn secure_cookie_note(config: &AuthConfig) -> &'static str {
-    if config.secure_cookie {
+fn secure_cookie_note(secure: bool) -> &'static str {
+    if secure {
         "当前会话 cookie 已启用 Secure。"
     } else {
-        "当前会话 cookie 未启用 Secure；生产环境请通过 HTTPS 反向代理并开启 RSS_READER_WEB_SECURE_COOKIE=true。"
+        "当前会话 cookie 未启用 Secure；生产环境请通过 HTTPS 反向代理访问，并把 RSS_READER_WEB_PUBLIC_ORIGIN 设为 https 地址。"
     }
 }
 

@@ -102,16 +102,16 @@ mod tests {
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
-        let theme = ThemeController {
-            settings: use_signal(|| UserSettings {
-                custom_css: "/* persisted */".into(),
-                ..UserSettings::default()
-            }),
-        };
+        let theme = crate::theme::use_theme_controller();
+        theme.store(UserSettings {
+            custom_css: "/* persisted */".into(),
+            ..UserSettings::default()
+        });
         let page = SettingsPageSession::new(theme);
-        let save = SettingsPageSaveSession::new(page);
+        let save_state = use_signal(crate::pages::settings_page::save::SettingsPageSaveState::new);
+        let save = SettingsPageSaveSession::new(save_state, page);
         let sync_state = use_signal(SettingsPageSyncState::new);
-        let sync = SettingsPageSyncSession::new(sync_state, page);
+        let sync = SettingsPageSyncSession::new(sync_state, page, crate::ui::use_app_shell_state());
         use_context_provider(|| {
             SettingsPageFacade::new(page, save, save.snapshot(), sync, sync.snapshot())
         });

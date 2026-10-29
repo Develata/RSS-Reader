@@ -1,0 +1,154 @@
+## startup route, empty
+StartupRouteResolved(StartupRouteSnapshot { route: EntriesPage })
+## feeds snapshot, empty
+FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { unread_count: 0, archived_count: 0, feeds: [], feed_count: 0, entry_count: 0, fingerprint: ConfigFingerprint(<1>) })))
+## add feed a
+FeedsPage(AddFeedFinished { token: 1, saved: true })
+FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
+## add feed b
+FeedsPage(AddFeedFinished { token: 1, saved: true })
+FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
+## add discovery page
+FeedsPage(FeedCandidates { token: 1, page_url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/page.html", query: None, fragment: None }, candidates: [FeedDiscoveryCandidate { url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/a.xml", query: None, fragment: None }, title: Some("First") }, FeedDiscoveryCandidate { url: Url { scheme: "http", cannot_be_a_base: false, username: "", password: None, host: Some(Ipv4(127.0.0.1)), port: Some(<port>), path: "/b.xml", query: None, fragment: None }, title: Some("Second") }] })
+FeedsPage(AddFeedFinished { token: 1, saved: false })
+## add failing feed
+FeedsPage(AddFeedFinished { token: 1, saved: false })
+FeedsPage(Failed(UiFailure { action: "添加订阅", error: BackendError { code: Network, message: "订阅探测返回非成功状态: HTTP status server error (500 Internal Server Error)", request_id: None, reason: None } }))
+## add duplicate feed a
+FeedsPage(AddFeedFinished { token: 1, saved: false })
+FeedsPage(Failed(UiFailure { action: "添加订阅", error: BackendError { code: InvalidInput, message: "该地址已订阅：http://127.0.0.1:<port>/a.xml", request_id: None, reason: None } }))
+## add feed with an image
+FeedsPage(AddFeedFinished { token: 1, saved: true })
+FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
+## feeds snapshot
+FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { unread_count: 5, archived_count: 5, feeds: [FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 3, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<2>) })))
+## entries bootstrap, all
+EntriesPage(ApplyLoadedSettings(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
+EntriesPage(ApplyLoadedWorkspaceState(EntriesWorkspaceState { grouping_mode: Time, show_archived: false, read_filter: All, starred_filter: All, selected_feed_urls: [] }))
+EntriesPage(SetFeeds([FeedSummary { id: 1, title: "Feed A", url: "http://127.0.0.1:<port>/a.xml", unread_count: 3, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }]))
+EntriesPage(PreferencesLoaded)
+## entries bootstrap, feed 1
+## remember opened feed 1
+## list entries
+EntriesPage(SetEntries { entries: [EntrySummary { id: 5, feed_id: 3, title: "Image one", feed_title: "Feed I", published_at: Some(2026-04-05T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 3, feed_id: 1, title: "Alpha three", feed_title: "Feed A", published_at: Some(2026-04-03T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 2, feed_id: 1, title: "Alpha two", feed_title: "Feed A", published_at: Some(2026-04-02T10:00:00Z), is_read: false, is_starred: false }, EntrySummary { id: 1, feed_id: 1, title: "Alpha one", feed_title: "Feed A", published_at: Some(2026-04-01T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
+## list entries of feed 2
+EntriesPage(SetEntries { entries: [EntrySummary { id: 4, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
+## toggle read in list
+EntriesPage(SetStatus { message: "已将《Alpha one》标记为已读。", tone: "info" })
+EntriesPage(PatchEntryFlags { entry_id: 1, is_read: Some(true), is_starred: None })
+## toggle starred in list
+EntriesPage(SetStatus { message: "已收藏《Alpha two》。", tone: "info" })
+EntriesPage(PatchEntryFlags { entry_id: 2, is_read: None, is_starred: Some(true) })
+## repeat read in list
+EntriesPage(SetStatus { message: "《Alpha one》已是已读。", tone: "info" })
+EntriesPage(PatchEntryFlags { entry_id: 1, is_read: Some(true), is_starred: None })
+## set read on a missing entry
+EntriesPage(SetStatus { message: "《Gone》已不存在，可能已被刷新清理或订阅已删除。", tone: "error" })
+## save browsing preferences
+EntriesPage(WorkspaceSaved(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
+## save the same browsing preferences
+EntriesPage(WorkspaceSaved(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
+## entries bootstrap after saving preferences
+EntriesPage(ApplyLoadedSettings(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
+EntriesPage(ApplyLoadedWorkspaceState(EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] }))
+EntriesPage(PreferencesLoaded)
+## mark selected articles read
+EntriesPage(SelectionApplied { ids: [1, 2], action: MarkRead, count: 1 })
+## repeat the same selection
+EntriesPage(SelectionApplied { ids: [1, 2], action: MarkRead, count: 0 })
+## load feed editor
+FeedsPage(EditLoaded { feed_id: 1, generation: 1, result: Ok(FeedEditDetails { feed_id: 1, url: "http://127.0.0.1:<port>/a.xml", original_title: Some("Feed A"), custom_title: None }) })
+## save feed editor
+FeedsPage(EditSaved { feed_id: 1, generation: 1, result: Ok(()) })
+## reader load
+ReaderPage(ApplyLoadedContent { entry_id: 1, content: ReaderPageLoadedContent { title: "Alpha one", body_text: "", body_html: Some("<p>Body of Alpha one</p>"), source: "Edited source", author: None, original_url: Some("https://example.invalid/a1"), published_at: "2026-04-01T10:00:00Z", navigation_state: EntryNavigation { previous_unread_entry_id: Some(3), next_unread_entry_id: None, previous_feed_entry_id: Some(2), next_feed_entry_id: None }, is_read: true, is_starred: false } })
+## reader load missing
+ReaderPage(SetError { entry_id: 999, error: Some("文章不存在") })
+## reader reread
+ReaderPage(ApplyReread { entry_id: 1, is_read: true, is_starred: false, navigation_state: EntryNavigation { previous_unread_entry_id: Some(3), next_unread_entry_id: None, previous_feed_entry_id: Some(2), next_feed_entry_id: None } })
+## reader reread missing
+ReaderPage(RereadMissing { entry_id: 999 })
+## entries reread
+EntriesPage(PreferencesReread { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }, workspace: EntriesWorkspaceState { grouping_mode: Source, show_archived: true, read_filter: UnreadOnly, starred_filter: All, selected_feed_urls: ["http://127.0.0.1:<port>/a.xml"] } })
+EntriesPage(SetFeeds([FeedSummary { id: 1, title: "Edited source", url: "http://127.0.0.1:<port>/a.xml", unread_count: 1, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }]))
+## reader toggle read
+ReaderPage(SetStatus { message: "已将当前文章标记为未读。", tone: "info" })
+ReaderPage(PatchEntryFlags { entry_id: 1, is_read: Some(false), is_starred: None })
+## reader toggle starred by shortcut
+ReaderPage(SetStatus { message: "已通过快捷键收藏文章。", tone: "info" })
+ReaderPage(PatchEntryFlags { entry_id: 1, is_read: None, is_starred: Some(true) })
+## reader set read on a missing entry
+ReaderPage(SetStatus { message: "当前文章已不存在，可能已被刷新清理或订阅已删除。", tone: "error" })
+## reader repeat starred by shortcut
+ReaderPage(SetStatus { message: "当前文章已在收藏中。", tone: "info" })
+ReaderPage(PatchEntryFlags { entry_id: 1, is_read: None, is_starred: Some(true) })
+## reader localize assets
+## reader localize the image entry
+## reader load the image entry
+ReaderPage(ApplyLoadedContent { entry_id: 5, content: ReaderPageLoadedContent { title: "Image one", body_text: "", body_html: Some("<p>Picture</p><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==\">"), source: "Feed I", author: None, original_url: Some("https://example.invalid/i1"), published_at: "2026-04-05T10:00:00Z", navigation_state: EntryNavigation { previous_unread_entry_id: None, next_unread_entry_id: Some(4), previous_feed_entry_id: None, next_feed_entry_id: None }, is_read: false, is_starred: false } })
+## refresh feed 1
+FeedsPage(SetStatus { message: "没有新文章：Feed A", tone: "info" })
+## manual refresh
+SetStatus { message: "没有新文章。", tone: "info" }
+## export config
+FeedsPage(ConfigTextExported("{\n  \"version\": 2,\n  \"exported_at\": \"<now>\",\n  \"feeds\": [\n    {\n      \"url\": \"http://127.0.0.1:<port>/a.xml\",\n      \"title\": \"Edited source\",\n      \"folder\": null\n    },\n    {\n      \"url\": \"http://127.0.0.1:<port>/b.xml\",\n      \"title\": \"Feed B\",\n      \"folder\": null\n    },\n    {\n      \"url\": \"http://127.0.0.1:<port>/img.xml\",\n      \"title\": \"Feed I\",\n      \"folder\": null\n    }\n  ],\n  \"settings\": {\n    \"theme\": \"system\",\n    \"list_density\": \"comfortable\",\n    \"startup_view\": \"all\",\n    \"refresh_interval_minutes\": 30,\n    \"archive_after_months\": 3,\n    \"entries_page_size\": 100,\n    \"reader_font_scale\": 1.0,\n    \"custom_css\": \"\"\n  }\n}"))
+FeedsPage(SetStatus { message: "已导出配置包 JSON。", tone: "info" })
+## export opml
+FeedsPage(OpmlTextExported("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<opml version=\"2.0\">\n  <head/>\n  <body>\n    <outline text=\"Edited source\" title=\"Feed A\" type=\"rss\" xmlUrl=\"http://127.0.0.1:<port>/a.xml\"/>\n    <outline text=\"Feed B\" title=\"Feed B\" type=\"rss\" xmlUrl=\"http://127.0.0.1:<port>/b.xml\"/>\n    <outline text=\"Feed I\" title=\"Feed I\" type=\"rss\" xmlUrl=\"http://127.0.0.1:<port>/img.xml\"/>\n  </body>\n</opml>"))
+FeedsPage(SetStatus { message: "已导出 OPML。", tone: "info" })
+## import opml
+FeedsPage(SetStatus { message: "OPML 已导入：1 个订阅。", tone: "info" })
+FeedsPage(BumpReload)
+## import opml, broken
+Failed(UiFailure { action: "导入 OPML", error: BackendError { code: InvalidInput, message: "OPML 无法解析：syntax error: tag not closed: `>` not found before end of input", request_id: None, reason: None } })
+## feeds snapshot before import
+FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { unread_count: 4, archived_count: 5, feeds: [FeedSummary { id: 1, title: "Edited source", url: "http://127.0.0.1:<port>/a.xml", unread_count: 2, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 4, title: "Extra", url: "http://127.0.0.1:<port>/extra.xml", unread_count: 0, entry_count: 0, last_fetched_at: None, last_success_at: None, fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 4, entry_count: 5, fingerprint: ConfigFingerprint(<3>) })))
+## import config
+FeedsPage(PendingConfigImportSet(false))
+FeedsPage(SetStatus { message: "配置包已导入：导入 3 个订阅，清理 1 个缺失订阅，设置未变化。", tone: "info" })
+## import config, broken
+FeedsPage(PendingConfigImportSet(false))
+FeedsPage(Failed(UiFailure { action: "导入配置包", error: BackendError { code: InvalidInput, message: "配置包不是有效的 JSON：EOF while parsing an object at line 1 column 1", request_id: None, reason: None } }))
+## import config from a stale page
+FeedsPage(PendingConfigImportSet(false))
+FeedsPage(SetStatus { message: "订阅或设置在本页载入后已被修改，配置包未导入；已重新载入，请确认后再导入。", tone: "error" })
+## settings load
+SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
+## settings save
+SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comfortable, startup_view: LastFeed, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "body { color: red }" }))
+SettingsPage(SetStatus { message: "已保存", tone: "info" })
+## settings save, invalid
+Failed(UiFailure { action: "保存设置", error: BackendError { code: InvalidInput, message: "文章页每页数量必须在 1 到 200 之间", request_id: None, reason: None } })
+## settings save, invalid CSS
+Failed(UiFailure { action: "保存设置", error: BackendError { code: InvalidInput, message: "自定义 CSS 格式无效：存在未闭合的括号或花括号", request_id: None, reason: None } })
+## feeds snapshot after settings
+FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { unread_count: 4, archived_count: 5, feeds: [FeedSummary { id: 1, title: "Edited source", url: "http://127.0.0.1:<port>/a.xml", unread_count: 2, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<4>) })))
+## import config with other settings
+FeedsPage(PendingConfigImportSet(false))
+FeedsPage(SettingsReplaced(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
+FeedsPage(SetStatus { message: "配置包已导入：导入 3 个订阅，清理 0 个缺失订阅，设置已更新。", tone: "info" })
+## push config
+SettingsPage(SetStatus { message: "配置已上传到 WebDAV：3 个订阅。", tone: "info" })
+## pull config
+SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" }))
+SettingsPage(SetStatus { message: "已从 WebDAV 下载并导入配置：导入 3 个订阅，清理 0 个缺失订阅，设置未变化。", tone: "info" })
+## pull missing config
+SettingsPage(SetStatus { message: "远端配置不存在。", tone: "info" })
+## startup route, last feed
+StartupRouteResolved(StartupRouteSnapshot { route: EntriesPage })
+## remove feed 2
+FeedsPage(PendingDeleteFeedSet(None))
+FeedsPage(SetStatus { message: "已删除订阅：Feed B", tone: "info" })
+FeedsPage(BumpReload)
+## re-add feed b
+FeedsPage(AddFeedFinished { token: 2, saved: true })
+FeedsPage(SetStatus { message: "订阅已保存并完成首次刷新。", tone: "info" })
+## list entries of feed 2 after re-adding
+EntriesPage(SetEntries { entries: [EntrySummary { id: 14, feed_id: 2, title: "Bravo one", feed_title: "Feed B", published_at: Some(2026-04-04T10:00:00Z), is_read: false, is_starred: false }], archived_count: 0, truncated: false })
+## feeds snapshot, at the end
+FeedsPage(SnapshotLoaded(Ok(FeedsPageSnapshot { unread_count: 4, archived_count: 5, feeds: [FeedSummary { id: 1, title: "Edited source", url: "http://127.0.0.1:<port>/a.xml", unread_count: 2, entry_count: 3, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 2, title: "Feed B", url: "http://127.0.0.1:<port>/b.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }, FeedSummary { id: 3, title: "Feed I", url: "http://127.0.0.1:<port>/img.xml", unread_count: 1, entry_count: 1, last_fetched_at: Some(<now>), last_success_at: Some(<now>), fetch_error: None }], feed_count: 3, entry_count: 5, fingerprint: ConfigFingerprint(<5>) })))
+## authenticated shell
+AutoRefreshStarted
+AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" } })
+## shell settings again
+AuthenticatedShellLoaded(AuthenticatedShellSnapshot { settings: UserSettings { theme: System, list_density: Comfortable, startup_view: All, refresh_interval_minutes: 30, archive_after_months: 3, entries_page_size: 100, reader_font_scale: 1.0, custom_css: "" } })
