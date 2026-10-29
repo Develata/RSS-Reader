@@ -8,6 +8,8 @@
 - [文章列表目录：手动浏览与自动跟随（已确认设计，待实施）](./entries-directory-follow.md)
 - [Headless Active Interface 设计目标](./headless-active-interface.md)
 - [UI Shell / Bus / Page Facade 边界](./ui-shell-bus-page-facade.md)
+- [原生界面前置模块边界](./native-ui-preparation.md)
+- [原生控件适配契约](./native-control-adapter-contracts.md)
 - [Application Use Case 收敛计划](./application-use-case-consolidation-plan.md)
 - [Application Use Case 边界检查清单](./application-use-case-boundary-checklist.md)
 - [CSS 完全分离基线检查](./css-separation-baseline-checklist.md)

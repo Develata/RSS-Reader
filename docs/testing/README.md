@@ -36,6 +36,7 @@
 ### 重构 / 约束
 
 - [Headless 重构视觉等价验收](./headless-refactor-equivalence.md)
+- [原生控件适配验收清单](./native-control-acceptance.md)
 - [环境限制索引](./environment-limitations.md)
 - [Contract Harness 重建计划](./contract-harness-rebuild-plan.md)
 
