@@ -1,6 +1,6 @@
 # 维护状态
 
-核对日期：2026-10-28。正式版本基线：`v0.2.1` → `dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee`；Rust / CSS 产品代码与此前专项验收的 `a9608056` 相同，正式附件另做身份与升级核验。本文件汇总当前事实，不替代具体设计契约或逐次验收证据；经源码核实的后续事项维护在[当前待办](./maintenance-backlog.md)。
+整体核对日期：2026-10-28；目录原生复测专项补充：2026-10-29。正式版本基线：`v0.2.1` → `dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee`；Rust / CSS 产品代码与此前专项验收的 `a9608056` 相同，正式附件另做身份与升级核验。本文件汇总当前事实，不替代具体设计契约或逐次验收证据；经源码核实的后续事项维护在[当前待办](./maintenance-backlog.md)。
 
 ## 主线与已发布版本
 
@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | 正式发布 | v0.2.1，2026-10-28 发布；14 个公开附件与实际 CI 文件及 GitHub SHA256 全部相符 | [Release](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1)、[正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md) |
 | 最近合并 | PR #35 文档与原生证据、#34 setup-python v7、#36 历史待办核实；各自合并前 37 项成功 / 1 项跳过 | [PR 收尾记录](./handoffs/2026-10-28-historical-followup-audit.md)、[PR #36](https://github.com/Develata/RSS-Reader/pull/36) |
+| 目录突跳专项补充（2026-10-29） | PR #43 已合并；在 `0692c924` 上完成 Windows 原生 9/9 验收、6/6 补充检查及系统滚轮交叉检查，原视频边界动作最大目录帧间位移 0px；未发布新版本 | [原生验收及范围](./handoffs/2026-10-29-directory-native-verification.md)、[顺序模型修正](./handoffs/2026-10-29-directory-reading-order.md) |
 | 发布基线自动化 | dbfbf896 的 CI、Pages、Docker 成功；Release 最终 13 项成功 / 1 项复用跳过，四平台 Web 包各 6 项、容器 9 项检查通过 | [CI](https://github.com/Develata/RSS-Reader/actions/runs/40681852013)、[Pages](https://github.com/Develata/RSS-Reader/actions/runs/40681852004)、[Docker](https://github.com/Develata/RSS-Reader/actions/runs/40681852052)、[Release](https://github.com/Develata/RSS-Reader/actions/runs/40683428344) |
 | 正式原生产物 | Windows 正式 GUI 启动、5000 篇单库升级及关闭通过；Android 正式 APK 在隔离模拟器覆盖安装、初始化与预置旧 schema 单库对照通过，APK/AAB 证书与 v0.2.0 相同 | [正式产物验收及边界](./handoffs/2026-10-28-v0.2.1-release.md)、[原生证据](./testing/evidence/2026-10-28-v0.2.1-release/native.json) |
 | 原生交互专项 | 此前 Windows 27 项、Android 真机 28 项，以及快捷键、重启偏好与 Windows v0.2.0 升级通过；Android 当时使用 debug 外壳，未把其结果当作正式 APK 全流程复测 | [此前验收及边界](./handoffs/2026-10-28-release-readiness.md)、[覆盖矩阵](./testing/release-ui-coverage-matrix.md) |
