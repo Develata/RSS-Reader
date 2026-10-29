@@ -3,6 +3,8 @@
 #![allow(clippy::double_must_use)]
 pub mod app_state_service;
 pub mod composition;
+mod content_identity;
+pub use content_identity::entry_content_hash;
 pub mod entries_list_service;
 pub mod entries_workspace_service;
 pub mod entry_batch_service;
@@ -56,8 +58,8 @@ pub use refresh_service::{
     ParsedEntryData, ParsedFeedUpdate, RefreshAllExecutionOutcome, RefreshAllInput,
     RefreshAllOutcome, RefreshAllSummary, RefreshCommit, RefreshCommitOutcome, RefreshFailure,
     RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshHttpMetadata, RefreshLocalizedEntry, RefreshService, RefreshStorePort, RefreshTarget,
-    RefreshTicket, SERIAL_REFRESH_CONCURRENCY,
+    RefreshHttpMetadata, RefreshLocalizationCandidate, RefreshService, RefreshStorePort,
+    RefreshTarget, RefreshTicket, SERIAL_REFRESH_CONCURRENCY,
 };
 pub use result_bounds::{
     MAX_DISCOVERY_CANDIDATES, MAX_LISTED_FAILURES, MAX_MESSAGE_BYTES, MAX_NAME_BYTES,

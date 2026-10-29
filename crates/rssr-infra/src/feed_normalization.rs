@@ -122,30 +122,7 @@ fn utf8_parser_input(raw: &[u8]) -> impl std::io::Read + '_ {
 /// 地址变了，按旧地址本地化的结果就不再对应这篇文章。旧算法把三段直接拼接，`("c", "ab")`
 /// 与 `("bc", "a")` 会得到同一个哈希，不能单独据此判断源是否变化；加版本前缀后，旧库里的
 /// 哈希在下一次刷新时一次性更新。四段都缺失时返回 `None`。
-pub fn hash_content(
-    html: Option<&str>,
-    text: Option<&str>,
-    title: Option<&str>,
-    url: Option<&str>,
-) -> Option<String> {
-    let parts = [title, text, html, url];
-    if parts.iter().all(Option::is_none) {
-        return None;
-    }
-    let mut hasher = Sha256::new();
-    hasher.update(b"rssr-content-v2");
-    for part in parts {
-        match part {
-            Some(part) => {
-                hasher.update([1]);
-                hasher.update((part.len() as u64).to_le_bytes());
-                hasher.update(part.as_bytes());
-            }
-            None => hasher.update([0]),
-        }
-    }
-    Some(format!("{:x}", hasher.finalize()))
-}
+pub use rssr_application::entry_content_hash as hash_content;
 
 fn normalize_feed(feed: FeedRsFeed) -> ParsedFeed {
     let title = text_value(feed.title.as_ref());

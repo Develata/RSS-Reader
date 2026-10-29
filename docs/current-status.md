@@ -18,7 +18,7 @@
 
 ## 当前维护重点
 
-1. 按[当前待办](./maintenance-backlog.md)推进：先复现 HTML 预算盲区、测量后台图片任务公平性，不重做已被新架构替代的旧事项。
+1. HTML 的 Marker/属性慢点与后台图片轮转、候选载荷约束已在 `codex/parse-image-performance` 实现；2026-10-29 创建 [PR #38](https://github.com/Develata/RSS-Reader/pull/38)，`a8791026` 的远端检查 37 成功 / 1 预期跳过，见[CI 回执](./handoffs/2026-10-29-parse-image-pr-ci.md)。这是尚未合并、未发布的工作分支；实现与边界见[本轮记录](./handoffs/2026-10-28-parse-image-performance.md)、[处理预算](./design/reader-processing-budgets.md)，剩余单 token 预算、304 续排和规模观察继续列在[当前待办](./maintenance-backlog.md)。
 2. 真实 Android 旧库搬迁与正式签名包真机升级仍需专项验收；模拟器中的覆盖安装和预置 Windows 旧 schema 夹具不替代这两项。
 3. 系统 IME、辅助技术、macOS/Linux GUI 完整交互与其他设备覆盖按明确场景补验；其余历史段落继续逐批核实，归档不代表全部结案。
 

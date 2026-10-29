@@ -10,6 +10,8 @@
 
 mod auto_refresh;
 #[cfg(not(target_arch = "wasm32"))]
+mod image_localization;
+#[cfg(not(target_arch = "wasm32"))]
 mod native_host;
 mod refresh_flight;
 
@@ -27,8 +29,8 @@ use rssr_application::{
     EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, PrepareSubscriptionOutcome,
     ReaderEntrySnapshot, RefreshAllExecutionOutcome, RefreshAllInput, RefreshAllOutcome,
     RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome, RefreshFeedResult,
-    RefreshLocalizedEntry, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteConfigStore,
-    RemoveSubscriptionInput, SettingsPatch, StartupTarget,
+    RefreshLocalizationCandidate, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
+    RemoteConfigStore, RemoveSubscriptionInput, SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -85,7 +87,7 @@ pub trait LocalHost: HostBound + 'static {
         remote_path: &str,
     ) -> Result<Box<dyn RemoteConfigStore>>;
     /// A refresh stored new or changed bodies of `feed_id`; they may hold images to keep locally.
-    fn feed_refreshed(&self, _feed_id: i64, _entries: Vec<RefreshLocalizedEntry>) {}
+    fn feed_refreshed(&self, _feed_id: i64, _entries: Vec<RefreshLocalizationCandidate>) {}
     /// Stores the entry's images locally where this host can; `true` when it did.
     async fn localize_entry_assets(&self, _entry_id: i64) -> Result<bool> {
         Ok(false)

@@ -8,7 +8,7 @@ members = [
     "crates/rssr-domain",
     "crates/rssr-infra",
 ]
-exclude = ["vendor/url"]
+exclude = ["vendor/url", "vendor/html5ever"]
 resolver = "2"
 
 [workspace.package]
@@ -59,3 +59,6 @@ webbrowser = "1"
 # Keep the upstream-equivalent dot-segment fix until rust-url#1163 is released.
 [patch.crates-io]
 url = { path = "vendor/url" }
+# Attribute deduplication and marker visibility for the reader's parse budget.
+# Provenance and removal conditions: vendor/html5ever/RSSR-PATCH.md.
+html5ever = { path = "vendor/html5ever" }

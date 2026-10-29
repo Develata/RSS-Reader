@@ -218,3 +218,28 @@ fn long_formulas_do_not_widen_a_narrow_reader() {
     assert!(result["hostScrollWidth"].as_f64().unwrap() <= client, "{result}");
     assert!(result["maxMathWidth"].as_f64().unwrap() <= client, "{result}");
 }
+
+#[wasm_bindgen_test]
+fn marker_residue_and_wide_attributes_remain_inert_after_browser_reparse() {
+    let markers = format!(
+        "{}{}<p>visible</p>",
+        "<template><object></template>".repeat(5_000),
+        "<b>x</b>".repeat(20_000)
+    );
+    let result = render(&markers);
+    assert_eq!(result["unsafe"], serde_json::json!([]), "{result}");
+    assert_eq!(result["stable"], true);
+    assert!(result["text"].as_str().unwrap().ends_with("visible"));
+    let attrs: String = (0..10_000).map(|i| format!(" a{i}=x")).collect();
+    let result = render(&format!("<p{attrs} onclick=alert(1)>visible &amp; text</p>"));
+    assert_eq!(result["unsafe"], serde_json::json!([]), "{result}");
+    assert_eq!(result["text"], "visible & text");
+}
+
+#[wasm_bindgen_test]
+fn unquoted_url_slashes_are_preserved_on_the_shared_wasm_path() {
+    let base = url::Url::parse("https://example.com/article").unwrap();
+    let normalized =
+        rssr_infra::html::normalize_html_for_live_display("<img src=/directory/>", Some(&base));
+    assert!(normalized.contains(r#"src="https://example.com/directory/""#), "{normalized}");
+}
