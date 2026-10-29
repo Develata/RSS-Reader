@@ -819,4 +819,103 @@ mod tests {
         assert_eq!(date.entry_cards[1].id, 12);
         assert_eq!(date.entry_cards[1].index, 1);
     }
+
+    #[test]
+    fn every_directory_branch_is_the_concatenation_of_its_pages_reading_order() {
+        use std::collections::BTreeMap;
+
+        // Read the public projections, independently of their grouping helpers.
+        // Branch identity and (index, id) order must commute with pagination in
+        // both modes, including duplicate feed names and missing dates.
+        type Branches = BTreeMap<String, Vec<EntryCardRef>>;
+        fn directory(presenter: &EntriesPagePresenter) -> Branches {
+            presenter
+                .directory_months
+                .iter()
+                .flat_map(|month| &month.dates)
+                .map(|date| (date.anchor_id.clone(), date.entry_cards.clone()))
+                .chain(
+                    presenter
+                        .directory_sources
+                        .iter()
+                        .flat_map(|source| &source.months)
+                        .map(|month| (month.anchor_id.clone(), month.entry_cards.clone())),
+                )
+                .collect()
+        }
+        let entries: Vec<_> = (0..137)
+            .map(|index| {
+                let source = index % 4;
+                Arc::new(EntrySummary {
+                    id: 1000 - index,
+                    feed_id: source + 1,
+                    feed_title: ["Zulu", "Alpha", "Same", "Same"][source as usize].into(),
+                    title: format!("Article {index}"),
+                    published_at: match index {
+                        0..=69 => Some(parse_datetime("2026-09-02T12:00:00Z")),
+                        70..=102 => Some(parse_datetime("2026-09-01T12:00:00Z")),
+                        103..=126 => Some(parse_datetime("2026-08-01T12:00:00Z")),
+                        _ => None,
+                    },
+                    is_read: false,
+                    is_starred: false,
+                })
+            })
+            .collect();
+        for mode in [EntryGroupingMode::Time, EntryGroupingMode::Source] {
+            for page_size in [0, 1, 2, 7, 50, 100, 1000] {
+                for len in [0, 1, 31, entries.len()] {
+                    let mut state = EntriesPageState::new();
+                    state.grouping_mode = mode;
+                    state.entries_page_size = page_size;
+                    state.entries = entries[..len].to_vec().into();
+                    let baseline = EntriesPagePresenter::from_input(
+                        &EntriesPresenterInput::from_state(&state, None),
+                    );
+                    let expected = directory(&baseline);
+                    let mut read: Branches = BTreeMap::new();
+                    for page in 1..=baseline.total_pages {
+                        state.current_page = page;
+                        let presenter = EntriesPagePresenter::from_input(
+                            &EntriesPresenterInput::from_state(&state, None),
+                        );
+                        assert_eq!(
+                            directory(&presenter),
+                            expected,
+                            "changing pages cannot reorder the full directory"
+                        );
+                        for card in leaf_cards(&presenter) {
+                            assert_eq!(state.entries[card.index].id, card.id);
+                            assert_eq!(card.index / page_size.max(1) as usize + 1, page as usize);
+                        }
+                        for date in
+                            presenter.time_grouped_entries.iter().flat_map(|month| &month.dates)
+                        {
+                            read.entry(date.anchor_id.clone()).or_default().extend(
+                                date.sources.iter().flat_map(|source| &source.entry_cards).copied(),
+                            );
+                        }
+                        for month in presenter
+                            .source_grouped_entries
+                            .iter()
+                            .flat_map(|source| &source.months)
+                        {
+                            read.entry(month.anchor_id.clone())
+                                .or_default()
+                                .extend(&month.entry_cards);
+                        }
+                    }
+                    assert_eq!(read, expected, "mode={mode:?}, page_size={page_size}, len={len}");
+                    let mut indices: Vec<_> =
+                        read.values().flatten().map(|card| card.index).collect();
+                    indices.sort_unstable();
+                    assert_eq!(
+                        indices,
+                        (0..len).collect::<Vec<_>>(),
+                        "each article must occur exactly once, including off-page articles"
+                    );
+                }
+            }
+        }
+    }
 }

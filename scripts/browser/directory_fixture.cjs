@@ -25,7 +25,8 @@ exports.install = async (context, repo) => {
   await context.route(origin + '/__codex/setup-local-auth**', async route => {
     const url = new URL(route.request().url());
     const windowSeed = url.searchParams.get('seed') === 'directory-window';
-    const seed = windowSeed ? 'directory-contract' : url.searchParams.get('seed');
+    const pageOrderSeed = url.searchParams.get('seed') === 'directory-page-order';
+    const seed = windowSeed || pageOrderSeed ? 'directory-contract' : url.searchParams.get('seed');
     const session = await harness.server.useSeed(seed, { edit: ({core, app_state: app, entry_flags: flags, entry_content: content}) => {
       if (url.searchParams.get('workspace') === 'true') {
         core.settings.entries_page_size = 8;
@@ -49,6 +50,25 @@ exports.install = async (context, repo) => {
         content.entries = [];
         app.entries_workspace.grouping_mode = url.searchParams.get('group') || 'source';
         app.entries_workspace.show_archived = url.searchParams.get('archived') !== 'false';
+      }
+      if (pageOrderSeed) {
+        const template = core.entries[0];
+        core.entries = Array.from({length:5000}, (_, i) => {
+          const id = 5000 - i;
+          return {...template, id, feed_id:(id - 1) % 6 + 1,
+            external_id:'page-order-' + id, dedup_key:'page-order-' + id,
+            url:origin + '/article/' + id,
+            title:`阅读基线文章 ${String(id).padStart(5, '0')} — Reading baseline`,
+            published_at:'2026-09-02 12:00:00.0 +00:00:00'};
+        });
+        core.next_entry_id = 5001;
+        core.settings.entries_page_size = 50;
+        core.settings.archive_after_months = 120;
+        core.settings.theme = url.searchParams.get('theme') || 'light';
+        flags.entries = [];
+        content.entries = [];
+        app.entries_workspace.grouping_mode = 'time';
+        app.entries_workspace.show_archived = false;
       }
     }});
     const split = session.cookie.indexOf('=');
