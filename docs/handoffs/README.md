@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| PR #40 主线整合 | [最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md)、[逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
+| PR #40 主线整合 | [main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md)、[最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md)、[逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
 | 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md)、[Windows 原生复测](./2026-10-29-directory-native-verification.md) |
 | 主题预览与设计细节 | [设计审查改进与验收](./2026-10-29-design-refinements.md)、[原始审查依据](./2026-10-29-design-audit.md) |
 | 订阅与设置顶部层级 | [导航与独立主面板统一](./2026-10-29-secondary-page-surfaces.md) |
@@ -28,6 +28,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-29 | [PR #40 合并后 main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md) |
 | 2026-10-29 | [PR #40 最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md) |
 | 2026-10-29 | [PR #40 接入目录顺序主线与原生复验](./2026-10-29-pr40-directory-order-integration.md) |
 | 2026-10-29 | [PR #40 CI 等待边界与诊断](./2026-10-29-pr40-ci-wait-boundaries.md) |

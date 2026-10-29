@@ -62,6 +62,7 @@
 - 当前工作树已 fast-forward 到实际合并提交。首次 fetch 遇到临时 TLS 握手失败，正常重试成功；未修改 TLS 校验或全局网络设置。
 - [结构化合并与 CI 回执](../testing/evidence/2026-10-29-pr40-final-review/merge-receipt.json) 保存最终检查名称、结论、run 和 artifact 身份。合并后文档收口提交不改变产品内容；其 main 推送检查与此处已通过的 PR CI 是独立运行，不以 PR 结果冒充后续运行结果。
 - 不打 tag、不发布新版本。
+- 同日后续：已继续核对合并后的 main CI 和 Docker；旧运行因 main 更新取消，最新核验基线 `aa60c661` 两个工作流均成功，实际报告及散列见[主线 CI/Docker 交接](./2026-10-29-pr40-main-ci-docker.md)。
 
 ## 风险与后续事项
 
