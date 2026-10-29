@@ -410,13 +410,39 @@ async function preferenceOrdering(page) {
   for (const labels of [['仅未读', '仅未读'], ['来源', '时间']]) {
     const before = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
     let afterClicks;
-    await holdWrites(page, async captured => {
-      await page.getByRole('button', { name: labels[0], exact: true }).click();
-      await captured;
-      await page.getByRole('button', { name: labels[1], exact: true }).click();
-      afterClicks = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
-      assert.equal(afterClicks, 'false', 'the visible filter must already reflect the final All choice');
-    });
+    let finalSave;
+    const observeSave = response => {
+      const request = response.request();
+      if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/v1/workspace') return;
+      const workspace = request.postDataJSON();
+      if (workspace.read_filter === 'all' && workspace.grouping_mode === 'time') finalSave = response;
+    };
+    page.on('response', observeSave);
+    try {
+      await holdWrites(page, async captured => {
+        await page.getByRole('button', { name: labels[0], exact: true }).click();
+        await captured;
+        await page.getByRole('button', { name: labels[1], exact: true }).click();
+        afterClicks = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
+        assert.equal(afterClicks, 'false', 'the visible filter must already reflect the final All choice');
+        // The initial stored value already equals the final choice while the
+        // first write is blocked. Polling that value alone cannot prove success.
+        const initial = await page.evaluate(async () => {
+          const input = encodeURIComponent(JSON.stringify({load_preferences:true,load_feeds:false}));
+          return (await (await fetch('/api/v1/entries/bootstrap?input=' + input)).json()).workspace;
+        });
+        assert.equal(initial.read_filter, 'all');
+        assert.equal(initial.grouping_mode, 'time');
+        assert.equal(finalSave, undefined, 'no final save can complete while writes are held');
+      });
+      // Continuing the held route only sends it. Wait for the queued final PUT
+      // to finish before reloading can cancel the document's remaining tasks.
+      await expect.poll(() => Boolean(finalSave), { message: 'the final workspace save must respond', timeout: 15000 }).toBe(true);
+      assert.ok(finalSave.ok(), `the final workspace save failed: ${finalSave.status()}`);
+      assert.equal(await finalSave.finished(), null, 'the final workspace response must finish');
+    } finally {
+      page.off('response', observeSave);
+    }
     // Read the persisted server preference before unloading page tasks.
     await page.waitForFunction(async () => {
       const input = encodeURIComponent(JSON.stringify({load_preferences:true,load_feeds:false}));

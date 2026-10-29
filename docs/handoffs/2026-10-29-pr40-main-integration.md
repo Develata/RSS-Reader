@@ -3,8 +3,8 @@
 - 日期：2026-10-29
 - 作者 / Agent：Codex
 - 分支：本地 `codex/pr40-main-integration`；推送目标 `codex/native-ui-preparation-20261029`
-- 当前 HEAD：追加优化基线 `72e0516bb809ce213b8b9decbdcc6e9a2fc4673c`；优化与本记录同一提交，见 PR #40 分支历史
-- 相关 commit：`a7107b8b`（PR `58157a1a` + main `6a201d5a`）；最终普通合并提交包含本记录，第二父提交为 `9b17a4d5`。后一次合并只有交接元数据变化，产品源码与本地最终验收一致
+- 当前产品 HEAD：`67a9596fe47f2daea1288915b1719e8c26bcb34f`；CI 验收同步修正与本记录同一提交，见 PR #40 分支历史
+- 相关 commit：`a7107b8b`（PR `58157a1a` + main `6a201d5a`）；`72e0516b`（普通合并 main `9b17a4d5`，只有交接元数据变化）；`67a9596f`（Settings 私有状态转换封装）
 - 相关 tag / release：无
 - 状态：`validated`（本地自动化范围；远端检查记录在 PR #40 的当前 head/run 回执中）
 
@@ -83,7 +83,16 @@
 - 保持行为：仍按实际字段构造补丁，保留后来编辑；只有携带已存储设置的写入作废旧读；后发读取即使失败，也不复活较早暂存结果；全局主题版本判断仍由 session 处理。
 - 新增 6 项无 Dioxus/I/O 的不变量测试，覆盖编辑回退、失败恢复与重试、保存归一化及字段归属、后发失败读取、成功写入前后到达的旧读、失败写入释放一次暂存结果。既有 Dioxus 接线测试保留。
 - 验证：`cargo test -p rssr-app --locked settings_page` 60/60；`cargo test --workspace --locked` 1057 通过、0 失败、4 既有忽略；fmt、Clippy 全工作区检查通过；Web release 与 rssr-web 重建通过；`rssr_native_preparation_acceptance.cjs` 8/8 通过，无页面/控制台异常。日志为 target/settings-cohesion-tests.log、workspace-cohesion-tests.log、clippy-cohesion.log、web-cohesion-build.log、server-cohesion-build.log、settings-cohesion-web.log，JSON 为 target/pr40-web-cohesion/acceptance.json。
-- 提交范围仅 Settings 的两个规则模块、session 接线及相关文档；本段追加完成后单独 commit/push 并复核新 head 的自动 PR CI。原生复跑的审批限制与未覆盖平台仍适用；不以基线原生结果声称本次追加的原生交互验收。
+- 提交范围仅 Settings 的两个规则模块、session 接线及相关文档，已作为 `67a9596f` 单独 commit/push。原生复跑的审批限制与未覆盖平台仍适用；不以基线原生结果声称本次追加的原生交互验收。
+
+## 自动 PR CI 发现的验收同步问题
+
+- `67a9596f` 的自动 [CI 40878790163](https://github.com/Develata/RSS-Reader/actions/runs/40878790163) 在 `reading-workspace` 中失败于主线已有的 `preferenceOrdering` 场景；汇总门禁随之失败。其余 35 项成功，Pages 部署 1 项按草稿 PR 预期跳过；Rust、Android、Web、WASM 和主题模块均通过。
+- 根因：筛选从“全部”切到“仅未读”再切回“全部”时，最终目标值恰好等于初始存储值。旧脚本在释放请求后只轮询该值，可以在第一次写入提交之前满足条件并刷新页面，取消尚未完成的最终写入。`route.continue()` 只代表请求已继续，不能当作存储回执。
+- 修正：`preferenceOrdering` 在操作前监听真实 `PUT /api/v1/workspace` 回执，匹配最终 all/time 请求，断言成功且响应完整后才检查服务器存储并刷新；监听器在 finally 中撤除。保留全部原有持久化断言，不使用固定延时，不改变产品写入语义。
+- 回归前提：在第一笔写入仍被拦截时，明确断言服务器已返回初始 all/time，且最终写入尚无回执，验证旧轮询条件存在提前成立的窗口。
+- 验证：`node --check scripts/browser/rssr_workspace_acceptance.cjs`、`git diff --check` 通过；Entries 生命周期 8/8 通过，无页面或意外控制台异常，证据在 `target/preference-fix-entries.log` 和 `target/pr40-ci-preference-fix-entries/acceptance.json`。`node scripts/browser/rssr_workspace_acceptance.cjs` 完整工作区 18/18 通过，无页面异常，日志为 `target/preference-fix-workspace.log`，隔离服务器证据在 `target/pr40-ci-preference-fix-workspace/`。
+- 此次只改验收脚本和本记录，沿用 `67a9596f` 对应的同源码 Web/server 构建；Rust 产品代码未变。推送后重新核对新 head 的自动 PR CI，结果以 PR 描述的固定 head/run 回执为准。
 
 ## 风险与后续事项
 
