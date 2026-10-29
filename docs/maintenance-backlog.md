@@ -1,10 +1,16 @@
 # 当前维护待办
 
-核对日期：2026-10-28；发布基线：`v0.2.1` → `dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee`。本页记录经当前源码核对后仍值得跟进的事项。发布和 CI 状态见[维护状态](./current-status.md)，逐次执行结果见[历史核实](./handoffs/2026-10-28-historical-followup-audit.md)与[正式发布](./handoffs/2026-10-28-v0.2.1-release.md)。
+核对日期：2026-10-29（本次补当前批次与合并状态；M01–M07 的实测仍以各自记录日期为准）。本页记录经源码核对后仍值得跟进的事项。main、本地候选、发布和 CI 状态统一见[维护状态](./current-status.md)，历史核实见[10 月 28 日记录](./handoffs/2026-10-28-historical-followup-audit.md)。
 
-本轮扫描了 147 份历史 handoff，优先核对架构、数据迁移、资源边界与发布。以下是这一轮的处置结果，不是对所有历史段落、所有用户路径的完整结案。源码支持、历史实测、本轮实测必须分开；缺少当前复现时不把推断升级成新缺陷。
+10 月 28 日扫描了 147 份历史 handoff，优先核对架构、数据迁移、资源边界与发布。以下保留当轮处置结果，不是对所有历史段落、所有用户路径的完整结案。源码支持、历史实测、本轮实测必须分开；缺少当前复现时不把推断升级成新缺陷。
 
-## 当前待办
+## 当前批次的收口
+
+- 返回策略 `62113c4f`：实现、review、Rust / Web 验证及 Windows / Android 编译已完成；实际宿主交互因自动执行审批拒绝而未执行。完成标准是隔离资料库下的 Windows WebView2 / Android 系统返回验收与可回读证据，见[本批记录](./handoffs/2026-10-29-native-back-policy.md)。
+- 当前分支已包含 main `4101520c`；遗漏文档、当前入口和 51 份历史记录归档已整理完成，候选合并待实际验收及后续授权。分支引用不能仅按 ahead 数量判断未完成工作；见[整合清单](./handoffs/2026-10-29-consolidation.md)。
+- PR #38 和 #40 已合并，不再作为“等待实现/等待合并”的任务。原生控件接入尚未开始，Shell、渲染器、数据库和新 crate 不纳入本批。
+
+## 持续维护事项
 
 | ID | 顺序 / 类型 | 当前事实与边界 | 下一步与完成标准 |
 | --- | --- | --- | --- |
@@ -30,8 +36,8 @@
 | SQL 校验和依赖 CRLF/LF；[10-09 修复](./handoffs/archive/2026-10/2026-10-09-audit-fixes.md) | [migrate.rs](../crates/rssr-infra/src/store/migrate.rs) 对当前迁移规范化换行；[import.rs](../crates/rssr-infra/src/store/import.rs)核对已发布旧前缀的换行形式。设备和真实旧库覆盖仍列 M04，不混为一个“全部升级通过”。 |
 | `url` 根路径点段反扫、JSON Feed 作者与 Media RSS 复制放大；[10-21 防护](./handoffs/archive/2026-10/2026-10-21-untrusted-url-guard.md) | url 已有本地补丁；当前 [feed_structure](../crates/rssr-infra/src/feed_structure.rs) 已覆盖 JSON 作者继承/比较与 rating 传播，[响应边界测试](../crates/rssr-infra/tests/test_feed_response_limits.rs)有相应反例。旧“JSON 不预检”结论已过时；依赖模型仍需维护，见 M06。 |
 | `<picture>` 重复写 data URL 导致正文放大；[C4 记录](./handoffs/archive/2026-10/2026-10-19-v0.2-phase-c4.md) | [live_display.rs](../crates/rssr-infra/src/html/live_display.rs)改写前计算 allowance，逐项累计，超限保留原文；`localized_rewrites_cannot_multiply_one_image_without_bound` 已有回归。data URL 的常规存储成本仍存在，不等于此放大缺陷未修。 |
-| C4 Ubuntu CI / 独立复审、C6 四平台包、v0.2.0 发布尚未完成；[10-22 整合](./handoffs/archive/2026-10/2026-10-22-branch-integration.md) | 后续[10-23 整合](./handoffs/2026-10-23-integration-merge-pages.md)与[v0.2.0 发布](./handoffs/2026-10-23-v0.2.0-release.md)已有对应完成证据。新版本不能沿用旧包身份，见 M03。 |
-| 无 Android 真机、目录箭头和间距待同步、Windows wasm-opt 阻断 | 后续[原生与 Penpot 专项](./handoffs/2026-10-28-release-readiness.md)及[wasm-opt 修复](./handoffs/2026-10-27-wasm-opt-release-build.md)已补齐所列范围；其余设备与全量设计检查仍按 M07 判断。 |
+| C4 Ubuntu CI / 独立复审、C6 四平台包、v0.2.0 发布尚未完成；[10-22 整合](./handoffs/archive/2026-10/2026-10-22-branch-integration.md) | 后续[10-23 整合](./handoffs/archive/2026-10/2026-10-23-integration-merge-pages.md)与[v0.2.0 发布](./handoffs/2026-10-23-v0.2.0-release.md)已有对应完成证据。新版本不能沿用旧包身份，见 M03。 |
+| 无 Android 真机、目录箭头和间距待同步、Windows wasm-opt 阻断 | 后续[原生与 Penpot 专项](./handoffs/2026-10-28-release-readiness.md)及[wasm-opt 修复](./handoffs/archive/2026-10/2026-10-27-wasm-opt-release-build.md)已补齐所列范围；其余设备与全量设计检查仍按 M07 判断。 |
 
 ## 保留的契约与暂缓方向
 

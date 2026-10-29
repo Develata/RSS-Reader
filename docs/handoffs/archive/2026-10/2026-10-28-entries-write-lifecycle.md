@@ -99,4 +99,4 @@
 ## 给下一位 Agent 的备注
 
 - 从 `write_lifecycle.rs`、`preferences_policy.rs` 的普通 Rust 测试进入，再看 `session.rs` 的执行适配和集成测试。批量取消和 busy/revision 转移仍在原 reducer，偏好串行比较/写入仍在 application。
-- [原生界面前置模块](../design/native-ui-preparation.md) 已记录规则边界及三类验收入口。实际运行证据和编译检查应分别报告；后续源码变化不能直接沿用本次回执。
+- [原生界面前置模块](../../../design/native-ui-preparation.md) 已记录规则边界及三类验收入口。实际运行证据和编译检查应分别报告；后续源码变化不能直接沿用本次回执。

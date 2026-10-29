@@ -1,0 +1,774 @@
+{
+  "recorded_at_utc": "2026-10-29T20:16:23.0468234Z",
+  "candidate_source": "62113c4fc181e245bc077dcd46eda56a969d7b96",
+  "main": "4101520c33266026747db867c33e2b13baea3d23",
+  "local_main_before": "9b17a4d5053f5de2678533b8b514ce1db3c1e96c",
+  "local_main_update": "fast-forward; expected-old-SHA compare-and-swap; no checkout",
+  "local_branch_count": 17,
+  "actual_remote_branch_count": 12,
+  "open_pull_requests": [],
+  "open_pull_requests_source": "GitHub connector search_prs, state=open, Develata/RSS-Reader",
+  "branches": [
+    {
+      "ref": "refs/heads/audit/architecture-scan",
+      "sha": "b038077169418ac9dcc377fb1278b457276ac8bd",
+      "behind": 988,
+      "ahead": 1,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/backup/v0.2-architecture-pre-c2-squash",
+      "sha": "bde2502c3018739b925d9348fff121fd58cb6bfc",
+      "behind": 387,
+      "ahead": 6,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/backup/v0.2-architecture-pre-resplit",
+      "sha": "09ca47ec8b4f746d40ef4d1fcb56d6ddec8bf3f2",
+      "behind": 449,
+      "ahead": 5,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/claude/wonderful-engelbart-fdac91",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "behind": 520,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/codex/integration-final-20261023",
+      "sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "behind": 133,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/codex/native-back-policy",
+      "sha": "62113c4fc181e245bc077dcd46eda56a969d7b96",
+      "behind": 0,
+      "ahead": 3,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/codex/native-main-integration",
+      "sha": "2312dd0ec3a5e2bd83da365f3342a3adae737428",
+      "behind": 24,
+      "ahead": 5,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/codex/parse-image-performance",
+      "sha": "22c5d44b27d146eed4aeb90ee7796162c205ce2c",
+      "behind": 48,
+      "ahead": 4,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/codex/pr40-finalize-20261029",
+      "sha": "6117a353e398a96c7bf1488df221d7e5ff01f924",
+      "behind": 10,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/codex/pr40-main-integration",
+      "sha": "4101520c33266026747db867c33e2b13baea3d23",
+      "behind": 0,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/feat/reader-mathml",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "behind": 520,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/feat/reading-workspace-20261024",
+      "sha": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+      "behind": 463,
+      "ahead": 2,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/fix/feed-proxy-content-isolation",
+      "sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+      "behind": 556,
+      "ahead": 4,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/investigate/directory-scroll-20261007",
+      "sha": "d9e157762b76cb254d4fb0c3d239cac3eeb674bb",
+      "behind": 555,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/main",
+      "sha": "4101520c33266026747db867c33e2b13baea3d23",
+      "behind": 0,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/heads/refactor/application-usecases-step1",
+      "sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421",
+      "behind": 986,
+      "ahead": 1,
+      "contained": false
+    },
+    {
+      "ref": "refs/heads/v0.2-architecture",
+      "sha": "b749514209d10397287792ada4e35cbbb858f856",
+      "behind": 202,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/audit/architecture-scan",
+      "sha": "b038077169418ac9dcc377fb1278b457276ac8bd",
+      "behind": 988,
+      "ahead": 1,
+      "contained": false
+    },
+    {
+      "ref": "refs/remotes/origin/codex/integration-final-20261023",
+      "sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "behind": 133,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/codex/native-ui-preparation-20261029",
+      "sha": "adb7c5af3b802bafa117e357f0e605372435fa40",
+      "behind": 5,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/codex/parse-image-performance",
+      "sha": "a92ed16c08eec5815600211cad612c063bf06b8c",
+      "behind": 48,
+      "ahead": 2,
+      "contained": false
+    },
+    {
+      "ref": "refs/remotes/origin/feat/reading-workspace-20261024",
+      "sha": "30321e5b0643fbeabb90d4db14cde52220305ddb",
+      "behind": 75,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/fix/feed-proxy-content-isolation",
+      "sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+      "behind": 556,
+      "ahead": 4,
+      "contained": false
+    },
+    {
+      "ref": "refs/remotes/origin/fix/migration-opml-validation",
+      "sha": "3f95bb3e166672bb06edf8d6a178c11ac79cc90e",
+      "behind": 598,
+      "ahead": 4,
+      "contained": false
+    },
+    {
+      "ref": "refs/remotes/origin/investigate/directory-scroll-20261007",
+      "sha": "bfd2f3b6ce056d1a6617323fb60b02c6541b0b88",
+      "behind": 130,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/main",
+      "sha": "4101520c33266026747db867c33e2b13baea3d23",
+      "behind": 0,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/refactor/application-usecases-step1",
+      "sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421",
+      "behind": 986,
+      "ahead": 1,
+      "contained": false
+    },
+    {
+      "ref": "refs/remotes/origin/v0.2-architecture",
+      "sha": "b749514209d10397287792ada4e35cbbb858f856",
+      "behind": 202,
+      "ahead": 0,
+      "contained": true
+    },
+    {
+      "ref": "refs/remotes/origin/zheye-mainline-stabilization",
+      "sha": "c03c79d214b09c06251a579f997f86f8d4e7ffc3",
+      "behind": 986,
+      "ahead": 6,
+      "contained": false
+    }
+  ],
+  "registered_worktree_count": 11,
+  "valid_worktree_count": 7,
+  "stale_registration_count": 4,
+  "worktrees": [
+    {
+      "path": "E:/gitclone/RSS-Reader",
+      "valid": true,
+      "initial_status_count": 40,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader",
+        "HEAD 020f9d4031febc709cf1fdca2e7360698ba19f26",
+        "branch refs/heads/feat/reading-workspace-20261024"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/determined-mestorf-560b15",
+      "valid": true,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/.claude/worktrees/determined-mestorf-560b15",
+        "HEAD e4c4a8260d5890a4da99713deb69185cad4cd2bf",
+        "detached"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/nostalgic-perlman-51793d",
+      "valid": true,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/.claude/worktrees/nostalgic-perlman-51793d",
+        "HEAD 73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+        "branch refs/heads/claude/wonderful-engelbart-fdac91"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/reader-mathml",
+      "valid": true,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/.claude/worktrees/reader-mathml",
+        "HEAD 73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+        "branch refs/heads/feat/reader-mathml"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/youthful-curie-5447de",
+      "valid": true,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/.claude/worktrees/youthful-curie-5447de",
+        "HEAD d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+        "detached"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/target/audit-20261009/b2-baseline",
+      "valid": false,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/target/audit-20261009/b2-baseline",
+        "HEAD 6c8c95ca1483cfd4127ef875aa1144011ee2086b",
+        "detached",
+        "prunable gitdir file points to non-existent location"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/target/audit-20261009/worktree",
+      "valid": false,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/target/audit-20261009/worktree",
+        "HEAD b749514209d10397287792ada4e35cbbb858f856",
+        "branch refs/heads/v0.2-architecture",
+        "prunable gitdir file points to non-existent location"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/target/directory-scroll-20261007/worktree",
+      "valid": false,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/target/directory-scroll-20261007/worktree",
+        "HEAD d9e157762b76cb254d4fb0c3d239cac3eeb674bb",
+        "branch refs/heads/investigate/directory-scroll-20261007",
+        "prunable gitdir file points to non-existent location"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/target/feed-proxy-isolation-20261007/worktree",
+      "valid": false,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader/target/feed-proxy-isolation-20261007/worktree",
+        "HEAD 9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+        "branch refs/heads/fix/feed-proxy-content-isolation",
+        "prunable gitdir file points to non-existent location"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader-integration-20261023",
+      "valid": true,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader-integration-20261023",
+        "HEAD 936930f7384fa91ebeb3acae1ec1513fc1cff097",
+        "branch refs/heads/codex/integration-final-20261023"
+      ]
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader-worktrees/native-back-policy",
+      "valid": true,
+      "initial_status_count": 0,
+      "registration": [
+        "worktree E:/gitclone/RSS-Reader-worktrees/native-back-policy",
+        "HEAD 62113c4fc181e245bc077dcd46eda56a969d7b96",
+        "branch refs/heads/codex/native-back-policy",
+        ""
+      ]
+    }
+  ],
+  "other_worktree_status_checks": [
+    {
+      "path": "E:/gitclone/RSS-Reader",
+      "status_count": 40,
+      "status_unchanged": true
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/determined-mestorf-560b15",
+      "status_count": 0,
+      "status_unchanged": true
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/nostalgic-perlman-51793d",
+      "status_count": 0,
+      "status_unchanged": true
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/reader-mathml",
+      "status_count": 0,
+      "status_unchanged": true
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader/.claude/worktrees/youthful-curie-5447de",
+      "status_count": 0,
+      "status_unchanged": true
+    },
+    {
+      "path": "E:/gitclone/RSS-Reader-integration-20261023",
+      "status_count": 0,
+      "status_unchanged": true
+    }
+  ],
+  "imported_documents": [
+    {
+      "path": "docs/handoffs/2026-10-29-parse-image-pr-ci.md",
+      "blob": "12efa6f03643b4cdead99b45ee7783d77f91bd5a",
+      "source": "codex/parse-image-performance",
+      "match": true
+    },
+    {
+      "path": "docs/handoffs/2026-10-29-branch-cleanup.md",
+      "blob": "b6bc07f478cfb40f1c36713bff52a0cd41ca9a8d",
+      "source": "codex/parse-image-performance",
+      "match": true
+    },
+    {
+      "path": "docs/handoffs/2026-10-29-remaining-branch-audit.md",
+      "blob": "f72f1a3f6ab9394e53b7a00f613cace4083ab758",
+      "source": "codex/parse-image-performance",
+      "match": true
+    },
+    {
+      "path": "docs/testing/evidence/2026-10-29-branch-cleanup/result.json",
+      "blob": "5311cd2d92a7dabc437704dfdc7e0758ff3171f0",
+      "source": "codex/parse-image-performance",
+      "match": true
+    },
+    {
+      "path": "docs/testing/evidence/2026-10-29-remaining-branch-audit/result.json",
+      "blob": "e8cddb48d02218c3db70746f0fcf870c8ecf0943",
+      "source": "codex/parse-image-performance",
+      "match": true
+    }
+  ],
+  "archive_authorization": "User explicitly confirmed the exact 51-document archive manifest; preserve original prose and evidence",
+  "archived_document_count": 51,
+  "archive_checks": [
+    {
+      "source": "docs/handoffs/2026-10-23-integration-merge-pages.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-23-integration-merge-pages.md",
+      "before_sha256": "2F58162B70238D5374DB5FC97474CA73675D3B69AA50FA14315ECD163DB48416",
+      "after_sha256": "4CC3FAF2F1572BD9CD3F3CFB13DDF8F34691F839EAA96D4D1A64EEB614825439",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-native-preparation-assessment.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-native-preparation-assessment.md",
+      "before_sha256": "EF138722A6642D9D6BBED5B47ADF944A3D5B3FD32B45FFFAFB96490B5099DD4C",
+      "after_sha256": "EF138722A6642D9D6BBED5B47ADF944A3D5B3FD32B45FFFAFB96490B5099DD4C",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-pull-refresh-release-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-pull-refresh-release-review.md",
+      "before_sha256": "6B4D3BF519ED66A8B0D455834A29149AE21BFFF2814E4B914CAF73823135AF97",
+      "after_sha256": "6B4D3BF519ED66A8B0D455834A29149AE21BFFF2814E4B914CAF73823135AF97",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-reading-workspace-ime-alignment-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-reading-workspace-ime-alignment-review.md",
+      "before_sha256": "E352F451423475C619A8A48CF6F20CCF400B17FDF131F09933AFB99A4AA8F1A3",
+      "after_sha256": "E352F451423475C619A8A48CF6F20CCF400B17FDF131F09933AFB99A4AA8F1A3",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-reading-workspace-implementation.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-reading-workspace-implementation.md",
+      "before_sha256": "35907163CA1C13B6FC7D2BAC0F143A857DADB8ED0431D08AAE31F52EF957F385",
+      "after_sha256": "35907163CA1C13B6FC7D2BAC0F143A857DADB8ED0431D08AAE31F52EF957F385",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-reading-workspace-preference-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-reading-workspace-preference-review.md",
+      "before_sha256": "3E9114BA631E280A1302EFBE4F8C77829F2D769E4E63A6651AA0FED7FFF31A1C",
+      "after_sha256": "3E9114BA631E280A1302EFBE4F8C77829F2D769E4E63A6651AA0FED7FFF31A1C",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-reading-workspace-query-import-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-reading-workspace-query-import-review.md",
+      "before_sha256": "8E85C2F255304060D8446D469F8DE2DB3AFF95D31F5E45709DA8377E3EFD0447",
+      "after_sha256": "8E85C2F255304060D8446D469F8DE2DB3AFF95D31F5E45709DA8377E3EFD0447",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-reading-workspace-review-fixes.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-reading-workspace-review-fixes.md",
+      "before_sha256": "A08EC7B65EAF327DC3541D5933EC219B2ED854AA9460C28ED1484FEA90788199",
+      "after_sha256": "A08EC7B65EAF327DC3541D5933EC219B2ED854AA9460C28ED1484FEA90788199",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-24-reading-workspace-source-write-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-24-reading-workspace-source-write-review.md",
+      "before_sha256": "33697001984180EA34E6BD94EC82062BB23D67CA97BDD39A9821C9B5D4FE16EA",
+      "after_sha256": "33697001984180EA34E6BD94EC82062BB23D67CA97BDD39A9821C9B5D4FE16EA",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-android-back-and-persistent-storage.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-android-back-and-persistent-storage.md",
+      "before_sha256": "20F62689F93F25A2EB5625F025BFE19AD2D48CF18D04816EC39809DCDC819DE4",
+      "after_sha256": "20F62689F93F25A2EB5625F025BFE19AD2D48CF18D04816EC39809DCDC819DE4",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-android-device-access-and-qa.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-android-device-access-and-qa.md",
+      "before_sha256": "A69499A177BBC1EF76ECD0E2919BBF477E7358AF1759821C29491805970A2BBC",
+      "after_sha256": "A69499A177BBC1EF76ECD0E2919BBF477E7358AF1759821C29491805970A2BBC",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-android-repeated-back.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-android-repeated-back.md",
+      "before_sha256": "DCECF822E6F9A2C6F592349A6A4AAA21CF5C6B77F659304E54D7C4572CFC82E1",
+      "after_sha256": "DCECF822E6F9A2C6F592349A6A4AAA21CF5C6B77F659304E54D7C4572CFC82E1",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-native-interaction-modules.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-native-interaction-modules.md",
+      "before_sha256": "83BCF3383F1342DDD3A21D74BFAB9B90A428F6945EDC556E5ED4B07E0D44A74E",
+      "after_sha256": "83BCF3383F1342DDD3A21D74BFAB9B90A428F6945EDC556E5ED4B07E0D44A74E",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-persistence-retention-check.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-persistence-retention-check.md",
+      "before_sha256": "CF0EA337E5F00A98D36AD4671E30A092FB4DA123564375C0E514BBE796364FA8",
+      "after_sha256": "CF0EA337E5F00A98D36AD4671E30A092FB4DA123564375C0E514BBE796364FA8",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-reading-native-baseline.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-reading-native-baseline.md",
+      "before_sha256": "7F5C358A97832A04636488892477F354C59FD4623A53198B8B58A0F8884216A3",
+      "after_sha256": "39DBF05B2A71756E25DF306CFD3014F47B64CEAA410FBCE5817E12DA2B6C0DF3",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-25-source-directory-native-prep.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-25-source-directory-native-prep.md",
+      "before_sha256": "41A400CE0FE09AE2A4108C1F7F7D199FB4CE1E8455A2FE7DFA306A453231F781",
+      "after_sha256": "41A400CE0FE09AE2A4108C1F7F7D199FB4CE1E8455A2FE7DFA306A453231F781",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-compact-app-navigation.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-compact-app-navigation.md",
+      "before_sha256": "6325444C1C29F5057B59097E38641269E3A7A24AE5F6961048B4FC011C4B7500",
+      "after_sha256": "6325444C1C29F5057B59097E38641269E3A7A24AE5F6961048B4FC011C4B7500",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-directory-windowing-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-directory-windowing-review.md",
+      "before_sha256": "C7654832B4735011AC46A40F34496A00FB022BE53B2FB5E627F7BD10CEC1E6BB",
+      "after_sha256": "C7654832B4735011AC46A40F34496A00FB022BE53B2FB5E627F7BD10CEC1E6BB",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-directory-windowing.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-directory-windowing.md",
+      "before_sha256": "84ACA808F41FA0E0C33CBF0D1A15EA5AA4020C919E49C9AF65E01FE9CF965402",
+      "after_sha256": "84ACA808F41FA0E0C33CBF0D1A15EA5AA4020C919E49C9AF65E01FE9CF965402",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-entries-toolbar-alignment.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-entries-toolbar-alignment.md",
+      "before_sha256": "EB4ADBC28C7022BD7989946CFEC54F9DA53D3755D4AB0131B8465CD1A0BFF963",
+      "after_sha256": "EB4ADBC28C7022BD7989946CFEC54F9DA53D3755D4AB0131B8465CD1A0BFF963",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-migration-directory-rendering.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-migration-directory-rendering.md",
+      "before_sha256": "3FC55285B9BA71BF74BCF56E42E2DAEA49CDD31345171A9BFFC6B17DC4F9E79B",
+      "after_sha256": "3FC55285B9BA71BF74BCF56E42E2DAEA49CDD31345171A9BFFC6B17DC4F9E79B",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-native-directory-validation.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-native-directory-validation.md",
+      "before_sha256": "4CEB9A1916BC4066DFEF054ED309A103982924B8AFC9998C768BB87062DBCA32",
+      "after_sha256": "4CEB9A1916BC4066DFEF054ED309A103982924B8AFC9998C768BB87062DBCA32",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-native-ui-preparation.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-native-ui-preparation.md",
+      "before_sha256": "0FD5C710C9FD2A4F2945680652AC4B701F1F9E5740308F00280BEEB544B4F687",
+      "after_sha256": "0FD5C710C9FD2A4F2945680652AC4B701F1F9E5740308F00280BEEB544B4F687",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-penpot-code-alignment.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-penpot-code-alignment.md",
+      "before_sha256": "6EBB9B769C5B25AF1B6E41A6D3EB018C5E32D1309E849A25CE00DD653D1993EE",
+      "after_sha256": "6EBB9B769C5B25AF1B6E41A6D3EB018C5E32D1309E849A25CE00DD653D1993EE",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-penpot-coverage-completion.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-penpot-coverage-completion.md",
+      "before_sha256": "4858C8AF44CFF29AF981A00F20155D6F959B4DF5179F472A79B60F0DF8D58D16",
+      "after_sha256": "4858C8AF44CFF29AF981A00F20155D6F959B4DF5179F472A79B60F0DF8D58D16",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-penpot-reader-settings-alignment.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-penpot-reader-settings-alignment.md",
+      "before_sha256": "F1C6935DBF0B1F802DF2F06871C5757453A5AB796CA23699232F6CF406E89942",
+      "after_sha256": "58A896B2439D7DCB40CA88928DF8CE0B9ED9B42059022922B6D4EAED8AA5C44A",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-26-solid-background.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-26-solid-background.md",
+      "before_sha256": "C56BC954C3A766B28EFBF2D5EDB4652C0EB734974C6E79AD8E45CD09425E2216",
+      "after_sha256": "C56BC954C3A766B28EFBF2D5EDB4652C0EB734974C6E79AD8E45CD09425E2216",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-directory-cohesion-readability.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-directory-cohesion-readability.md",
+      "before_sha256": "83FC99A8581B438D665DE0F7F8889B1E1D21D38F6C062BF2DE4D4CA76690FA0B",
+      "after_sha256": "83FC99A8581B438D665DE0F7F8889B1E1D21D38F6C062BF2DE4D4CA76690FA0B",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-directory-disclosure-size.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-directory-disclosure-size.md",
+      "before_sha256": "E1564DB42A2509E0EC3255902C38BDF440877848DAE3D3CDE15BEEB8A9DD77E2",
+      "after_sha256": "E1564DB42A2509E0EC3255902C38BDF440877848DAE3D3CDE15BEEB8A9DD77E2",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-directory-push-ci.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-directory-push-ci.md",
+      "before_sha256": "F03F6BD2AF093A5637A9E9811C4682F20A6E7940DC9C14BA3169CAD0A5CC79BA",
+      "after_sha256": "F03F6BD2AF093A5637A9E9811C4682F20A6E7940DC9C14BA3169CAD0A5CC79BA",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-directory-right-disclosure.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-directory-right-disclosure.md",
+      "before_sha256": "81BF4F30B783A93ACD539561B7FA440AC427A782101F5241EBB66D22C1603109",
+      "after_sha256": "81BF4F30B783A93ACD539561B7FA440AC427A782101F5241EBB66D22C1603109",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-directory-window-boundaries.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-directory-window-boundaries.md",
+      "before_sha256": "631ADB52B3FA9BD18ED39EE489415364A29D1A056D6C2825905D4C5A7C2B8779",
+      "after_sha256": "631ADB52B3FA9BD18ED39EE489415364A29D1A056D6C2825905D4C5A7C2B8779",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-entries-request-lifecycle.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-entries-request-lifecycle.md",
+      "before_sha256": "F866E2426D308614D83B305565F30A63FA1872E4B51EFB4E22952BDFF35E5BA2",
+      "after_sha256": "69E13DF7F29DB019061FCC8355467DBAEA5725CB05FFF577CEF9BA073712AB97",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-native-preparation-next-step.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-native-preparation-next-step.md",
+      "before_sha256": "35D0A257D4BD92169F138F0B2E4A1A132375CB37AFB5C4E4BF5B6486670E5E09",
+      "after_sha256": "35D0A257D4BD92169F138F0B2E4A1A132375CB37AFB5C4E4BF5B6486670E5E09",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-pr-integration.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-pr-integration.md",
+      "before_sha256": "5347362C53E4AD2CF8C1A8D431CE9EB35A0DA7E8BD54C66AE007EDB6797D31B6",
+      "after_sha256": "5347362C53E4AD2CF8C1A8D431CE9EB35A0DA7E8BD54C66AE007EDB6797D31B6",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-wasm-opt-release-build.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-wasm-opt-release-build.md",
+      "before_sha256": "5A75BB52C4CFF5CE9D1D0890D13219BA83C9A9ED8A3C0BD3613C6B9B7FE28D00",
+      "after_sha256": "5A75BB52C4CFF5CE9D1D0890D13219BA83C9A9ED8A3C0BD3613C6B9B7FE28D00",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-workspace-cohesion.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-workspace-cohesion.md",
+      "before_sha256": "B22B583C42E45CB4FF7B5CBB3908C13D9BE67AFBA254EFC62FEFA648BA06F39B",
+      "after_sha256": "B22B583C42E45CB4FF7B5CBB3908C13D9BE67AFBA254EFC62FEFA648BA06F39B",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-workspace-merge.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-workspace-merge.md",
+      "before_sha256": "CE95901E46B84BB06791AD048D4A6620E88638EFE8D87B80DEDEC6B766A511AB",
+      "after_sha256": "CE95901E46B84BB06791AD048D4A6620E88638EFE8D87B80DEDEC6B766A511AB",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-workspace-recheck.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-workspace-recheck.md",
+      "before_sha256": "AF51C24FE4CB246075C8E3EE9946F6E8009C16221483DBBC0DF07DB2F83BC3A9",
+      "after_sha256": "AF51C24FE4CB246075C8E3EE9946F6E8009C16221483DBBC0DF07DB2F83BC3A9",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-27-workspace-review-fixes.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-27-workspace-review-fixes.md",
+      "before_sha256": "E3CEC12CD6DA9099042FBC476B4808CAC939F767CA0A8B4FF8F01F6DC5290E8A",
+      "after_sha256": "E3CEC12CD6DA9099042FBC476B4808CAC939F767CA0A8B4FF8F01F6DC5290E8A",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-entries-write-lifecycle.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-entries-write-lifecycle.md",
+      "before_sha256": "996BE9656B8840387C4A2D60B1960A795937ECC1BD3F5284913F262CD278A809",
+      "after_sha256": "9E41F28B0E8770B96655E554991CF725090E9FD4D292FB943F9C2596F47F7E10",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-entries-write-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-entries-write-review.md",
+      "before_sha256": "85E9D547D0711F8DF40B6781C4B87D56DB4BDCC1DE45060A1CAA485265C9EF69",
+      "after_sha256": "85E9D547D0711F8DF40B6781C4B87D56DB4BDCC1DE45060A1CAA485265C9EF69",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-feed-editor-state.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-feed-editor-state.md",
+      "before_sha256": "394C7CBFF01C35C30D65E4F89CABE0A0C63E8CB57DD57153EBC4D8C056D12FB4",
+      "after_sha256": "394C7CBFF01C35C30D65E4F89CABE0A0C63E8CB57DD57153EBC4D8C056D12FB4",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-feeds-lifecycle-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-feeds-lifecycle-review.md",
+      "before_sha256": "F6F73F568015982CC2E6FAC5C334A165F54B0ED86EEBF760B7005A89A0FDDEFB",
+      "after_sha256": "F6F73F568015982CC2E6FAC5C334A165F54B0ED86EEBF760B7005A89A0FDDEFB",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-feeds-request-lifecycle.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-feeds-request-lifecycle.md",
+      "before_sha256": "E83593E179BCA55E00199B2B3614C1AD6AA4B4ECCF524DBC21A7959DA725F0C3",
+      "after_sha256": "E83593E179BCA55E00199B2B3614C1AD6AA4B4ECCF524DBC21A7959DA725F0C3",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-reader-result-lifecycle.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-reader-result-lifecycle.md",
+      "before_sha256": "855811282D82EFAF38986AEA763358409DF1288741A076ECDB0306EB78706A7E",
+      "after_sha256": "855811282D82EFAF38986AEA763358409DF1288741A076ECDB0306EB78706A7E",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-settings-save-policy.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-settings-save-policy.md",
+      "before_sha256": "DC1324BC226888B2F5054960AF89365D4DAD30006D642FAFEC07C619AD2DFBED",
+      "after_sha256": "DC1324BC226888B2F5054960AF89365D4DAD30006D642FAFEC07C619AD2DFBED",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-settings-save-review.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-settings-save-review.md",
+      "before_sha256": "16240249B2C0C1814AEACEFE0346430D1AB44B966F459BD577DD4A0DA9479468",
+      "after_sha256": "16240249B2C0C1814AEACEFE0346430D1AB44B966F459BD577DD4A0DA9479468",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-settings-sync-boundary.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-settings-sync-boundary.md",
+      "before_sha256": "E3C733BF1B9BD2722A9B771F17E11FD387AF705FCC3FB81F4672A4F7998794DB",
+      "after_sha256": "E3C733BF1B9BD2722A9B771F17E11FD387AF705FCC3FB81F4672A4F7998794DB",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-theme-file-contracts.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-theme-file-contracts.md",
+      "before_sha256": "D29CEE0E75F96709DFE48469BA115D5807EF744AF836F3178F4F9C3C8C9B6D96",
+      "after_sha256": "D29CEE0E75F96709DFE48469BA115D5807EF744AF836F3178F4F9C3C8C9B6D96",
+      "content_and_link_targets_preserved": true
+    },
+    {
+      "source": "docs/handoffs/2026-10-28-theme-import-ownership.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-28-theme-import-ownership.md",
+      "before_sha256": "AEB1557409BB58B09FA46C3364776C450631F05F2868A68343C3A40247BE2D9F",
+      "after_sha256": "AEB1557409BB58B09FA46C3364776C450631F05F2868A68343C3A40247BE2D9F",
+      "content_and_link_targets_preserved": true
+    }
+  ],
+  "product_paths_unchanged": true,
+  "application_tests_rerun": false,
+  "native_back_host_acceptance": "pending; previous native execution approval rejection remains unresolved",
+  "branch_deletions": [],
+  "worktree_deletions": [],
+  "push_or_publish": false,
+  "local_link_check": {
+    "markdown_files": 317,
+    "local_links": 1434,
+    "missing": [],
+    "anchor_links": 15,
+    "anchor_failures": []
+  }
+}

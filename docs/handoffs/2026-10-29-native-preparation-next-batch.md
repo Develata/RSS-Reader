@@ -84,5 +84,5 @@ PR #40 的代码工作、冲突整合及最终 review 已结束，合并提交�
 ## 给下一位 Agent 的备注
 
 - 在 `E:/gitclone/RSS-Reader-worktrees/native-back-policy` 复用当前 `codex/native-back-policy` 分支；先重新核对 HEAD、dirty 状态与最新 main，再开始有界实现。不要在保留的 C 盘历史 checkout 或 E 盘主仓库启动本批，也不要向已合并的 PR #40 追加新实现。
-- 优先阅读本记录、[前端命令契约](../design/frontend-command-reference.md)、[原生控件契约](../design/native-control-adapter-contracts.md)与 [Android 连续返回修复](./2026-10-25-android-repeated-back.md)。历史记录仅用于了解原因，以当前源码和契约为准。
+- 优先阅读本记录、[前端命令契约](../design/frontend-command-reference.md)、[原生控件契约](../design/native-control-adapter-contracts.md)与 [Android 连续返回修复](./archive/2026-10/2026-10-25-android-repeated-back.md)。历史记录仅用于了解原因，以当前源码和契约为准。
 - 完成后 review、相称验收、更新长期契约中实际变化的部分和 `docs/handoffs/`，只暂存本任务文件并本地提交。新的 push、PR 和发布不属于本份接续范围。

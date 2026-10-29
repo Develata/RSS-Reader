@@ -42,7 +42,7 @@
 
 ### 原生宿主基线
 
-- [结果报告](../testing/baselines/2026-10-25-native-reading.md) 包含精确源码/二进制身份、设备、每轮数值及解读限制；[复现方法](../testing/native-reading-baseline.md) 对应新增运行脚本。
+- [结果报告](../../../testing/baselines/2026-10-25-native-reading.md) 包含精确源码/二进制身份、设备、每轮数值及解读限制；[复现方法](../../../testing/native-reading-baseline.md) 对应新增运行脚本。
 - 构建预演曾因两个工作区共用 Cargo target，得到相同 Windows EXE 哈希，立即作废；最终 Windows B 使用独立 `build-b/` 完整重编，A/B 哈希不同。Android dx 输出仍为工具共用目录，严格串行构建并立即复制到 A/B 独立文件；最终 B 的 infra、host、app 重编日志与持久目录运行结果另有核对。后续优先隔离整个构建目录，不只隔离复制后的文件。
 - Windows 正式轮次 `windows-final-v2-01-a` 至 `06-b`：全部通过，共 150 次计时与 72 次内存采样。最后一轮有一次进程计数不完整，重试成功并留档。
 - Android 正式轮次 `android-final-v2-01-a` 至 `06-b`：全部通过，共 102 次计时与 72 次内存采样。两版每个冷进程均只测一次阅读往返；各 5 次搜索、清除、目录展开。不是把旧版连续返回失败当成功。

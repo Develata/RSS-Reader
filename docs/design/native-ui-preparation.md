@@ -1,6 +1,6 @@
 # 原生界面前置模块边界
 
-核对日期：2026-10-28。本文件记录 main `a9608056` 已经具备的交互模块及剩余边界，不代表已替换 WebView，也不改变七个 crate 的职责。
+核对日期：2026-10-29。页面生命周期等模块已通过 PR #40 进入 main `4101520c`；返回导航与提示策略是本地 `62113c4f` 的新增提取，尚未进入 main，实际原生宿主验收待补。版本与验证状态统一见[维护状态](../current-status.md)。本文件不代表已替换 WebView，也不改变七个 crate 的职责。
 
 ## 已有可独立测试的 Rust 规则
 
@@ -81,13 +81,13 @@ DOM 几何测量、原生对话框焦点/模态、同步阻止链接或空格默
 - 隔离 fixture 回归：先构建正式 Web release 包，再运行 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `rssr_directory_window_acceptance.cjs`。脚本启动真实同源服务器和隔离 SQLite 资料库，由无头 Chrome 操作当前构建，不依赖用户的线上订阅；后一脚本覆盖 600 篇单分支、变高行、焦点、跨页、显隐恢复及损坏测量通道。`rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir <path>` 同样使用隔离 fixture 核对旧目录通道。
 - `scripts/browser/rssr_directory_window_boundaries.cjs` 延迟真实 Rust/WASM 回复，覆盖筛选/翻页/分组/返回后的旧焦点、被取代的跨页定位，以及来源筛选后末页正文返回的位置恢复。`rssr_directory_window_review.cjs` 补充手动浏览与自动跟随交错、隐藏时变宽和批量操作。
 - 阅读位置及快捷键：`scripts/browser/rssr_reading_position_acceptance.cjs`，包含返回、切文、M/F、修饰键/IME、正文测量次数。
-- 具体源码身份、命令和平台范围见 [2026-10-26 交接](../handoffs/2026-10-26-native-ui-preparation.md)。编译、浏览器运行、原生设备运行和性能结论分别记录。
+- 具体源码身份、命令和平台范围见 [2026-10-26 交接](../handoffs/archive/2026-10/2026-10-26-native-ui-preparation.md)。编译、浏览器运行、原生设备运行和性能结论分别记录。
 
 ## 原生验收后的优化顺序
 
-`34a63202` 的 Windows / Android 实际目录、连续返回和本会话阅读位置恢复已验证；完整证据与未验范围见 [原生目录验收](../handoffs/2026-10-26-native-directory-validation.md)。真实输入法留待用户空闲，后台 WebView 的降频样本不能用作前台性能基线。
+`34a63202` 的 Windows / Android 实际目录、连续返回和本会话阅读位置恢复已验证；完整证据与未验范围见 [原生目录验收](../handoffs/archive/2026-10/2026-10-26-native-directory-validation.md)。真实输入法留待用户空闲，后台 WebView 的降频样本不能用作前台性能基线。
 
-Android 展开一个包含 597 篇文章的来源月份时，渲染 trace 显示样式计算和布局是明确成本。现已按上述边界实现文章分支窗口化，功能、原生验收和测量范围见 [目录窗口化交接](../handoffs/2026-10-26-directory-windowing.md)。不切掉文章层级，不用固定行高假设，不改变查询或业务层职责；挂载节点、布局耗时、宿主往返延迟和内存应分别报告，不能仅凭节点数减少推断整应用更快。
+Android 展开一个包含 597 篇文章的来源月份时，渲染 trace 显示样式计算和布局是明确成本。现已按上述边界实现文章分支窗口化，功能、原生验收和测量范围见 [目录窗口化交接](../handoffs/archive/2026-10/2026-10-26-directory-windowing.md)。不切掉文章层级，不用固定行高假设，不改变查询或业务层职责；挂载节点、布局耗时、宿主往返延迟和内存应分别报告，不能仅凭节点数减少推断整应用更快。
 
 ## PR #40 与主线整合（2026-10-29）
 

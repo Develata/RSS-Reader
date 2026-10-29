@@ -75,7 +75,7 @@ Android 每轮耗时中位数（ms，A 三轮 / B 三轮）：
 - `android-fixed-back-qa.json`：8 次连续返回与阅读位置结果；`android-back-thread-probe.log`：临时诊断线程证据。
 - `phone-data-comparison.json`：测试前后新旧两套双库对照。6 个来源、5000 篇文章、5000 条正文及所有业务字段保留，偏好一致；仅 entries.updated_at 与 feeds 的刷新时间、HTTP Last-Modified、updated_at 变化，故不是文件逐字节相同。四个库完整性均为 ok。
 - `migration-inputs.json`：实际 SQL 输入哈希；`line-ending-mismatch.log`：隔离库上 migration 2 校验不一致的复现。
-- CI `40216754357` 对应 `df750c5d`，24 jobs 全通过；Android 返回修复另有本地 Rust/Clippy/wasm/实机结果，详见 [修复交接](../../handoffs/2026-10-25-android-repeated-back.md)。
+- CI `40216754357` 对应 `df750c5d`，24 jobs 全通过；Android 返回修复另有本地 Rust/Clippy/wasm/实机结果，详见 [修复交接](../../handoffs/archive/2026-10/2026-10-25-android-repeated-back.md)。
 
 | 构建 | SHA256 |
 | --- | --- |

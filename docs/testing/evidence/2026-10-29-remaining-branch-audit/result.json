@@ -1,0 +1,1254 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-29",
+  "captured_utc": "2026-10-29T10:47:52.1802598Z",
+  "pr_retrieved_utc": "2026-10-29T10:47:17.494Z",
+  "origin_main": "6e99706ce90026c70c9538eb35faf572f02781fd",
+  "audit_branch_head": "1d3d1213b0e789d913f686d53846699c99744a45",
+  "counts": {
+    "local": 15,
+    "remote": 28,
+    "remote_merged_pr_history_differs": 17,
+    "remote_already_contained": 4,
+    "remote_main": 1,
+    "remote_post_merge_docs": 1,
+    "remote_historical_unresolved": 4,
+    "open_pull_requests": 1,
+    "remote_active_directory_pr": 1
+  },
+  "refs": [
+    {
+      "kind": "local",
+      "name": "audit/architecture-scan",
+      "sha": "b038077169418ac9dcc377fb1278b457276ac8bd",
+      "category": "historical_unresolved",
+      "ahead": 1,
+      "behind": 940,
+      "last_commit_date": "2026-04-06T09:42:34-04:00",
+      "subject": "docs: add architecture review and refactor roadmap",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "docs/architecture-review-2026-04.md"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "backup/v0.2-architecture-pre-c2-squash",
+      "sha": "bde2502c3018739b925d9348fff121fd58cb6bfc",
+      "category": "history_backup",
+      "ahead": 6,
+      "behind": 339,
+      "last_commit_date": "2026-10-15T13:21:20-04:00",
+      "subject": "docs: record the first C2 code review, its fixes and verification",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/docker.yml",
+        "CLAUDE.md",
+        "Dockerfile",
+        "crates/rssr-web/src/auth.rs",
+        "crates/rssr-web/src/auth/AGENTS.md",
+        "crates/rssr-web/src/auth/login_flow.rs",
+        "crates/rssr-web/src/auth/session.rs",
+        "crates/rssr-web/src/auth/store.rs",
+        "crates/rssr-web/src/http_tests.rs",
+        "crates/rssr-web/src/main.rs",
+        "crates/rssr-web/src/proxy/isolation_tests.rs",
+        "docker-compose.yml",
+        "docs/deployment/web.md",
+        "docs/design/v0.2-phase-c-plan.md",
+        "docs/handoffs/2026-10-15-v0.2-phase-c.md",
+        "docs/testing/release-ui-regression-checklist.md",
+        "docs/testing/rssr-web-browser-feed-smoke.md",
+        "docs/testing/windows-chrome-visible-regression.md",
+        "scripts/browser/capture_smoke_page.mjs",
+        "scripts/browser/feed_proxy_isolation.mjs",
+        "scripts/browser/rssr_visible_regression.mjs",
+        "scripts/release-ui/tests/acceptance.py",
+        "scripts/release-ui/tests/auth_server.py",
+        "scripts/release-ui/web_auth.rs",
+        "scripts/run_rssr_web_auth_assertions.sh",
+        "scripts/run_rssr_web_browser_feed_smoke.sh",
+        "scripts/run_rssr_web_browser_smoke.sh",
+        "scripts/run_rssr_web_proxy_feed_smoke.sh",
+        "scripts/run_windows_chrome_visible_regression.sh"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "backup/v0.2-architecture-pre-resplit",
+      "sha": "09ca47ec8b4f746d40ef4d1fcb56d6ddec8bf3f2",
+      "category": "history_backup",
+      "ahead": 5,
+      "behind": 401,
+      "last_commit_date": "2026-10-14T05:27:45-04:00",
+      "subject": "fix(store): stop creators whose caller gave up and close the second A5 review",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "Cargo.lock",
+        "Cargo.toml",
+        "README.md",
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-app/src/bootstrap/web/AGENTS.md",
+        "crates/rssr-application/src/refresh_service.rs",
+        "crates/rssr-cli/src/main.rs",
+        "crates/rssr-infra/Cargo.toml",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/non_refresh.rs",
+        "crates/rssr-infra/src/application_adapters/refresh.rs",
+        "crates/rssr-infra/src/composition.rs",
+        "crates/rssr-infra/src/lib.rs",
+        "crates/rssr-infra/src/store.rs",
+        "crates/rssr-infra/src/store/AGENTS.md",
+        "crates/rssr-infra/src/store/executor.rs",
+        "crates/rssr-infra/src/store/files.rs",
+        "crates/rssr-infra/src/store/import.rs",
+        "crates/rssr-infra/src/store/local.rs",
+        "crates/rssr-infra/tests/test_feed_response_limits.rs",
+        "crates/rssr-infra/tests/test_library_baseline_schema.rs",
+        "crates/rssr-infra/tests/test_library_import.rs",
+        "crates/rssr-infra/tests/test_library_refresh_tickets.rs",
+        "crates/rssr-infra/tests/test_library_store.rs",
+        "crates/rssr-infra/tests/test_subscription_discovery.rs",
+        "docs/README.en.md",
+        "docs/design/v0.2-architecture.md",
+        "docs/handoffs/2026-10-13-v0.2-architecture.md",
+        "docs/testing/manual-regression.md",
+        "docs/user-guide.md"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "claude/wonderful-engelbart-fdac91",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 472,
+      "last_commit_date": "2026-10-21T12:11:27-04:00",
+      "subject": "docs: record round-7 review of the feed pre-scan",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "codex/directory-toolbar-sticky-header",
+      "sha": "ec46724a9582a681998ca80dc32bcbb91f5720a3",
+      "category": "active_directory_pr",
+      "ahead": 3,
+      "behind": 0,
+      "last_commit_date": "2026-10-29T06:59:41-04:00",
+      "subject": "fix(ui): keep oversized directory focus stable in short viewports",
+      "merged_prs": [],
+      "merge_status": "clean",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "codex/integration-final-20261023",
+      "sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 85,
+      "last_commit_date": "2026-10-23T08:15:24-04:00",
+      "subject": "docs: publish v0.2.0 downloads and verification record",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "codex/parse-image-performance",
+      "sha": "1d3d1213b0e789d913f686d53846699c99744a45",
+      "category": "post_merge_docs",
+      "ahead": 3,
+      "behind": 0,
+      "last_commit_date": "2026-10-29T06:22:44-04:00",
+      "subject": "docs: record approved branch cleanup",
+      "merged_prs": [],
+      "merge_status": "clean",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "feat/reader-mathml",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 472,
+      "last_commit_date": "2026-10-21T12:11:27-04:00",
+      "subject": "docs: record round-7 review of the feed pre-scan",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "feat/reading-workspace-20261024",
+      "sha": "ca0861cb1f531df4a91c990fbcdb781bd308d68f",
+      "category": "active_unmerged_work",
+      "ahead": 16,
+      "behind": 432,
+      "last_commit_date": "2026-10-29T06:56:18-04:00",
+      "subject": "fix(settings): retire numeric hints on accepted draft replacement",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/main.rs",
+        "crates/rssr-app/src/pages/entries_page/mod.rs",
+        "crates/rssr-app/src/pages/entries_page/session.rs",
+        "crates/rssr-app/src/pages/feeds_page/mod.rs",
+        "crates/rssr-app/src/pages/feeds_page/reducer.rs",
+        "crates/rssr-app/src/pages/feeds_page/session.rs",
+        "crates/rssr-app/src/pages/feeds_page/state.rs",
+        "crates/rssr-app/src/pages/reader_page/mod.rs",
+        "crates/rssr-app/src/pages/reader_page/session.rs",
+        "crates/rssr-app/src/pages/settings_page/facade.rs",
+        "crates/rssr-app/src/pages/settings_page/preferences.rs",
+        "crates/rssr-app/src/pages/settings_page/save/session.rs",
+        "crates/rssr-app/src/pages/settings_page/session.rs",
+        "crates/rssr-app/src/pages/settings_page/sync/session.rs",
+        "crates/rssr-app/src/ui/mod.rs",
+        "docs/design/README.md",
+        "docs/design/native-ui-preparation.md",
+        "docs/design/ui-shell-bus-page-facade.md",
+        "scripts/browser/rssr_entries_lifecycle_acceptance.cjs",
+        "scripts/browser/rssr_workspace_acceptance.cjs"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "fix/feed-proxy-content-isolation",
+      "sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+      "category": "merged_pr_history_differs",
+      "ahead": 4,
+      "behind": 508,
+      "last_commit_date": "2026-10-07T11:18:02-04:00",
+      "subject": "Merge main into feed-proxy isolation for combined validation",
+      "merged_prs": [
+        {
+          "number": 25,
+          "url": "https://github.com/Develata/RSS-Reader/pull/25",
+          "merged_at": "2026-10-07T15:42:31Z",
+          "merge_commit_sha": "e4c4a8260d5890a4da99713deb69185cad4cd2bf"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        ".github/workflows/ci.yml",
+        "crates/rssr-web/src/proxy.rs",
+        "docs/deployment/web.md",
+        "docs/testing/mainline-validation-matrix.md",
+        "docs/testing/rssr-web-proxy-feed-smoke.md"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "fix/native-outbound-request-safety",
+      "sha": "6479ffba71d9118d9f31b8c840a8d7f303098665",
+      "category": "merged_pr_history_differs",
+      "ahead": 3,
+      "behind": 509,
+      "last_commit_date": "2026-10-07T09:40:53-04:00",
+      "subject": "test: tighten outbound redirect limit and authentication assertions",
+      "merged_prs": [
+        {
+          "number": 26,
+          "url": "https://github.com/Develata/RSS-Reader/pull/26",
+          "merged_at": "2026-10-07T14:21:36Z",
+          "merge_commit_sha": "adcd39e92ce1b416c71df3542d64dae706accdb6"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/config_sync/webdav.rs",
+        "crates/rssr-infra/src/fetch/client/body_asset_localizer.rs",
+        "crates/rssr-infra/tests/test_webdav_local_roundtrip.rs"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "investigate/directory-scroll-20261007",
+      "sha": "d9e157762b76cb254d4fb0c3d239cac3eeb674bb",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 507,
+      "last_commit_date": "2026-10-07T01:53:37-04:00",
+      "subject": "docs: record Windows natural directory scroll evidence",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "main",
+      "sha": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+      "category": "main",
+      "ahead": 0,
+      "behind": 480,
+      "last_commit_date": "2026-10-21T02:45:37-04:00",
+      "subject": "Merge pull request #31 from Develata/refactor/retire-feed-proxy",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "local",
+      "name": "refactor/application-usecases-step1",
+      "sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421",
+      "category": "historical_unresolved",
+      "ahead": 1,
+      "behind": 938,
+      "last_commit_date": "2026-04-07T21:41:00-04:00",
+      "subject": "refactor: centralize application use cases for subscriptions and refresh",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-application/src/import_export_service/tests.rs",
+        "crates/rssr-application/src/lib.rs",
+        "crates/rssr-application/src/refresh_service.rs",
+        "crates/rssr-application/src/subscription_workflow.rs",
+        "crates/rssr-cli/src/main.rs",
+        "crates/rssr-infra/Cargo.toml",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/non_refresh.rs",
+        "crates/rssr-infra/src/application_adapters/refresh.rs",
+        "crates/rssr-infra/src/lib.rs",
+        "crates/rssr-infra/tests/test_config_package_io.rs",
+        "crates/rssr-infra/tests/test_webdav_local_roundtrip.rs"
+      ]
+    },
+    {
+      "kind": "local",
+      "name": "v0.2-architecture",
+      "sha": "b749514209d10397287792ada4e35cbbb858f856",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 154,
+      "last_commit_date": "2026-10-22T21:53:15-04:00",
+      "subject": "docs: record final branch integration checks and visual evidence",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "audit/architecture-scan",
+      "sha": "b038077169418ac9dcc377fb1278b457276ac8bd",
+      "category": "historical_unresolved",
+      "ahead": 1,
+      "behind": 940,
+      "last_commit_date": "2026-04-06T09:42:34-04:00",
+      "subject": "docs: add architecture review and refactor roadmap",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "docs/architecture-review-2026-04.md"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "chore/pages-actions-hardening",
+      "sha": "ffb1f1f76d21c95630f80b663790faa6806d46f8",
+      "category": "merged_pr_history_differs",
+      "ahead": 2,
+      "behind": 544,
+      "last_commit_date": "2026-10-02T09:11:42-04:00",
+      "subject": "chore(dependabot): isolate major action upgrades",
+      "merged_prs": [
+        {
+          "number": 14,
+          "url": "https://github.com/Develata/RSS-Reader/pull/14",
+          "merged_at": "2026-10-02T13:23:56Z",
+          "merge_commit_sha": "cffc25052d8eda72edfe9526086170f15d56c8ae"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        ".github/workflows/pages.yml"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "codex/integration-final-20261023",
+      "sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 85,
+      "last_commit_date": "2026-10-23T08:15:24-04:00",
+      "subject": "docs: publish v0.2.0 downloads and verification record",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "codex/parse-image-performance",
+      "sha": "a92ed16c08eec5815600211cad612c063bf06b8c",
+      "category": "post_merge_docs",
+      "ahead": 2,
+      "behind": 0,
+      "last_commit_date": "2026-10-29T05:51:05-04:00",
+      "subject": "docs: record merge receipt branch push",
+      "merged_prs": [],
+      "merge_status": "clean",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "feat/reading-workspace-20261024",
+      "sha": "30321e5b0643fbeabb90d4db14cde52220305ddb",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 27,
+      "last_commit_date": "2026-10-27T14:07:30-04:00",
+      "subject": "test(ui): await article results after clearing search",
+      "merged_prs": [
+        {
+          "number": 32,
+          "url": "https://github.com/Develata/RSS-Reader/pull/32",
+          "merged_at": "2026-10-27T18:20:50Z",
+          "merge_commit_sha": "0115eb9a6b1b888d1040765e3ba022160a4c598d"
+        }
+      ],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "fix/feed-guid-identity",
+      "sha": "7be7d6d5fcc6f77a039ab568a4463dcbaab9d694",
+      "category": "merged_pr_history_differs",
+      "ahead": 2,
+      "behind": 550,
+      "last_commit_date": "2026-10-01T11:35:11-04:00",
+      "subject": "fix(parser): replay GUID identity fix on current main",
+      "merged_prs": [
+        {
+          "number": 5,
+          "url": "https://github.com/Develata/RSS-Reader/pull/5",
+          "merged_at": "2026-10-01T15:54:25Z",
+          "merge_commit_sha": "7c9c5bde03b6c36ba2d6fedda5c0facdb28d50cb"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/feed_normalization.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/feed-proxy-content-isolation",
+      "sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+      "category": "merged_pr_history_differs",
+      "ahead": 4,
+      "behind": 508,
+      "last_commit_date": "2026-10-07T11:18:02-04:00",
+      "subject": "Merge main into feed-proxy isolation for combined validation",
+      "merged_prs": [
+        {
+          "number": 25,
+          "url": "https://github.com/Develata/RSS-Reader/pull/25",
+          "merged_at": "2026-10-07T15:42:31Z",
+          "merge_commit_sha": "e4c4a8260d5890a4da99713deb69185cad4cd2bf"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        ".github/workflows/ci.yml",
+        "crates/rssr-web/src/proxy.rs",
+        "docs/deployment/web.md",
+        "docs/testing/mainline-validation-matrix.md",
+        "docs/testing/rssr-web-proxy-feed-smoke.md"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/import-validation-migration-lock",
+      "sha": "dba08059ea41b5e2ac384c39d2e01067a9c092c2",
+      "category": "merged_pr_history_differs",
+      "ahead": 11,
+      "behind": 550,
+      "last_commit_date": "2026-10-01T11:55:49-04:00",
+      "subject": "style: format import regression tests",
+      "merged_prs": [
+        {
+          "number": 6,
+          "url": "https://github.com/Develata/RSS-Reader/pull/6",
+          "merged_at": "2026-10-01T16:03:28Z",
+          "merge_commit_sha": "14e11a22281d3ed525b1937f99934280df7c9234"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-domain/src/lib.rs",
+        "crates/rssr-domain/src/repository.rs",
+        "crates/rssr-domain/src/validation.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/feed.rs",
+        "crates/rssr-infra/src/db/feed_repository.rs",
+        "crates/rssr-infra/src/db/sqlite_native.rs",
+        "crates/rssr-infra/src/opml.rs",
+        "crates/rssr-infra/tests/test_config_exchange_contract_harness.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/large-feed-filter-bind-limit",
+      "sha": "d7adc4c85273685bb313507eca79e3a70945de5e",
+      "category": "merged_pr_history_differs",
+      "ahead": 4,
+      "behind": 547,
+      "last_commit_date": "2026-10-01T16:53:13-04:00",
+      "subject": "style: format large feed filter regression",
+      "merged_prs": [
+        {
+          "number": 11,
+          "url": "https://github.com/Develata/RSS-Reader/pull/11",
+          "merged_at": "2026-10-01T21:00:05Z",
+          "merge_commit_sha": "565afb207a3be1cad842feb23137fa0081d0a6b7"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/tests/test_bulk_read.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/migration-opml-validation",
+      "sha": "3f95bb3e166672bb06edf8d6a178c11ac79cc90e",
+      "category": "historical_unresolved",
+      "ahead": 4,
+      "behind": 550,
+      "last_commit_date": "2026-10-01T11:36:12-04:00",
+      "subject": "fix(import): replay URL and migration hardening on current main",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-application/src/subscription_discovery.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/native-outbound-request-safety",
+      "sha": "6479ffba71d9118d9f31b8c840a8d7f303098665",
+      "category": "merged_pr_history_differs",
+      "ahead": 3,
+      "behind": 509,
+      "last_commit_date": "2026-10-07T09:40:53-04:00",
+      "subject": "test: tighten outbound redirect limit and authentication assertions",
+      "merged_prs": [
+        {
+          "number": 26,
+          "url": "https://github.com/Develata/RSS-Reader/pull/26",
+          "merged_at": "2026-10-07T14:21:36Z",
+          "merge_commit_sha": "adcd39e92ce1b416c71df3542d64dae706accdb6"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/config_sync/webdav.rs",
+        "crates/rssr-infra/src/fetch/client/body_asset_localizer.rs",
+        "crates/rssr-infra/tests/test_webdav_local_roundtrip.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/native-persistence-atomicity",
+      "sha": "52a1db0d33b3aa7fd14084c93dea7f9fd862f8da",
+      "category": "merged_pr_history_differs",
+      "ahead": 22,
+      "behind": 554,
+      "last_commit_date": "2026-10-01T02:40:04-04:00",
+      "subject": "style: rustfmt persistence tests",
+      "merged_prs": [
+        {
+          "number": 3,
+          "url": "https://github.com/Develata/RSS-Reader/pull/3",
+          "merged_at": "2026-10-01T15:11:39Z",
+          "merge_commit_sha": "1cdc75113b4c4815e6d7abc0258939848b407106"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-application/src/composition.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-application/src/lib.rs",
+        "crates/rssr-application/src/persistence_mutation.rs",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters.rs",
+        "crates/rssr-infra/src/application_adapters/refresh.rs",
+        "crates/rssr-infra/src/composition.rs",
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/src/db/feed_repository.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/pages-smoke-profile-cleanup",
+      "sha": "620844e4f4db69537ad47c71ef45639a30bbc897",
+      "category": "merged_pr_history_differs",
+      "ahead": 1,
+      "behind": 541,
+      "last_commit_date": "2026-10-02T18:11:01-04:00",
+      "subject": "ci(pages): make Chrome profile cleanup best effort",
+      "merged_prs": [
+        {
+          "number": 18,
+          "url": "https://github.com/Develata/RSS-Reader/pull/18",
+          "merged_at": "2026-10-02T22:15:11Z",
+          "merge_commit_sha": "b2376f7b1251319469e44e2b7d86c0270f86fd8b"
+        }
+      ],
+      "merge_status": "clean",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "fix/post-audit-repair",
+      "sha": "dcfbcffe564077cf69c98cec2b3f341e587629f3",
+      "category": "merged_pr_history_differs",
+      "ahead": 54,
+      "behind": 548,
+      "last_commit_date": "2026-10-01T14:46:29-04:00",
+      "subject": "test(storage): avoid cancelling busy sqlite writers",
+      "merged_prs": [
+        {
+          "number": 10,
+          "url": "https://github.com/Develata/RSS-Reader/pull/10",
+          "merged_at": "2026-10-01T18:52:50Z",
+          "merge_commit_sha": "699edfd602f5f7f7a5892ddc3396a759659a277b"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-application/src/composition.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-application/src/lib.rs",
+        "crates/rssr-application/src/persistence_mutation.rs",
+        "crates/rssr-application/src/subscription_workflow.rs",
+        "crates/rssr-cli/src/main.rs",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/mutations.rs",
+        "crates/rssr-infra/src/application_adapters/browser/state/entries.rs",
+        "crates/rssr-infra/src/application_adapters/mutations.rs",
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/src/db/feed_repository.rs",
+        "crates/rssr-infra/tests/test_config_exchange_contract_harness.rs",
+        "crates/rssr-infra/tests/test_library_subscription_contract_harness.rs",
+        "crates/rssr-infra/tests/test_persistence_atomicity.rs",
+        "crates/rssr-infra/tests/wasm_config_exchange_contract_harness.rs",
+        "crates/rssr-infra/tests/wasm_subscription_contract_harness.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/post-generation-review",
+      "sha": "ea170874fa2103bdc8f60b168379b67204898217",
+      "category": "merged_pr_history_differs",
+      "ahead": 28,
+      "behind": 545,
+      "last_commit_date": "2026-10-02T08:33:19-04:00",
+      "subject": "style(web): format activation contract harness",
+      "merged_prs": [
+        {
+          "number": 13,
+          "url": "https://github.com/Develata/RSS-Reader/pull/13",
+          "merged_at": "2026-10-02T12:39:13Z",
+          "merge_commit_sha": "bba9445972f551266203ed5f1524a69e89dfef22"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-application/src/composition.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/lib.rs",
+        "crates/rssr-application/src/persistence_mutation.rs",
+        "crates/rssr-application/src/refresh_service.rs",
+        "crates/rssr-application/src/subscription_workflow.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/feed.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/mutations.rs",
+        "crates/rssr-infra/src/application_adapters/mutations.rs",
+        "crates/rssr-infra/src/composition.rs",
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/src/db/feed_repository.rs",
+        "crates/rssr-infra/tests/test_library_subscription_contract_harness.rs",
+        "crates/rssr-infra/tests/test_persistence_atomicity.rs",
+        "crates/rssr-infra/tests/wasm_subscription_contract_harness.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/refresh-generation-fence",
+      "sha": "09d627fb5f58febd1ece458cc420594dfb1502df",
+      "category": "merged_pr_history_differs",
+      "ahead": 55,
+      "behind": 547,
+      "last_commit_date": "2026-10-02T03:50:01-04:00",
+      "subject": "test(refresh): use production-style split sqlite pools",
+      "merged_prs": [
+        {
+          "number": 12,
+          "url": "https://github.com/Develata/RSS-Reader/pull/12",
+          "merged_at": "2026-10-02T07:54:42Z",
+          "merge_commit_sha": "d733d92eba225d42cf2f5c92d02c1d0908c3b81d"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-application/src/refresh_service.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/feed.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/mutations.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/refresh.rs",
+        "crates/rssr-infra/src/application_adapters/browser/state/models.rs",
+        "crates/rssr-infra/src/application_adapters/mutations.rs",
+        "crates/rssr-infra/src/application_adapters/refresh.rs",
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/src/db/feed_repository.rs",
+        "crates/rssr-infra/tests/support/refresh_content_cases.rs",
+        "crates/rssr-infra/tests/support/refresh_count_cases.rs",
+        "crates/rssr-infra/tests/test_application_refresh_store_adapter.rs",
+        "crates/rssr-infra/tests/test_feed_refresh_flow.rs",
+        "crates/rssr-infra/tests/test_subscription_discovery.rs",
+        "crates/rssr-infra/tests/wasm_refresh_contract_harness.rs",
+        "crates/rssr-infra/tests/wasm_subscription_contract_harness.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/rust-1.99-async-trait-clippy",
+      "sha": "4030cbde3c42226045bbdcab61157255e94de3ea",
+      "category": "merged_pr_history_differs",
+      "ahead": 4,
+      "behind": 551,
+      "last_commit_date": "2026-10-01T11:26:47-04:00",
+      "subject": "ci: allow async-trait double_must_use false positive",
+      "merged_prs": [
+        {
+          "number": 9,
+          "url": "https://github.com/Develata/RSS-Reader/pull/9",
+          "merged_at": "2026-10-01T15:34:09Z",
+          "merge_commit_sha": "7be428ddb1e23b75c8929ca23549e4dd7c5118b8"
+        }
+      ],
+      "merge_status": "clean",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "fix/sqlite-large-feed-batching",
+      "sha": "06acbab04ecc42589b6fb3447679f11e0548f07a",
+      "category": "merged_pr_history_differs",
+      "ahead": 4,
+      "behind": 553,
+      "last_commit_date": "2026-10-01T02:51:23-04:00",
+      "subject": "style: rustfmt 33k regression",
+      "merged_prs": [
+        {
+          "number": 4,
+          "url": "https://github.com/Develata/RSS-Reader/pull/4",
+          "merged_at": "2026-10-01T15:11:55Z",
+          "merge_commit_sha": "1253c284c8563dbe16d69201fc8a41d69531c8b2"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/db/entry_repository.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "fix/storage-gc-query-contract",
+      "sha": "a964ae658c3a3c24d5bf3aad889c2d7a91a95d59",
+      "category": "merged_pr_history_differs",
+      "ahead": 25,
+      "behind": 544,
+      "last_commit_date": "2026-10-02T09:25:22-04:00",
+      "subject": "style: apply rustfmt output",
+      "merged_prs": [
+        {
+          "number": 15,
+          "url": "https://github.com/Develata/RSS-Reader/pull/15",
+          "merged_at": "2026-10-02T13:30:27Z",
+          "merge_commit_sha": "7126434803eb59275e3cda3c8e04fed335cc6e35"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-cli/src/main.rs",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/browser/adapters/feed.rs",
+        "crates/rssr-infra/src/application_adapters/mutations.rs",
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/src/db/feed_repository.rs",
+        "crates/rssr-infra/tests/test_persistence_atomicity.rs",
+        "crates/rssr-infra/tests/wasm_subscription_contract_harness.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "hotfix/mobile-entry-scroll-snapback",
+      "sha": "3a6427c141a13520efecf0252ff9de8b24a35f00",
+      "category": "merged_pr_history_differs",
+      "ahead": 9,
+      "behind": 554,
+      "last_commit_date": "2026-10-01T02:21:29-04:00",
+      "subject": "test(ui): drive nested scrolling with touch events",
+      "merged_prs": [
+        {
+          "number": 2,
+          "url": "https://github.com/Develata/RSS-Reader/pull/2",
+          "merged_at": "2026-10-01T06:33:01Z",
+          "merge_commit_sha": "4372872c24cadbad4ea7386e20e63e16250af651"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/pages/entries_page/browser_interactions.rs",
+        "crates/rssr-app/src/pages/entries_page/pull_refresh.js",
+        "scripts/browser/rssr_small_viewport_assertions.mjs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "investigate/directory-scroll-20261007",
+      "sha": "bfd2f3b6ce056d1a6617323fb60b02c6541b0b88",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 82,
+      "last_commit_date": "2026-10-27T11:49:35-04:00",
+      "subject": "Merge main and adapt natural directory scroll regression to v0.2",
+      "merged_prs": [
+        {
+          "number": 24,
+          "url": "https://github.com/Develata/RSS-Reader/pull/24",
+          "merged_at": "2026-10-27T15:59:47Z",
+          "merge_commit_sha": "48bcaf69fd8d00050847827a69f7cc15a2525b17"
+        }
+      ],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "main",
+      "sha": "6e99706ce90026c70c9538eb35faf572f02781fd",
+      "category": "main",
+      "ahead": 0,
+      "behind": 0,
+      "last_commit_date": "2026-10-29T05:42:41-04:00",
+      "subject": "Merge pull request #38 from Develata/codex/parse-image-performance",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "perf/batch-content-upserts",
+      "sha": "096a28dbd96a0163a2494bcd95557282c6153801",
+      "category": "merged_pr_history_differs",
+      "ahead": 5,
+      "behind": 541,
+      "last_commit_date": "2026-10-02T18:13:39-04:00",
+      "subject": "style: finish rustfmt cleanup",
+      "merged_prs": [
+        {
+          "number": 17,
+          "url": "https://github.com/Develata/RSS-Reader/pull/17",
+          "merged_at": "2026-10-02T22:19:19Z",
+          "merge_commit_sha": "e8c6ee165761f2e89baa6612b96324310def187a"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/tests/test_large_feed_write.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "perf/sqlite-large-feed-scope-json",
+      "sha": "193f6f6fd60624fabef86ce779ba85ccf8c14361",
+      "category": "merged_pr_history_differs",
+      "ahead": 5,
+      "behind": 542,
+      "last_commit_date": "2026-10-02T18:00:43-04:00",
+      "subject": "style: apply rustfmt output",
+      "merged_prs": [
+        {
+          "number": 16,
+          "url": "https://github.com/Develata/RSS-Reader/pull/16",
+          "merged_at": "2026-10-02T22:07:01Z",
+          "merge_commit_sha": "0957a0302d790689fb6fff2b232e0a4dbfaa4d4b"
+        }
+      ],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-infra/src/db/entry_repository.rs",
+        "crates/rssr-infra/tests/test_bulk_read.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "refactor/application-usecases-step1",
+      "sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421",
+      "category": "historical_unresolved",
+      "ahead": 1,
+      "behind": 938,
+      "last_commit_date": "2026-04-07T21:41:00-04:00",
+      "subject": "refactor: centralize application use cases for subscriptions and refresh",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-application/src/import_export_service/tests.rs",
+        "crates/rssr-application/src/lib.rs",
+        "crates/rssr-application/src/refresh_service.rs",
+        "crates/rssr-application/src/subscription_workflow.rs",
+        "crates/rssr-cli/src/main.rs",
+        "crates/rssr-infra/Cargo.toml",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/non_refresh.rs",
+        "crates/rssr-infra/src/application_adapters/refresh.rs",
+        "crates/rssr-infra/src/lib.rs",
+        "crates/rssr-infra/tests/test_config_package_io.rs",
+        "crates/rssr-infra/tests/test_webdav_local_roundtrip.rs"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "v0.2-architecture",
+      "sha": "b749514209d10397287792ada4e35cbbb858f856",
+      "category": "already_contained",
+      "ahead": 0,
+      "behind": 154,
+      "last_commit_date": "2026-10-22T21:53:15-04:00",
+      "subject": "docs: record final branch integration checks and visual evidence",
+      "merged_prs": [],
+      "merge_status": "already_contained",
+      "conflict_paths": []
+    },
+    {
+      "kind": "remote",
+      "name": "zheye-mainline-stabilization",
+      "sha": "c03c79d214b09c06251a579f997f86f8d4e7ffc3",
+      "category": "historical_unresolved",
+      "ahead": 6,
+      "behind": 938,
+      "last_commit_date": "2026-04-08T12:05:30-04:00",
+      "subject": "docs: finalize validation matrix and test verification notes",
+      "merged_prs": [],
+      "merge_status": "conflict",
+      "conflict_paths": [
+        "crates/rssr-app/src/bootstrap/native.rs",
+        "crates/rssr-app/src/bootstrap/web.rs",
+        "crates/rssr-app/src/bootstrap/web/config.rs",
+        "crates/rssr-app/src/bootstrap/web/exchange.rs",
+        "crates/rssr-app/src/bootstrap/web/mutations.rs",
+        "crates/rssr-app/src/bootstrap/web/refresh.rs",
+        "crates/rssr-app/src/pages/entries_page.rs",
+        "crates/rssr-app/src/pages/feeds_page_sections.rs",
+        "crates/rssr-app/src/pages/reader_page.rs",
+        "crates/rssr-application/src/feed_service.rs",
+        "crates/rssr-application/src/import_export_service.rs",
+        "crates/rssr-application/src/import_export_service/tests.rs",
+        "crates/rssr-application/src/lib.rs",
+        "crates/rssr-application/src/refresh_service.rs",
+        "crates/rssr-application/src/subscription_workflow.rs",
+        "crates/rssr-cli/src/main.rs",
+        "crates/rssr-infra/Cargo.toml",
+        "crates/rssr-infra/src/application_adapters.rs",
+        "crates/rssr-infra/src/application_adapters/non_refresh.rs",
+        "crates/rssr-infra/src/application_adapters/refresh.rs",
+        "crates/rssr-infra/src/lib.rs",
+        "crates/rssr-infra/tests/test_config_package_io.rs",
+        "crates/rssr-infra/tests/test_webdav_local_roundtrip.rs",
+        "docs/testing/environment-limitations.md",
+        "docs/testing/mainline-validation-matrix.md"
+      ]
+    },
+    {
+      "kind": "remote",
+      "name": "codex/directory-toolbar-sticky-header",
+      "sha": "241bdebfbc4cb3dbe0affa05b41bccc201cf035b",
+      "category": "active_directory_pr",
+      "ahead": 2,
+      "behind": 0,
+      "last_commit_date": "2026-10-29T06:55:51-04:00",
+      "subject": "docs: record Penpot directory baseline and PR validation",
+      "merged_prs": [],
+      "merge_status": "clean",
+      "conflict_paths": []
+    }
+  ],
+  "active_work": {
+    "captured_utc": "2026-10-29T10:50:22.5754958Z",
+    "primary_thread": "规划原生 Rust 化前的模块优化",
+    "primary_worktree": "E:/gitclone/RSS-Reader",
+    "primary_head": "906035eff7c83348350b8eceecf67cfa80d4830e",
+    "primary_merge_base": "6109380b1563ddb1a8812a654980729a9eb9ac3b",
+    "primary_unique_commits": 15,
+    "primary_missing_main_commits": 432,
+    "primary_committed_change_paths": 72,
+    "primary_unique_commits_not_on_origin": 15,
+    "primary_architecture": [
+      "rssr-host",
+      "sqlx",
+      "BrowserStore"
+    ],
+    "ui_thread": "调整目录按钮与固定标题",
+    "ui_worktree": "E:/gitclone/RSS-Reader-directory-ui-20261029",
+    "ui_head": "6e99706ce90026c70c9538eb35faf572f02781fd",
+    "ui_changed_paths": [
+      "assets/styles/reading-workspace.css",
+      "crates/rssr-app/src/pages/entries_page/controls.rs",
+      "crates/rssr-app/src/pages/entries_page/directory/adapter.js",
+      "crates/rssr-app/src/pages/entries_page/directory/window_adapter.js",
+      "crates/rssr-app/tests/test_default_style_token_contract.rs",
+      "scripts/browser/rssr_directory_window_acceptance.cjs",
+      "scripts/browser/rssr_workspace_acceptance.cjs"
+    ],
+    "overlapping_committed_primary_paths": [
+      "scripts/browser/rssr_workspace_acceptance.cjs"
+    ],
+    "overlapping_current_dirty_paths": []
+  },
+  "backup_tree_equivalence": [
+    {
+      "old": "09ca47ec8b4f746d40ef4d1fcb56d6ddec8bf3f2",
+      "replacement": "e8811401849eb66f143cb3a6a7847b5e810ad40d",
+      "same_tree": true,
+      "replacement_in_main": true
+    },
+    {
+      "old": "bde2502c3018739b925d9348fff121fd58cb6bfc",
+      "replacement": "5d4716ad3e393fffe400b81888be1467bd40ba8f",
+      "same_tree": true,
+      "replacement_in_main": true
+    }
+  ],
+  "merged_pr_parent_counts": [
+    {
+      "branch": "chore/pages-actions-hardening",
+      "pr": 14,
+      "parents": 1
+    },
+    {
+      "branch": "fix/feed-guid-identity",
+      "pr": 5,
+      "parents": 1
+    },
+    {
+      "branch": "fix/feed-proxy-content-isolation",
+      "pr": 25,
+      "parents": 1
+    },
+    {
+      "branch": "fix/import-validation-migration-lock",
+      "pr": 6,
+      "parents": 1
+    },
+    {
+      "branch": "fix/large-feed-filter-bind-limit",
+      "pr": 11,
+      "parents": 1
+    },
+    {
+      "branch": "fix/native-outbound-request-safety",
+      "pr": 26,
+      "parents": 1
+    },
+    {
+      "branch": "fix/native-persistence-atomicity",
+      "pr": 3,
+      "parents": 1
+    },
+    {
+      "branch": "fix/pages-smoke-profile-cleanup",
+      "pr": 18,
+      "parents": 1
+    },
+    {
+      "branch": "fix/post-audit-repair",
+      "pr": 10,
+      "parents": 1
+    },
+    {
+      "branch": "fix/post-generation-review",
+      "pr": 13,
+      "parents": 1
+    },
+    {
+      "branch": "fix/refresh-generation-fence",
+      "pr": 12,
+      "parents": 1
+    },
+    {
+      "branch": "fix/rust-1.99-async-trait-clippy",
+      "pr": 9,
+      "parents": 1
+    },
+    {
+      "branch": "fix/sqlite-large-feed-batching",
+      "pr": 4,
+      "parents": 1
+    },
+    {
+      "branch": "fix/storage-gc-query-contract",
+      "pr": 15,
+      "parents": 1
+    },
+    {
+      "branch": "hotfix/mobile-entry-scroll-snapback",
+      "pr": 2,
+      "parents": 1
+    },
+    {
+      "branch": "perf/batch-content-upserts",
+      "pr": 17,
+      "parents": 1
+    },
+    {
+      "branch": "perf/sqlite-large-feed-scope-json",
+      "pr": 16,
+      "parents": 1
+    }
+  ],
+  "checks": [
+    "All 17 matched merged PR commits are ancestors of origin/main.",
+    "All 17 matched merged PR commits have one parent.",
+    "Current branch SHA matches each of those PR final head SHAs.",
+    "Two historical backup tip trees equal replacement commits already contained in main.",
+    "Merge simulation does not modify any checked-out branch, index or worktree."
+  ],
+  "limitations": [
+    "Ahead/behind counts refer to commit ancestry, not missing features.",
+    "Four historical branches have not been audited for complete semantic absorption.",
+    "Active uncommitted work is changing; file overlap is a snapshot only.",
+    "Merge cleanliness is not runtime acceptance; no integrated build or runtime tests were run."
+  ],
+  "final_captured_utc": "2026-10-29T10:59:47.188158Z",
+  "final_active_work": {
+    "captured_utc": "2026-10-29T10:59:47.188158Z",
+    "origin_main": "6e99706ce90026c70c9538eb35faf572f02781fd",
+    "primary_head": "ca0861cb1f531df4a91c990fbcdb781bd308d68f",
+    "primary_ahead": 16,
+    "primary_behind": 432,
+    "primary_not_on_origin": 16,
+    "primary_commit_paths": 74,
+    "primary_last_commit": "ca0861cb 2026-10-29T06:56:18-04:00 fix(settings): retire numeric hints on accepted draft replacement",
+    "ui_head": "ec46724a9582a681998ca80dc32bcbb91f5720a3",
+    "ui_ahead": 3,
+    "ui_behind": 0,
+    "ui_commit_paths": 13,
+    "ui_last_commit": "ec46724a 2026-10-29T06:59:41-04:00 fix(ui): keep oversized directory focus stable in short viewports",
+    "overlapping_committed_paths": [
+      "scripts/browser/rssr_workspace_acceptance.cjs"
+    ],
+    "merges": [
+      {
+        "name": "main-to-native",
+        "base_side": "6e99706ce90026c70c9538eb35faf572f02781fd",
+        "incoming_side": "ca0861cb1f531df4a91c990fbcdb781bd308d68f",
+        "status": "conflict",
+        "conflict_paths": [
+          "crates/rssr-app/src/main.rs",
+          "crates/rssr-app/src/pages/entries_page/mod.rs",
+          "crates/rssr-app/src/pages/entries_page/session.rs",
+          "crates/rssr-app/src/pages/feeds_page/mod.rs",
+          "crates/rssr-app/src/pages/feeds_page/reducer.rs",
+          "crates/rssr-app/src/pages/feeds_page/session.rs",
+          "crates/rssr-app/src/pages/feeds_page/state.rs",
+          "crates/rssr-app/src/pages/reader_page/mod.rs",
+          "crates/rssr-app/src/pages/reader_page/session.rs",
+          "crates/rssr-app/src/pages/settings_page/facade.rs",
+          "crates/rssr-app/src/pages/settings_page/preferences.rs",
+          "crates/rssr-app/src/pages/settings_page/save/session.rs",
+          "crates/rssr-app/src/pages/settings_page/session.rs",
+          "crates/rssr-app/src/pages/settings_page/sync/session.rs",
+          "crates/rssr-app/src/ui/mod.rs",
+          "docs/design/README.md",
+          "docs/design/native-ui-preparation.md",
+          "docs/design/ui-shell-bus-page-facade.md",
+          "scripts/browser/rssr_entries_lifecycle_acceptance.cjs",
+          "scripts/browser/rssr_workspace_acceptance.cjs"
+        ],
+        "merge_tree": "7309280cc224de726ed731d41efc681c473626f6"
+      },
+      {
+        "name": "main-to-directory",
+        "base_side": "6e99706ce90026c70c9538eb35faf572f02781fd",
+        "incoming_side": "ec46724a9582a681998ca80dc32bcbb91f5720a3",
+        "status": "clean",
+        "conflict_paths": [],
+        "merge_tree": "43b3dfd0a83a55980caff23f9bad9bfbfa26da8a"
+      },
+      {
+        "name": "directory-to-native",
+        "base_side": "ec46724a9582a681998ca80dc32bcbb91f5720a3",
+        "incoming_side": "ca0861cb1f531df4a91c990fbcdb781bd308d68f",
+        "status": "conflict",
+        "conflict_paths": [
+          "crates/rssr-app/src/main.rs",
+          "crates/rssr-app/src/pages/entries_page/mod.rs",
+          "crates/rssr-app/src/pages/entries_page/session.rs",
+          "crates/rssr-app/src/pages/feeds_page/mod.rs",
+          "crates/rssr-app/src/pages/feeds_page/reducer.rs",
+          "crates/rssr-app/src/pages/feeds_page/session.rs",
+          "crates/rssr-app/src/pages/feeds_page/state.rs",
+          "crates/rssr-app/src/pages/reader_page/mod.rs",
+          "crates/rssr-app/src/pages/reader_page/session.rs",
+          "crates/rssr-app/src/pages/settings_page/facade.rs",
+          "crates/rssr-app/src/pages/settings_page/preferences.rs",
+          "crates/rssr-app/src/pages/settings_page/save/session.rs",
+          "crates/rssr-app/src/pages/settings_page/session.rs",
+          "crates/rssr-app/src/pages/settings_page/sync/session.rs",
+          "crates/rssr-app/src/ui/mod.rs",
+          "docs/design/README.md",
+          "docs/design/native-ui-preparation.md",
+          "docs/design/ui-shell-bus-page-facade.md",
+          "scripts/browser/rssr_entries_lifecycle_acceptance.cjs",
+          "scripts/browser/rssr_workspace_acceptance.cjs"
+        ],
+        "merge_tree": "04720d4219a4c075333034f65c76cbcd4d87d25b"
+      }
+    ],
+    "local_count": 15,
+    "remote_count": 28,
+    "primary_status_entries": 40,
+    "ui_status_entries": 0
+  },
+  "final_open_pull_requests": [
+    {
+      "number": 39,
+      "title": "修正目录入口位置并固定目录标题，同步 Penpot",
+      "state": "open",
+      "head": "codex/directory-toolbar-sticky-header",
+      "sha": "241bdebfbc4cb3dbe0affa05b41bccc201cf035b",
+      "url": "https://github.com/Develata/RSS-Reader/pull/39"
+    }
+  ],
+  "snapshot_note": "Initial 42 references were classified; final recheck updates two advancing local tips and adds the new remote directory branch. Activity continues independently."
+}

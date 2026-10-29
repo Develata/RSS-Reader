@@ -12,7 +12,7 @@
 | 正式 APK 覆盖安装与初始化 | Android 16 隔离模拟器通过 | v0.2.0 → v0.2.1 未卸载覆盖安装、appId / 首次安装时间保留；新持久目录初始化及预置 Windows v0.2.0 单库夹具对照通过。ARM64 使用模拟器 native bridge；不等于真实旧 Android 数据搬迁或真机签名升级 |
 | 真机交互 | 2026-10-28 当前产品代码的 28 项专项通过 | Xiaomi 12 / Android 15，含系统返回、写入与筛选恢复；另补冷进程偏好保留。仅适用于记录的设备、`67e1c2c2` debug 签名包与场景，见[本轮验收](../handoffs/2026-10-28-release-readiness.md) |
 
-2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/2026-10-25-android-back-and-persistent-storage.md)。2026-10-26 又完成目录和阅读返回专项，见[原生目录记录](../handoffs/2026-10-26-native-directory-validation.md)。这些结果不替代最新候选、其他设备或正式签名包的验收。
+2026-10-25 补充：小米 12 / Android 15 已完成系统返回与边缘手势、弹层关闭顺序、后台恢复，以及缓存目录迁入持久目录后的数据对照与重启检查，见[修复交接](../handoffs/archive/2026-10/2026-10-25-android-back-and-persistent-storage.md)。2026-10-26 又完成目录和阅读返回专项，见[原生目录记录](../handoffs/archive/2026-10/2026-10-26-native-directory-validation.md)。这些结果不替代最新候选、其他设备或正式签名包的验收。
 
 打 tag 和手动触发 Release 均要求 Android signing secrets 齐全，否则 `build-android` 失败；两种入口都会发布，不能将手动入口当作 debug 试跑。临时 debug 验证使用下面的本地构建流程或对应 CI。正式签名包与临时 debug 签名包不能互相覆盖安装。卸载会清除本地订阅、文章和图片缓存；卸载前先导出配置，但配置导出本身不包含文章库和已读状态。`versionCode` / `versionName` 从发布 tag 派生，不读取 workspace `Cargo.toml` 的版本号。
 

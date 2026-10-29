@@ -10,9 +10,9 @@
 
 2026-10-28 复核：当前文件 rev 370，55 张基准画板与唯一 capture-key 保留，完整性检查正常，右侧箭头命名版本已回读。对桌面时间目录和手机来源目录导出复核，并量测桌面代表行，6px / 5px 箭头、8px 文章缩进、至少 44px 行高与当前原生代码实测一致；本轮无需修改设计。此为代表抽查，未重跑全部画板几何遍历，详见[本轮交接](../handoffs/2026-10-28-release-readiness.md)。
 
-2026-10-27 最新增量：按用户参考图，以代码 `badf7fae` 将各级展开箭头统一移到右侧，文章容器左缩进由 38px 缩为 8px。Penpot rev 369 已更新 16 张画板、86 个父级箭头、43 个分支箭头及 69 个文章条目；父级箭头 6px、分支箭头 5px，点击高度至少 44px。全量几何与完整性校验无错误，代表画板实际导出复核通过；已保存并回读命名版本 `Right-side directory disclosure · badf7fae · 2026-10-27`。详见[右侧箭头与缩进交接](../handoffs/2026-10-27-directory-right-disclosure.md)。
+2026-10-27 最新增量：按用户参考图，以代码 `badf7fae` 将各级展开箭头统一移到右侧，文章容器左缩进由 38px 缩为 8px。Penpot rev 369 已更新 16 张画板、86 个父级箭头、43 个分支箭头及 69 个文章条目；父级箭头 6px、分支箭头 5px，点击高度至少 44px。全量几何与完整性校验无错误，代表画板实际导出复核通过；已保存并回读命名版本 `Right-side directory disclosure · badf7fae · 2026-10-27`。详见[右侧箭头与缩进交接](../handoffs/archive/2026-10/2026-10-27-directory-right-disclosure.md)。
 
-此前 rev 357 / `119dc73f` / `9ba17dda` 的 5px 箭头、4px 文章上下内边距和 44px 最小行高继续适用，但“38px 缩进、文章与父级标签齐平”的布局已被上述增量取代。旧版本及验证过程见[箭头与间距修正交接](../handoffs/2026-10-27-directory-disclosure-size.md)。整体代码基准仍为 `34a63202`，下述 rev 351 为此前已验收快照。
+此前 rev 357 / `119dc73f` / `9ba17dda` 的 5px 箭头、4px 文章上下内边距和 44px 最小行高继续适用，但“38px 缩进、文章与父级标签齐平”的布局已被上述增量取代。旧版本及验证过程见[箭头与间距修正交接](../handoffs/archive/2026-10/2026-10-27-directory-disclosure-size.md)。整体代码基准仍为 `34a63202`，下述 rev 351 为此前已验收快照。
 
 > 已完成 55 张代表性状态画板的对齐与分类整理。最终文件 rev 351，完整性校验无错误；已确认命名版本 `Code baseline complete · 34a63202 · 2026-10-26`。代表画板导出复核通过，验证边界见下文。
 
@@ -84,4 +84,4 @@
 - 当前画板覆盖代表性状态，不穷举所有网络故障、瞬时加载、主题×页面×模式组合；桌面原生壳与 Android 系统控件未在本轮重新验收。
 - 原有 31 张旧预览仍在历史页，**不再作为当前视觉规格**；其历史连线与旧验收说明保持可查。
 
-验证过程和证据见 [第一批交接](../handoffs/2026-10-26-penpot-code-alignment.md)、[阅读、设置与搜索交接](../handoffs/2026-10-26-penpot-reader-settings-alignment.md)和[登录、异常、内容与主题交接](../handoffs/2026-10-26-penpot-coverage-completion.md)。
+验证过程和证据见 [第一批交接](../handoffs/archive/2026-10/2026-10-26-penpot-code-alignment.md)、[阅读、设置与搜索交接](../handoffs/archive/2026-10/2026-10-26-penpot-reader-settings-alignment.md)和[登录、异常、内容与主题交接](../handoffs/archive/2026-10/2026-10-26-penpot-coverage-completion.md)。
