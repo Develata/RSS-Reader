@@ -4,11 +4,13 @@
 - 作者 / Agent：Codex（主审 + 官方资料、源码、Penpot 并行核对）
 - 分支：`codex/secondary-page-surfaces`
 - 当前 HEAD：`eb29193f163b694e2d0c5e70ff36f0d11f0f91f5`
-- 相关 commit：本报告 `commit: pending`；产品代码未改
+- 相关 commit：审查时尚未提交，产品代码未改；后续由 `d14116ba` 归档
 - 相关 tag / release：N/A
 - 状态：`validated`（审查结论及所列证据；不是产品完整验收）
 
 ## 工作摘要
+
+本文是改进前的只读审查记录，不是当前缺陷清单。用户确认后的实现与验收见[设计审查改进](./2026-10-29-design-refinements.md)。
 
 用户要求参考 Apple 与 Google，深入检查尺寸、角度、动效、配色、行为等设计细节。本轮只做审查和建议，不修改生产代码、Penpot、用户资料库，也不创建或合并新 PR。
 
