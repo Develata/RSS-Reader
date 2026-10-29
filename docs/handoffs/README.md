@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md) |
+| 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md)、[Windows 原生复测](./2026-10-29-directory-native-verification.md) |
 | 主题预览与设计细节 | [设计审查改进与验收](./2026-10-29-design-refinements.md)、[原始审查依据](./2026-10-29-design-audit.md) |
 | 订阅与设置顶部层级 | [导航与独立主面板统一](./2026-10-29-secondary-page-surfaces.md) |
 | 2026-10-29 | [目录入口、固定标题与 Penpot 同步](./2026-10-29-directory-toolbar-sticky-header.md) |
@@ -27,6 +27,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-29 | [目录突跳修复的 Windows 原生复测](./2026-10-29-directory-native-verification.md) |
 | 2026-10-29 | [解析与图片队列 PR 创建及 CI 验收](./2026-10-29-parse-image-pr-ci.md) |
 | 2026-10-28 | [正文解析性能与后台图片队列](./2026-10-28-parse-image-performance.md) |
 | 2026-10-28 | [v0.2.1 正式发布与产物核验](./2026-10-28-v0.2.1-release.md) |
