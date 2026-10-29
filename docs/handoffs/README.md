@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| 原生前置下一批 | [系统返回与退出提示策略评估](./2026-10-29-native-preparation-next-batch.md) |
+| 原生前置下一批 | [E 盘接续与背景交接](./2026-10-29-pr40-worktree-handoff.md)、[系统返回与退出提示策略评估](./2026-10-29-native-preparation-next-batch.md) |
 | PR #40 主线整合 | [main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md)、[最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md)、[逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
 | 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md)、[Windows 原生复测](./2026-10-29-directory-native-verification.md) |
 | 主题预览与设计细节 | [设计审查改进与验收](./2026-10-29-design-refinements.md)、[原始审查依据](./2026-10-29-design-audit.md) |
@@ -29,6 +29,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-29 | [PR #40 收尾与 E 盘工作树接续](./2026-10-29-pr40-worktree-handoff.md) |
 | 2026-10-29 | [PR #40 后的原生前置模块化建议](./2026-10-29-native-preparation-next-batch.md) |
 | 2026-10-29 | [PR #40 合并后 main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md) |
 | 2026-10-29 | [PR #40 最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md) |

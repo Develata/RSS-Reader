@@ -2,9 +2,9 @@
 
 - 日期：2026-10-29
 - 作者 / Agent：Codex
-- 分支：`codex/native-back-policy`（复用原 PR #40 整合工作树；本次只提交评估文档）
+- 分支：`codex/native-back-policy`（现已迁到独立 E 盘工作树；只提交评估与交接文档）
 - 评估源码 HEAD：`4101520c33266026747db867c33e2b13baea3d23`
-- 相关 commit：本文与索引同批本地提交；具体提交见本文件 git log
+- 相关 commit：`a641cee1` 为初次评估；后续接续路径与收尾记录见本文件 git log
 - 相关 tag / release：无
 - 状态：`draft`（源码评估完成，下一批尚未实施）
 
@@ -12,13 +12,21 @@
 
 PR #40 已合并，四个页面的主要异步规则已完成本轮收口。下一批建议只独立系统返回和退出提示的纯 Rust 决策，保留现有宿主执行路径。该建议以当前源码为依据，不把“继续拆文件”当作原生接入的无限前置条件，也不宣称发现了新的运行缺陷。
 
+## 接续背景
+
+这项工作起初是为未来原生界面准备可复用的 Rust 规则，先从 Entries 的初始化和查询生命周期开始，随后按批处理写入/偏好、Reader 访问归属、Feeds 编辑与读取、Settings 编辑保存和异步回填。期间主线已调整为七 crate、Backend/LocalBackend、rusqlite 单库及逐字段 Settings 保存，因此 PR #40 的整合采用了主线架构和保存语义，旧分支的整份草稿替换与 BrowserStore 路径已经退役。
+
+PR #40 的代码工作、冲突整合及最终 review 已结束，合并提交为 `ad5e8f31`；后续 main `4101520c` 的 CI 和 Docker 也已完成验证。`codex/native-back-policy` 是为了下一次 session 准备的本地接续分支，目前只有评估与交接文档，返回策略尚未实现。分支名不能作为已完成新一批重构的证据。
+
+选择返回策略，是因为它仍将决策和宿主执行组合在同一个 hook 中，且已有明确的行为契约和历史跨线程修复可作约束；这是模块边界的改进建议，不是一个已经复现的新缺陷。用户确认本 session 只收尾交接并迁移到 E 盘，实际实现留给新 session。迁移、证据位置和清理限制见[工作树接续记录](./2026-10-29-pr40-worktree-handoff.md)。
+
 ## 影响范围
 
 - 本次变更：本交接及交接索引，没有生产代码、测试、依赖或工作流改动。
 - 下一批主要入口：[返回 hook](../../crates/rssr-app/src/hooks/use_mobile_back_navigation.rs)、[跨线程捕获门禁](../../crates/rssr-app/src/hooks/use_mobile_back_navigation/back_capture.rs)、[Android 输入桥](../../crates/rssr-app/src/hooks/use_mobile_back_navigation/android_bridge.rs)。
 - 相关调用：Entries 的来源筛选/目录、Reader 的图片查看器、Feeds 的编辑关闭，以及 Settings 的返回入口。
 - 目标平台：策略为普通 Rust；Android 系统返回是主要行为面。共用工具栏返回影响 Web、Windows 及其他原生宿主，应保留同步路径。
-- 当前工作树：`C:/Users/QQ/.codex/worktrees/pr40-main-integration/RSS-Reader`；其他工作树不在本次范围。
+- 当前接续工作树：`E:/gitclone/RSS-Reader-worktrees/native-back-policy`。原评估发生于 `C:/Users/QQ/.codex/worktrees/pr40-main-integration/RSS-Reader`；E 盘主仓库的其他任务改动保持原样。
 
 ## 当前源码事实
 
@@ -75,6 +83,6 @@ PR #40 已合并，四个页面的主要异步规则已完成本轮收口。下�
 
 ## 给下一位 Agent 的备注
 
-- 复用当前 `codex/native-back-policy` 分支；先重新核对 HEAD、dirty 状态与最新 main，再开始有界实现。不要向已合并的 PR #40 追加新实现，也不要覆盖其他工作树改动。
+- 在 `E:/gitclone/RSS-Reader-worktrees/native-back-policy` 复用当前 `codex/native-back-policy` 分支；先重新核对 HEAD、dirty 状态与最新 main，再开始有界实现。不要在保留的 C 盘历史 checkout 或 E 盘主仓库启动本批，也不要向已合并的 PR #40 追加新实现。
 - 优先阅读本记录、[前端命令契约](../design/frontend-command-reference.md)、[原生控件契约](../design/native-control-adapter-contracts.md)与 [Android 连续返回修复](./2026-10-25-android-repeated-back.md)。历史记录仅用于了解原因，以当前源码和契约为准。
 - 完成后 review、相称验收、更新长期契约中实际变化的部分和 `docs/handoffs/`，只暂存本任务文件并本地提交。新的 push、PR 和发布不属于本份接续范围。
