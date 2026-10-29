@@ -16,11 +16,13 @@
 
 窄导航中的搜索输入应可换到下一行；默认容器断点为 328px，包含收起按钮的 48px 预留；搜索换行后使用首行箭头下方的完整行宽。主题覆盖导航宽度时应一起保留输入宽度和箭头触控空间，无新增选择器接口。
 
+R 的可访问名称在全局文章页为“Read / 刷新全部订阅”，其他路由为“Read / 首页”；仍使用 `activate-home`。主题和自动化应依赖动作标记，保留与实际动作一致的名称，不将其写死为首页导航。
+
 文章右侧已读／收藏使用 `[data-slot="entry-card-action"]` 图标按钮和 `aria-pressed` 状态。左侧 `select-entry` 是独立选择入口，16px 圆角方框、44px 点击范围。`data-selected="true"` 使用淡背景，不加整行描边；默认／悬停／键盘聚焦／已有选择分别表现。旧 `entry-controls-toggle` 与折叠标签已退役。
 
-生效的搜索、已读、收藏和来源条件放在筛选栏下的 `entry-filter-summary`，文字槽位为 `entry-filter-summary-text`，`clear-entry-filters` 为清除入口。摘要允许换行，主题应保留它；筛选栏现在常驻。
+生效的搜索、已读、收藏和来源条件放在筛选栏下的 `entry-filter-summary`，文字槽位为 `entry-filter-summary-text`。摘要允许换行，主题应保留它；筛选栏现在常驻。`clear-entry-filters` 同时用于列表选项与有生效筛选时的空结果区域，不能假定它只出现一次，也不要用位置选择器隐藏其中一个入口。无筛选的空库／无订阅提示不显示额外清除按钮。
 
-Reader 元信息的整体留白与分隔线应施加在 `reader-meta-block`，`reader-meta` 表示其中单行，避免每行重复增加块级间距。底部四个按钮应适应等宽列，不能用超过列宽的最小宽度覆盖相邻点击区域。Amethyst Glass 已采用上述布局；旧预设保留身份，重新应用后取得新样式。
+Reader 元信息的整体留白与分隔线应施加在 `reader-meta-block`，`reader-meta` 表示其中单行，避免每行重复增加块级间距。底部四个按钮应适应等宽列，不能用超过列宽的最小宽度覆盖相邻点击区域。Amethyst Glass 已采用上述布局；旧预设保留身份，重新预览对应卡片并显式保存后取得新样式。
 
 Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状态提供可见反馈；错误状态仍显示。主题不得把这一隐藏状态条改为占用正文空间的面板。
 
@@ -33,6 +35,10 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 ## 使用原则
 
 订阅与设置页采用与文章工作区相同的两层布局：`app-nav-shell` 与 `page-main` 是 `data-page` 下的同级区域，外层页面不再绘制包住导航的大卡片。`page-main` 承载标题、状态信息和内容，默认使用 `surface-reader`、`radius-panel` 及 16px 内边距（600px 以下 12px）；页面外侧留白和导航的吸顶／收起行为保持共享。主题应通过 `data-page` 与 `page-main` 限定内容区域，不依赖内容是页面直属子节点。Atlas 的侧栏仍使用第一列、主面板使用第二列。
+
+订阅页的 `refresh-all` 位于 `exchange-header[data-section="saved-feeds"]`，新增订阅的 `feed-form` 只包含地址和添加操作。`feed-card-actions[data-state="idle"]` 的编辑、刷新、删除保持同一行和各自 44px 点击区域；`confirm`／`busy` 可扩展或换行。确认删除使用 `.button[data-variant="danger"]`，旁边为 `cancel-remove-feed`；提交后取消消失，删除按钮以原生 `disabled` 和 `aria-busy` 表示正在处理。主题不得把确认态压回只有图标的固定宽度，也不能用样式恢复禁用按钮的点击或悬停反馈。
+
+设置内容采用单列分节，主题选择集中于 `theme-gallery`；CSS 编辑与导入／导出放在 `theme-advanced` 的原生 `details` 中。`settings-save-region` 位于内容之后并在底部吸附，包含统一保存按钮、草稿状态、结果和离页提示。主题应保留不透明底色、安全区留白和末尾内容空间，确保最后一个字段及键盘焦点可滚动到保存区之外；不要在主题内重新强制手机设置为两列。
 
 - 优先使用：
   - `data-page`
@@ -208,6 +214,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-action="refresh-all"`
 - `data-action="refresh-feed"`
 - `data-action="remove-feed"`
+- `data-action="cancel-remove-feed"`
 - `data-action="export-config"`
 - `data-action="import-config"`
 - `data-action="export-opml"`
@@ -226,9 +233,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-action="clear-custom-css"`
 - `data-action="import-custom-css-file"`
 - `data-action="export-custom-css-file"`
-- `data-action="apply-selected-theme"`
 - `data-action="apply-theme-preset"`
-- `data-action="remove-theme-preset"`
 - `data-action="push-webdav"`
 - `data-action="pull-webdav"`
 - `data-action="open-github-repo"`
@@ -247,6 +252,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 
 - 输入字段不再伪装成 action
 - 结构容器不应使用 `data-action`
+- 2026-10-29：`apply-selected-theme`、`remove-theme-preset`、`preset-theme-select`、`theme-preset-selector` 与 `theme-preset-quick-actions` 已退役；预设选择统一使用主题卡片，恢复默认使用 `clear-custom-css`。
+- `apply-theme-preset`、`apply-custom-css`、CSS 导入和 `clear-custom-css` 保留动作名，但现在只修改草稿／预览；只有 `save-settings` 显式保存这些编辑。不要从 `apply` 字面推断已持久化。
 
 ## 字段接口
 
@@ -269,7 +276,6 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-field="refresh-interval"`
 - `data-field="archive-after-months"`
 - `data-field="reader-font-scale"`
-- `data-field="preset-theme-select"`
 - `data-field="custom-css"`
 - `data-field="webdav-endpoint"`
 - `data-field="webdav-remote-path"`
@@ -301,8 +307,18 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 
 - `data-layout="stats-grid"`
 - `data-layout="feed-workbench-single"`
+- `data-layout="feed-form"`
+- `data-layout="exchange-header"` 与 `data-section="saved-feeds"`
+- `data-layout="feed-card"`
+- `data-layout="feed-card-actions"`
 - `data-layout="exchange-grid"`
 - `data-layout="settings-grid"`
+- `data-layout="settings-card"`
+- `data-layout="theme-gallery"`
+- `data-layout="theme-card"`
+- `data-layout="theme-advanced"`
+- `data-layout="theme-lab"`
+- `data-layout="settings-save-region"`
 
 ### 文章页
 
@@ -359,6 +375,10 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-slot="theme-card-title"`
 - `data-slot="theme-card-swatches"`
 - `data-slot="theme-card-swatch"`
+- `data-slot="theme-advanced-toggle"`
+- `data-slot="settings-save-feedback"`
+- `data-slot="settings-save-status"`
+- `data-slot="settings-save-hint"`
 - `data-slot="web-auth-title"`
 - `data-slot="web-auth-intro"`
 - `data-slot="web-auth-note"`
@@ -371,6 +391,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `info | error | success`
 - `pending | idle`
 - `confirm | idle`
+- 订阅行及操作组：`idle | confirm | busy`；确认前可取消，`busy` 表示删除已提交。
+- 设置保存区：`clean | dirty | pending`；结果色调由同区的 `StatusBanner` 表达。
 - `active | inactive`
 - `available | unavailable`
 - `read | unread`
@@ -557,14 +579,16 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 }
 ```
 
-### 3. 强调删除按钮
+### 3. 强调确认删除按钮
 
 ```css
-[data-page="feeds"] [data-action="remove-feed"] {
+[data-page="feeds"] [data-action="remove-feed"][data-state="confirm"] {
   min-width: 7rem;
   font-weight: 700;
 }
 ```
+
+常态图标按钮保留 44px 点击区域；确认态与就近取消应允许换行，不能挤占相邻操作。
 
 ### 4. 优化阅读页排版
 
@@ -611,15 +635,19 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 
 ## 将示例主题应用到应用中
 
-- 通过设置页的主题卡片或“应用所选主题”按钮应用内置主题时，主题会立即生效并自动保存
-- `移除这套主题` 只会移除当前卡片对应的内置主题；如果当前并未启用该主题，只会提示，不会清空其它自定义 CSS
+- 点击内置主题卡片只预览该主题，`theme-card[data-state="active"]` 和按钮 `aria-pressed` 表示当前草稿的主题身份，不代表已保存。
+- 默认主题卡片的“恢复默认”清空草稿 CSS 并预览；同样须点击“保存设置”才保留。
+- CSS 文本编辑本身不注入样式；“预览当前 CSS”或 CSS 文件导入校验后更新预览，显式保存才写入配置。普通页内导航离开设置会丢弃未保存草稿与预览；Web 的版本更新／重新登录恢复流程仍按既有规则暂存草稿。
+- 预览不连带保存其他设置；“保存设置”统一提交当时已编辑字段，保存期间的新编辑仍为草稿，失败保留草稿及当前预览。
+- 已保存 CSS 是版本快照，升级不会自动改写。旧版内置主题仍识别为对应预设；即使卡片显示“当前已选”，重新点击该卡片预览并保存，才会采用仓库中的新版样式。
 
 ### 在设置页中使用
 
 1. 打开对应的主题文件
 2. 复制 CSS 内容
-3. 粘贴到“设置”页的“自定义 CSS”
-4. 点击“保存设置”
+3. 展开“设置 → 高级：自定义 CSS”，粘贴到编辑框
+4. 点击“预览当前 CSS”检查样式与可操作性
+5. 点击底部保存区的“保存设置”保留修改
 
 ### 用 CLI 应用
 

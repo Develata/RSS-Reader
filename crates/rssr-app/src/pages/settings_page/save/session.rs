@@ -42,7 +42,7 @@ impl SettingsPageSaveSession {
         mut success_message: String,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
-        // Every entry point, including theme preset buttons, passes this synchronous gate.
+        // Only an explicit save persists the draft; duplicate saves pass this synchronous gate.
         if self.state.peek().pending_save {
             self.page
                 .set_status("上一份设置仍在保存；新修改已保留在草稿中，完成后请再次保存。", "info");
@@ -71,6 +71,7 @@ impl SettingsPageSaveSession {
         }
         let mut state = self.state;
         state.with_mut(|state| state.pending_save = true);
+        self.page.set_status("正在保存设置…", "info");
 
         let status = self.page.status_signal();
         let status_tone = self.page.status_tone_signal();
@@ -122,6 +123,8 @@ impl SettingsPageSaveSession {
 mod tests {
     use std::{cell::Cell, rc::Rc};
 
+    use dioxus::core::current_scope_id;
+
     use super::*;
     use crate::theme::ThemeController;
     use crate::ui::AppShellState;
@@ -144,6 +147,245 @@ mod tests {
         let (session, theme) =
             dom.in_scope(ScopeId::APP, || (consume_context(), consume_context()));
         (dom, session, theme)
+    }
+
+    fn theme_selection_harness() -> Element {
+        use crate::pages::settings_page::{
+            facade::SettingsPageFacade,
+            sync::{SettingsPageSyncSession, SettingsPageSyncState},
+        };
+
+        let theme = crate::theme::use_theme_controller();
+        let page = SettingsPageSession::new(theme);
+        let state = use_signal(SettingsPageSaveState::new);
+        let save = SettingsPageSaveSession::new(state, page);
+        let shell = crate::ui::use_app_shell_state();
+        let sync_state = use_signal(SettingsPageSyncState::new);
+        let sync = SettingsPageSyncSession::new(sync_state, page, shell);
+        use_context_provider(|| {
+            SettingsPageFacade::new(page, save, save.snapshot(), sync, sync.snapshot())
+        });
+        use_context_provider(|| save);
+        use_context_provider(|| theme);
+        rsx! {}
+    }
+
+    /// All theme entry points edit the same draft. Neither an imported CSS preview nor a
+    /// preset/reset button may silently persist the other fields the user has changed.
+    #[test]
+    fn theme_selection_import_and_reset_wait_for_an_explicit_save() {
+        use crate::pages::settings_page::{facade::SettingsPageFacade, themes::preset_css};
+
+        let mut dom = VirtualDom::new(theme_selection_harness);
+        dom.rebuild_in_place();
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            let facade = consume_context::<SettingsPageFacade>();
+            let session = consume_context::<SettingsPageSaveSession>();
+            let theme = consume_context::<ThemeController>();
+            let stored = theme.settings.peek().clone();
+            let revision = theme.stored_count();
+            facade.update_draft(|draft| {
+                draft.theme = ThemeMode::Dark;
+                draft.list_density = ListDensity::Compact;
+                draft.reader_font_scale = 1.1;
+                draft.refresh_interval_minutes = 99;
+            });
+            facade.apply_builtin_theme("newsprint");
+            assert_eq!(theme.appearance().custom_css, preset_css("newsprint"));
+            assert_eq!(theme.appearance().theme, ThemeMode::Dark);
+            assert_eq!(theme.appearance().list_density, ListDensity::Compact);
+            assert_eq!(theme.appearance().reader_font_scale, 1.1);
+            assert_eq!(*theme.settings.peek(), stored);
+            assert!(!session.snapshot().pending_save);
+
+            let imported = ".app-shell { --text-main: #234567; }".to_string();
+            facade.set_custom_css(imported.clone());
+            assert_eq!(
+                theme.appearance().custom_css,
+                preset_css("newsprint"),
+                "typing is not a preview"
+            );
+            facade.preview_custom_css(imported.clone(), "已载入 CSS。");
+            assert_eq!(theme.appearance().custom_css, imported);
+            assert!(!session.snapshot().pending_save);
+
+            facade.clear_custom_css("正在预览默认主题。");
+            assert!(theme.appearance().custom_css.is_empty());
+            assert!(facade.has_unsaved_changes());
+            assert_eq!(*theme.settings.peek(), stored);
+            assert_eq!(theme.stored_count(), revision, "previews are never a stored revision");
+            assert!(!session.snapshot().pending_save);
+            assert_eq!(
+                submitted_patch(session),
+                SettingsPatch {
+                    theme: Some(ThemeMode::Dark),
+                    list_density: Some(ListDensity::Compact),
+                    reader_font_scale: Some(1.1),
+                    refresh_interval_minutes: Some(99),
+                    custom_css: Some(String::new()),
+                    ..Default::default()
+                },
+                "the one explicit save includes every edited field"
+            );
+        });
+    }
+
+    #[test]
+    fn late_loads_update_stored_settings_without_replacing_the_preview() {
+        let (mut dom, session, theme) = setup();
+        let load = dom.in_scope(ScopeId::APP, || {
+            let load = start_load(session);
+            session.page.edit(|draft| {
+                draft.theme = ThemeMode::Light;
+                draft.custom_css = "body { color: blue; }".into();
+            });
+            session.page.preview_custom_css("body { color: blue; }".into());
+            load
+        });
+        load.send(customized()).expect("deliver the late load");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(*theme.settings.peek(), customized());
+            assert_eq!(theme.appearance().theme, ThemeMode::Light);
+            assert_eq!(theme.appearance().custom_css, "body { color: blue; }");
+            assert_eq!(session.page.draft().refresh_interval_minutes, 90);
+            assert!(session.page.has_unsaved_changes());
+        });
+    }
+
+    #[test]
+    fn save_completion_keeps_the_latest_preview_and_unpreviewed_css_edits() {
+        let (mut dom, session, theme) = setup();
+        let first = "body { color: blue; }";
+        let later = "body { color: green; }";
+        let raw = "body { color: purple; }";
+        let save = dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.custom_css = first.into());
+            session.page.preview_custom_css(first.into());
+            start_save(session)
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            session.page.edit(|draft| draft.custom_css = later.into());
+            session.page.preview_custom_css(later.into());
+            session.page.edit(|draft| draft.custom_css = raw.into());
+        });
+        save.send(true).expect("save the first preview");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().custom_css, first);
+            assert_eq!(
+                theme.appearance().custom_css,
+                later,
+                "the reply does not replace the preview"
+            );
+            assert_eq!(
+                session.page.draft().custom_css,
+                raw,
+                "typing stays unpreviewed and unsaved"
+            );
+            assert!(session.page.has_unsaved_changes());
+        });
+        let retry =
+            dom.in_scope(ScopeId::APP, || start_save_over(session, theme.settings.peek().clone()));
+        retry.send(false).expect("fail the second save");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().custom_css, first);
+            assert_eq!(theme.appearance().custom_css, later);
+            assert_eq!(session.page.draft().custom_css, raw);
+            assert!(session.page.status().contains("草稿已保留"));
+        });
+        let retry =
+            dom.in_scope(ScopeId::APP, || start_save_over(session, theme.settings.peek().clone()));
+        retry.send(true).expect("explicitly save the latest CSS");
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.settings.peek().custom_css, raw);
+            assert_eq!(theme.appearance().custom_css, raw);
+            assert!(!session.page.has_unsaved_changes());
+        });
+    }
+
+    #[derive(Clone, Copy)]
+    struct PreviewPageProbe {
+        visible: Signal<bool>,
+        page: Signal<Option<(SettingsPageSession, ScopeId)>>,
+    }
+
+    fn preview_lifecycle_harness() -> Element {
+        let theme = crate::theme::use_theme_controller();
+        let shell = crate::ui::use_app_shell_state();
+        let visible = use_signal(|| true);
+        let page = use_signal(|| None);
+        use_context_provider(|| theme);
+        use_context_provider(|| shell);
+        use_context_provider(|| PreviewPageProbe { visible, page });
+        rsx! {
+            if visible() {
+                PreviewLifecyclePage {}
+            }
+        }
+    }
+
+    #[component]
+    fn PreviewLifecyclePage() -> Element {
+        let theme = use_context::<ThemeController>();
+        let shell = use_context::<AppShellState>();
+        let mut probe = use_context::<PreviewPageProbe>();
+        let page = SettingsPageSession::new(theme);
+        use_hook(move || {
+            shell.set_settings_page_open(true);
+            probe.page.set(Some((page, current_scope_id())));
+        });
+        use_drop(move || shell.set_settings_page_open(false));
+        rsx! {}
+    }
+
+    /// Ordinary navigation drops the page's draft and visual preview. An actual stored result
+    /// arriving meanwhile remains intact; reopening starts from that stored state.
+    #[test]
+    fn leaving_settings_discards_preview_without_reverting_a_stored_result() {
+        let mut dom = VirtualDom::new(preview_lifecycle_harness);
+        dom.rebuild_in_place();
+        dom.render_immediate_to_vec();
+        let (mut probe, theme, shell) = dom.in_scope(ScopeId::APP, || {
+            (
+                consume_context::<PreviewPageProbe>(),
+                consume_context::<ThemeController>(),
+                consume_context::<AppShellState>(),
+            )
+        });
+        let (page, scope) = probe.page.peek().expect("mounted settings page");
+        dom.in_scope(scope, || {
+            page.edit(|draft| {
+                draft.theme = ThemeMode::Light;
+                draft.custom_css = "body { color: green; }".into();
+            });
+            page.preview_custom_css("body { color: green; }".into());
+        });
+        dom.in_scope(ScopeId::APP, || {
+            theme.store(customized());
+            assert_eq!(theme.appearance().custom_css, "body { color: green; }");
+            assert!(shell.settings_draft().is_some());
+            probe.visible.set(false);
+        });
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || {
+            assert!(!page.is_open());
+            assert_eq!(shell.settings_draft(), None);
+            assert_eq!(theme.settings.peek().custom_css, customized().custom_css);
+            assert_eq!(theme.appearance().custom_css, customized().custom_css);
+            assert_eq!(theme.appearance().theme, ThemeMode::Dark);
+            probe.visible.set(true);
+        });
+        dom.render_immediate_to_vec();
+        let (reopened, scope) = probe.page.peek().expect("reopened settings page");
+        dom.in_scope(scope, || {
+            assert_eq!(reopened.draft(), customized());
+            assert!(!reopened.has_unsaved_changes());
+        });
     }
 
     fn start_save(session: SettingsPageSaveSession) -> oneshot::Sender<bool> {
@@ -740,7 +982,11 @@ mod tests {
         let load = dom.in_scope(ScopeId::APP, || {
             assert_eq!(session.page.pending_edits(), kept);
             assert_eq!(session.page.draft().list_density, ListDensity::Compact);
-            assert_eq!(session.page.status(), "已恢复重新加载前未保存的设置修改，尚未保存。");
+            assert_eq!(
+                session.page.status(),
+                "已恢复重新加载前未保存的设置修改，尚未保存。 CSS 草稿已恢复，需重新预览。"
+            );
+            assert!(theme.appearance().custom_css.is_empty(), "restoring raw CSS is not a preview");
             start_load(session)
         });
         load.send(customized()).expect("deliver the load");
@@ -750,6 +996,19 @@ mod tests {
             assert_eq!(session.page.draft(), kept.applied(&customized()), "the draft over them");
             assert_eq!(session.page.pending_edits(), kept, "still to be saved");
             assert!(!session.snapshot().pending_save, "not saved by itself");
+            assert_eq!(
+                theme.appearance().custom_css,
+                customized().custom_css,
+                "the late load supplies the stored CSS, not the restored draft"
+            );
+            session.page.preview_custom_css(session.page.draft().custom_css);
+            assert_eq!(
+                theme.appearance().custom_css,
+                "body { color: blue; }",
+                "only an explicit preview applies the restored CSS"
+            );
+            assert_eq!(*theme.settings.peek(), customized());
+            assert!(!session.snapshot().pending_save);
         });
     }
 

@@ -37,7 +37,7 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
                         Ok(raw) => apply_custom_css_from_raw(
                             &import_facade,
                             raw,
-                            "已从文件载入并应用自定义 CSS。",
+                            "已从文件载入并预览自定义 CSS。",
                         ),
                         Err(err) => import_facade
                             .set_status(format!("载入 CSS 文件失败：{err}"), "error"),
@@ -80,47 +80,48 @@ pub(super) fn ThemeLabSection(facade: SettingsPageFacade) -> Element {
     };
 
     rsx! {
-        div {
-            "data-layout": "theme-lab",
-            "data-section": "settings-theme-lab",
-            div { "data-slot": "settings-card-section-header",
-                h3 { "data-slot": "settings-card-section-title", "主题实验室" }
-            }
-            label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
-            textarea {
-                id: "settings-custom-css",
-                name: "custom_css",
-                class: "text-area",
-                "data-field": "custom-css",
-                value: "{facade.custom_css()}",
-                placeholder: "[data-page=\"reader\"] [data-layout=\"reader-body\"] {{ max-width: 72ch; }}",
-                oninput: move |event| {
-                    input_facade.set_custom_css(event.value());
+        details {
+            "data-layout": "theme-advanced",
+            summary { "data-slot": "theme-advanced-toggle", "高级：自定义 CSS" }
+            div {
+                "data-layout": "theme-lab",
+                "data-section": "settings-theme-lab",
+                label { class: "field-label", r#for: "settings-custom-css", "自定义 CSS" }
+                textarea {
+                    id: "settings-custom-css",
+                    name: "custom_css",
+                    class: "text-area",
+                    "data-field": "custom-css",
+                    value: "{facade.custom_css()}",
+                    placeholder: "[data-page=\"reader\"] [data-layout=\"reader-body\"] {{ max-width: 72ch; }}",
+                    oninput: move |event| {
+                        input_facade.set_custom_css(event.value());
+                    }
                 }
-            }
-            div { class: "inline-actions", "data-layout": "theme-lab-actions",
-                {import_css_trigger}
-                button {
-                    class: "button inline-actions__item",
-                    "data-variant": "secondary",
-                    "data-action": "apply-custom-css",
-                    onclick: move |_| {
-                        apply_custom_css_from_raw(
-                            &apply_facade,
-                            apply_facade.custom_css(),
-                            "已应用当前输入框中的自定义 CSS。",
-                        );
-                    },
-                    "应用当前 CSS"
-                }
-                button {
-                    class: "button inline-actions__item",
-                    "data-variant": "secondary",
-                    "data-action": "export-custom-css-file",
-                    onclick: move |_| {
-                        export_css_file(export_facade.custom_css(), &export_facade);
-                    },
-                    "导出当前 CSS"
+                div { class: "inline-actions", "data-layout": "theme-lab-actions",
+                    {import_css_trigger}
+                    button {
+                        class: "button inline-actions__item",
+                        "data-variant": "secondary",
+                        "data-action": "apply-custom-css",
+                        onclick: move |_| {
+                            apply_custom_css_from_raw(
+                                &apply_facade,
+                                apply_facade.custom_css(),
+                                "正在预览当前输入框中的自定义 CSS。",
+                            );
+                        },
+                        "预览当前 CSS"
+                    }
+                    button {
+                        class: "button inline-actions__item",
+                        "data-variant": "secondary",
+                        "data-action": "export-custom-css-file",
+                        onclick: move |_| {
+                            export_css_file(export_facade.custom_css(), &export_facade);
+                        },
+                        "导出当前 CSS"
+                    }
                 }
             }
         }

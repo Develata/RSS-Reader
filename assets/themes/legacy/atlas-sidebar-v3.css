@@ -1,0 +1,304 @@
+/* Atlas Sidebar —— 宽幅工作台：顶部导航改为左侧固定栏，冷灰蓝底、圆润卡片。
+ * 配色与控件通过 token 覆写；侧栏网格重排是本主题的结构性个性，保留具体规则。
+ * 暗色模式（.theme-dark / 跟随系统）为深板岩配色，侧栏底色经
+ * --atlas-rail-bg 主题局部变量随模式切换。 */
+
+:root {
+  /* 基础调色板 */
+  --bg: #ece9df;
+  --panel: rgba(252, 251, 247, 0.9);
+  --panel-strong: #fffdfa;
+  --ink: #1f2430;
+  --muted: #66727e;
+  --line: rgba(37, 54, 78, 0.12);
+  --accent: #b24c3d;
+  --accent-strong: #8c382b;
+  --shadow: 0 24px 56px rgba(34, 44, 60, 0.08);
+
+  /* 表面与边线 */
+  --line-soft: rgba(37, 54, 78, 0.1);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0)),
+    var(--panel);
+  --surface-reader: var(--surface-panel);
+  --surface-card: var(--panel-strong);
+  --surface-chip: rgba(255, 255, 255, 0.95);
+  --surface-chip-hover: rgba(255, 255, 255, 1);
+  --surface-tint: rgba(237, 233, 224, 0.6);
+  --input-bg: rgba(255, 255, 255, 0.92);
+  --reader-ink: #242b35;
+
+  /* 圆润卡片 */
+  --radius-panel: 24px;
+  --radius-card: 24px;
+  --radius-card-sm: 24px;
+  --shadow-card: 0 10px 24px rgba(39, 52, 71, 0.04);
+
+  /* 按钮 */
+  --button-bg: linear-gradient(135deg, #c65c49 0%, #9b3f31 100%);
+  --button-fg: #fff8f4;
+  --button-radius: 16px;
+  --button-shadow:
+    0 12px 22px -14px rgba(155, 63, 49, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  --button-secondary-bg: linear-gradient(135deg, #334053 0%, #263243 100%);
+  --button-secondary-shadow:
+    0 10px 18px -16px rgba(36, 48, 66, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --button-danger-bg: linear-gradient(135deg, #c74a42 0%, #9f2d28 100%);
+  --button-danger-outline-bg: rgba(255, 243, 239, 0.96);
+  --button-danger-outline-fg: #9a392f;
+  --button-danger-outline-border: rgba(155, 63, 49, 0.16);
+
+  /* 宽幅布局 */
+  --shell-max-width: 1500px;
+
+  /* 主题局部变量：侧栏底色 / 投影（暗色块覆写） */
+  --atlas-rail-bg:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(237, 233, 224, 0.94)),
+    rgba(255, 255, 255, 0.9);
+  --atlas-rail-shadow: 0 18px 36px rgba(32, 41, 55, 0.06);
+}
+
+/* 暗色：深板岩 + 暖砖强调。只覆写 token，结构规则共用。 */
+.theme-dark {
+  --bg: #161a22;
+  --panel: rgba(30, 35, 46, 0.92);
+  --panel-strong: #202634;
+  --ink: #e6e9f0;
+  --muted: #95a0b1;
+  --line: rgba(148, 163, 184, 0.16);
+  --accent: #d0684f;
+  --accent-strong: #e58a70;
+  --shadow: 0 24px 56px rgba(0, 0, 0, 0.4);
+
+  --line-soft: rgba(148, 163, 184, 0.12);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+    var(--panel);
+  --surface-reader: var(--surface-panel);
+  --surface-card: var(--panel-strong);
+  --surface-chip: rgba(255, 255, 255, 0.06);
+  --surface-chip-hover: rgba(255, 255, 255, 0.11);
+  --surface-tint: rgba(35, 42, 56, 0.6);
+  --input-bg: rgba(15, 19, 27, 0.6);
+  --reader-ink: #dde3ec;
+
+  --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.28);
+
+  --button-bg: linear-gradient(135deg, #b34f3c 0%, #8a3527 100%);
+  --button-fg: #fff8f4;
+  --button-shadow:
+    0 12px 22px -14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+  --button-secondary-bg: linear-gradient(135deg, #3c4c63 0%, #2b3a4f 100%);
+  --button-secondary-shadow:
+    0 10px 18px -16px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --button-danger-bg: linear-gradient(135deg, #a83f38 0%, #832521 100%);
+  --button-danger-outline-bg: rgba(90, 38, 30, 0.32);
+  --button-danger-outline-fg: #ffb3a3;
+  --button-danger-outline-border: rgba(255, 140, 115, 0.28);
+
+  --atlas-rail-bg:
+    linear-gradient(180deg, rgba(42, 49, 63, 0.98), rgba(28, 33, 44, 0.96)),
+    #1d2330;
+  --atlas-rail-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+}
+
+@media (prefers-color-scheme: dark) {
+  .theme-system {
+    --bg: #161a22;
+    --panel: rgba(30, 35, 46, 0.92);
+    --panel-strong: #202634;
+    --ink: #e6e9f0;
+    --muted: #95a0b1;
+    --line: rgba(148, 163, 184, 0.16);
+    --accent: #d0684f;
+    --accent-strong: #e58a70;
+    --shadow: 0 24px 56px rgba(0, 0, 0, 0.4);
+
+    --line-soft: rgba(148, 163, 184, 0.12);
+    --surface-panel:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+      var(--panel);
+    --surface-reader: var(--surface-panel);
+    --surface-card: var(--panel-strong);
+    --surface-chip: rgba(255, 255, 255, 0.06);
+    --surface-chip-hover: rgba(255, 255, 255, 0.11);
+    --surface-tint: rgba(35, 42, 56, 0.6);
+    --input-bg: rgba(15, 19, 27, 0.6);
+    --reader-ink: #dde3ec;
+
+    --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.28);
+
+    --button-bg: linear-gradient(135deg, #b34f3c 0%, #8a3527 100%);
+    --button-fg: #fff8f4;
+    --button-shadow:
+      0 12px 22px -14px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+    --button-secondary-bg: linear-gradient(135deg, #3c4c63 0%, #2b3a4f 100%);
+    --button-secondary-shadow:
+      0 10px 18px -16px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --button-danger-bg: linear-gradient(135deg, #a83f38 0%, #832521 100%);
+    --button-danger-outline-bg: rgba(90, 38, 30, 0.32);
+    --button-danger-outline-fg: #ffb3a3;
+    --button-danger-outline-border: rgba(255, 140, 115, 0.28);
+
+    --atlas-rail-bg:
+      linear-gradient(180deg, rgba(42, 49, 63, 0.98), rgba(28, 33, 44, 0.96)),
+      #1d2330;
+    --atlas-rail-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+  }
+}
+
+/* 坐标纸底纹需要 background-size，保留 body 规则。
+ * body 在 .app-shell 之外拿不到主题类上的变量，故暗色底纹用 :has 显式声明。 */
+body {
+  background:
+    linear-gradient(90deg, rgba(31, 36, 48, 0.05) 0, rgba(31, 36, 48, 0.05) 1px, transparent 1px),
+    radial-gradient(circle at top right, rgba(178, 76, 61, 0.08), transparent 18%),
+    linear-gradient(180deg, #f6f3ec 0%, #ece8de 100%);
+  background-size: 28px 28px, auto, auto;
+}
+
+body:has(.theme-dark) {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(148, 163, 184, 0.05) 0,
+      rgba(148, 163, 184, 0.05) 1px,
+      transparent 1px
+    ),
+    radial-gradient(circle at top right, rgba(208, 104, 79, 0.1), transparent 18%),
+    linear-gradient(180deg, #1a1f29 0%, #151923 100%);
+  background-size: 28px 28px, auto, auto;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:has(.theme-system) {
+    background:
+      linear-gradient(
+        90deg,
+        rgba(148, 163, 184, 0.05) 0,
+        rgba(148, 163, 184, 0.05) 1px,
+        transparent 1px
+      ),
+      radial-gradient(circle at top right, rgba(208, 104, 79, 0.1), transparent 18%),
+      linear-gradient(180deg, #1a1f29 0%, #151923 100%);
+    background-size: 28px 28px, auto, auto;
+  }
+}
+
+/* ---- 结构性个性：顶部导航重排为左侧固定栏 ----
+ * 普通页面与阅读页共用同一套侧栏规则，选择器合并声明。 */
+
+[data-page]:not([data-page="reader"]),
+[data-layout="reader-page"] {
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px 24px;
+}
+
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"],
+[data-layout="reader-page"] > [data-layout="app-nav-shell"] {
+  grid-column: 1;
+  /* span 大于任何页面的实际行数即可整列占位；多余的隐式行高度为 0 */
+  grid-row: 1 / span 12;
+  position: sticky;
+  top: calc(24px + var(--safe-area-top));
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-content: start;
+  align-self: start;
+  /* Keep the shared five-icon Reader row and expanded search usable in the rail. */
+  padding: 0 8px;
+  border-radius: 26px;
+  background: var(--atlas-rail-bg);
+  box-shadow: var(--atlas-rail-shadow);
+}
+
+@media (min-width: 961px) {
+  [data-page]:has(> [data-layout="app-nav-shell"][data-state="collapsed"]) {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  /* The navigation occupies another column, so the directory needs no top-bar clearance. */
+  .app-shell [data-page="entries"] [data-layout="entry-directory-rail"] {
+    top: calc(24px + var(--safe-area-top));
+  }
+}
+
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
+[data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
+  display: flex;
+  gap: 0;
+}
+
+[data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-nav],
+[data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-nav] {
+  border-radius: 18px;
+  text-align: center;
+}
+
+/* 除侧栏外的所有顶层子块进主内容列；新增页面区块无需登记即可正确落位 */
+[data-page]:not([data-page="reader"]) > :not([data-layout="app-nav-shell"]),
+[data-layout="reader-page"] > :not([data-layout="app-nav-shell"]) {
+  grid-column: 2;
+}
+
+[data-layout="stats-grid"],
+[data-page="settings"] [data-layout="settings-grid"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* ---- 少量视觉精修 ---- */
+
+[data-layout="stat-card"],
+[data-layout="feed-card"],
+[data-layout="entry-card"],
+[data-layout="exchange-card"],
+[data-layout="settings-card"],
+[data-layout="theme-card"] {
+  box-shadow: var(--shadow-card);
+}
+
+.button[data-variant="secondary"] {
+  color: #f8fafc;
+}
+
+[data-slot="feed-card-title"],
+[data-slot="entry-card-title"] {
+  line-height: 1.34;
+}
+
+[data-page="reader"] [data-layout="reader-body"] {
+  color: var(--reader-ink);
+}
+
+@media (max-width: 960px) {
+  [data-page]:not([data-page="reader"]),
+  [data-layout="reader-page"] {
+    display: block;
+  }
+
+  [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"],
+  [data-layout="reader-page"] > [data-layout="app-nav-shell"] {
+    position: sticky;
+    top: calc(8px + var(--safe-area-top));
+    margin-bottom: 6px;
+  }
+
+  [data-page]:not([data-page="reader"]) > [data-layout="app-nav-shell"] [data-layout="app-nav-links"],
+  [data-layout="reader-page"] > [data-layout="app-nav-shell"] [data-layout="app-nav-links"] {
+    position: static;
+    display: flex;
+    flex-wrap: nowrap;
+  }
+}

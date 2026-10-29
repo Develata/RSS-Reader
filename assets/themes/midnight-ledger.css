@@ -73,7 +73,7 @@
   --radius-card-sm: 16px;
 
   /* 按钮 */
-  --button-bg: linear-gradient(135deg, #2bb4ae 0%, #1d8f8a 100%);
+  --button-bg: linear-gradient(135deg, #157872 0%, #106560 100%);
   --button-fg: #f6ffff;
   --button-shadow:
     0 12px 24px -12px rgba(36, 188, 179, 0.5),

@@ -17,7 +17,7 @@ pub(super) fn import_css_file(facade: &SettingsPageFacade) {
     spawn(async move {
         match pick_css_file_contents().await {
             Ok(Some(raw)) => {
-                apply_custom_css_from_raw(&facade, raw, "已从文件载入并应用自定义 CSS。")
+                apply_custom_css_from_raw(&facade, raw, "已从文件载入并预览自定义 CSS。")
             }
             Ok(None) => facade.set_status("已取消载入 CSS 文件。", "info"),
             Err(err) => facade.set_status(format!("载入 CSS 文件失败：{err}"), "error"),

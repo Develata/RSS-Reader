@@ -208,6 +208,9 @@ pub(crate) fn reduce_feeds_page_intent(
             vec![UiCommand::Feeds(FeedsCommand::RefreshFeed { feed_id, feed_title })]
         }
         FeedsPageIntent::RemoveFeedRequested { feed_id, feed_title } => {
+            if state.removing_feed.is_some() {
+                return Vec::new();
+            }
             state.pending_config_import = false;
             if state.pending_delete_feed != Some(feed_id) {
                 state.pending_delete_feed = Some(feed_id);
@@ -216,7 +219,18 @@ pub(crate) fn reduce_feeds_page_intent(
                 return Vec::new();
             }
 
+            state.pending_delete_feed = None;
+            state.removing_feed = Some(feed_id);
             vec![UiCommand::Feeds(FeedsCommand::RemoveFeed { feed_id, feed_title })]
+        }
+        FeedsPageIntent::CancelRemoveFeed(feed_id) => {
+            if state.pending_delete_feed == Some(feed_id) && state.removing_feed.is_none() {
+                state.pending_delete_feed = None;
+                state.status_revision = state.status_revision.wrapping_add(1);
+                state.status = "已取消删除订阅。".to_string();
+                state.status_tone = "info".to_string();
+            }
+            Vec::new()
         }
         FeedsPageIntent::ExportConfigRequested => {
             clear_pending_confirmations(state);
@@ -297,6 +311,10 @@ pub(crate) fn reduce_feeds_page_intent(
         }
         FeedsPageIntent::PendingDeleteFeedSet(pending) => {
             state.pending_delete_feed = pending;
+            if pending.is_none() {
+                // Both success and failure release the existing runtime's delete gate.
+                state.removing_feed = None;
+            }
             Vec::new()
         }
         FeedsPageIntent::SetStatus { message, tone } => {
@@ -448,6 +466,8 @@ mod tests {
         );
 
         assert_eq!(effects.len(), 1);
+        assert_eq!(state.pending_delete_feed, None);
+        assert_eq!(state.removing_feed, Some(42));
         match &effects[0] {
             UiCommand::Feeds(FeedsCommand::RemoveFeed { feed_id, feed_title }) => {
                 assert_eq!(*feed_id, 42);
@@ -455,6 +475,65 @@ mod tests {
             }
             other => panic!("unexpected effect: {other:?}"),
         }
+    }
+
+    #[test]
+    fn cancel_delete_only_dismisses_its_own_confirmation_and_requires_a_fresh_one() {
+        let mut state = FeedsPageState::new();
+        state.pending_delete_feed = Some(42);
+
+        assert!(
+            reduce_feeds_page_intent(&mut state, FeedsPageIntent::CancelRemoveFeed(41)).is_empty()
+        );
+        assert_eq!(state.pending_delete_feed, Some(42), "a stale cancel cannot affect another row");
+        assert!(
+            reduce_feeds_page_intent(&mut state, FeedsPageIntent::CancelRemoveFeed(42)).is_empty()
+        );
+        assert_eq!(state.pending_delete_feed, None);
+        assert_eq!(state.status, "已取消删除订阅。");
+        assert!(
+            reduce_feeds_page_intent(
+                &mut state,
+                FeedsPageIntent::RemoveFeedRequested {
+                    feed_id: 42,
+                    feed_title: "Example".to_string(),
+                },
+            )
+            .is_empty(),
+            "cancel must discard the previous destructive confirmation"
+        );
+        assert_eq!(state.pending_delete_feed, Some(42));
+        assert_eq!(state.removing_feed, None);
+    }
+
+    #[test]
+    fn confirmed_delete_cannot_be_cancelled_or_resubmitted_before_completion() {
+        let mut state = FeedsPageState::new();
+        state.pending_delete_feed = Some(42);
+        let request =
+            FeedsPageIntent::RemoveFeedRequested { feed_id: 42, feed_title: "Example".to_string() };
+        assert_eq!(reduce_feeds_page_intent(&mut state, request.clone()).len(), 1);
+
+        assert!(
+            reduce_feeds_page_intent(&mut state, FeedsPageIntent::CancelRemoveFeed(42)).is_empty()
+        );
+        assert_eq!(state.removing_feed, Some(42));
+        assert!(reduce_feeds_page_intent(&mut state, request.clone()).is_empty());
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::RefreshAllRequested);
+        assert_eq!(
+            state.removing_feed,
+            Some(42),
+            "other actions cannot release an in-flight delete"
+        );
+        assert!(reduce_feeds_page_intent(&mut state, request.clone()).is_empty());
+
+        reduce_feeds_page_intent(&mut state, FeedsPageIntent::PendingDeleteFeedSet(None));
+        assert_eq!(state.removing_feed, None);
+        assert!(
+            reduce_feeds_page_intent(&mut state, request).is_empty(),
+            "retrying a failed deletion needs a new confirmation"
+        );
+        assert_eq!(state.pending_delete_feed, Some(42));
     }
 
     fn loaded_state() -> FeedsPageState {
