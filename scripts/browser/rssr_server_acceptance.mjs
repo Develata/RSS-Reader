@@ -65,8 +65,8 @@ const READER = '[data-page="reader"][data-position-ready="true"]';
 const LONG_POLL = /^\/api\/v1\/jobs\/[0-9a-f]{32}$/;
 const BANNER = {
   entries: '[data-layout="entries-main"] > [data-layout="status-banner"]',
-  feeds: '[data-page="feeds"] > [data-layout="status-banner"]',
-  settings: '[data-page="settings"] > [data-layout="status-banner"]',
+  feeds: '[data-page="feeds"] [data-layout="page-main"] > [data-layout="status-banner"]',
+  settings: '[data-page="settings"] [data-layout="page-main"] > [data-layout="status-banner"]',
   reader: '[data-page="reader"] [data-layout="status-banner"]',
 };
 const busy = (message) => JSON.stringify({ code: 'unavailable', message });

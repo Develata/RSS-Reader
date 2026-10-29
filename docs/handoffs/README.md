@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| 订阅与设置顶部层级 | [导航与独立主面板统一](./2026-10-29-secondary-page-surfaces.md) |
 | 2026-10-29 | [目录入口、固定标题与 Penpot 同步](./2026-10-29-directory-toolbar-sticky-header.md) |
 | 正文性能与后台图片调度 | [PR 与 CI 验收](./2026-10-29-parse-image-pr-ci.md)、[实现及证据](./2026-10-28-parse-image-performance.md)、[长期预算契约](../design/reader-processing-budgets.md) |
 | 文档维护与归档 | [2026-10-28 整理](./2026-10-28-docs-maintenance.md)、[历史索引](./archive/README.md) |
