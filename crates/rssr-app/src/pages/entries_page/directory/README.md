@@ -20,6 +20,7 @@
 
 - `DirectoryModel` 的 `presenter` 与 `entries` 是不同身份：渲染 props 用 Arc 身份比较，交互重置使用较窄的 `DirectoryResetIdentity`，不要把任意 presenter 变化都变成目录重置。
 - `resolve_article` 同时校验全局 `(index, id)`，再计算目标页。过期或越界引用返回 `None`；普通和虚拟分支都跳过它，不能按下标误展示另一篇文章。不要使用窗口内下标计算页码。
+- 阅读顺序由 `groups.rs` 统一负责：时间树的日期下按（全局页号、来源名称、来源 ID）建立页内来源段，目录仅拍平这些段，不维护自己的排序规则。两种模式都必须满足“分支的完整目录顺序 = 各页对应分支阅读顺序依次拼接”；保留所有全局引用。
 - `ArticleBranch` 只是借用两种投影中已有字段的显示描述，不持有状态，不克隆树。分支类型替代语义不明的 `true / false` 参数。
 - 月份／日期标签负责定位；右侧 `entry-directory-branch-toggle` 负责展开。DOM 顺序与视觉、Tab 顺序一致。父级 group toggle 与文章 branch toggle 的行为不同，不合并为一个含糊的动作。
 - `data-directory-kind`、`data-directory-anchor`、`data-directory-group-anchor`、`data-directory-page` 连接视图与 adapter；`aria-expanded` / `aria-controls` 连接控件与文章容器。调整内部类名时保留这些语义接口。
@@ -35,6 +36,7 @@
 3. `cargo clippy -p rssr-app --all-targets --locked -- -D warnings`
 4. 使用与锁文件匹配的 dx 0.7.9：`dx build --platform web --package rssr-app --release --locked --debug-symbols false`。release 保留完整优化，省去会触发本机 Binaryen DWARF 写出异常的调试信息；不要仅凭 dx 退出 0 判断优化成功，见[构建验收说明](../../../../../../docs/testing/release-ui-runner.md#web-release-构建约定)。
 5. 用 `PUBLIC_DIR=target/dx/rssr-app/release/web/public` 指向刚构建的产物，依次执行已有脚本 `scripts/browser/rssr_directory_offline_regression.cjs` 和 `scripts/browser/rssr_directory_window_acceptance.cjs`。脚本使用隔离无头 Chrome 和离线样例；依赖解析按本机已有 Playwright 安装设置。
+6. `scripts/browser/rssr_directory_page_order_acceptance.cjs` 覆盖5000篇同日多来源夹具，逐帧检查来源交界处往返滚动、固定标题、手机/平板浮层、浅深色、勾选保留与末篇跨页定位；已接入 CI。
 
 身份／分页规则修改需覆盖过期 ID、越界引用、页边界；视图／样式修改需覆盖时间与来源分组、手机浮层、鼠标／键盘展开。窗口路径修改还需检查焦点、跨页和收起后恢复；专项入口见下列契约。
 
