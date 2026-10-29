@@ -71,6 +71,7 @@
 - 实际浏览器截图检查：桌面与手机目标在固定标题下可见；逐帧证据用于判断跳动，静态截图本身不证明滚动稳定。
 - 证据目录：`C:/Users/QQ/Documents/Codex/2026-10-29/directory-jump/`。`regression-before/` 保存旧产物失败；`model-final/` 保存最终模型和最终回归脚本的截图、每帧轨迹及验收 JSON；`model-offline_regression/`、`model-window_acceptance/`、`model-window_boundaries/`、`model-window_review/` 保存已有回归；`rust-tests-model.log`、`clippy-model.log`、`native-build-model.log`、`web-build-model.log` 保存命令结果。产物构建于代码提交前的同一工作树，内嵌 Git 基线仍为 `8932a5ac`；对应生产源码已提交为 `a3dbd63e`，远端 CI 按 PR HEAD 重新构建。
 - Windows 原生隔离复测启动被自动审批拒绝，工具只给出 `blocked by policy`，因此未执行；不能将原生编译通过算作原生交互通过。Android、Safari、本机触摸/惯性及辅助技术此次未验收。
+- 同日后续：用户要求继续后，已从合并提交 `0692c924` 成功启动隔离 Windows 原生应用并完成复测，原视频动作、快速反向、虚拟窗口跟随与关闭重开均通过；环境、录像及范围见 [Windows 原生验收记录](./2026-10-29-directory-native-verification.md)。上项保留为前一阶段的执行记录。
 
 ## 结果
 
