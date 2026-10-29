@@ -126,6 +126,14 @@ async function main() {
       await page.keyboard.press('End');await focused(599);await idle();
       check('window bridge continues after '+fault,await mounted()<60);
     }
+    await page.setViewportSize({width:1440,height:360});await idle();
+    await page.keyboard.press('Home');await focused(0);
+    await page.waitForFunction(()=>[...document.querySelectorAll('[data-virtual-articles]')].every(e=>e.__rssrVirtualWindow?.idle),null,{timeout:5000});await idle();
+    const oversized = await page.locator(rail).evaluate(e=>{
+      const h=e.querySelector('.directory-heading-row').getBoundingClientRect(), r=e.getBoundingClientRect(), f=document.activeElement.getBoundingClientRect();
+      return {rowHeight:f.height,viewport:r.bottom-h.bottom,top:f.top,headerBottom:h.bottom};
+    });
+    check('a row taller than the viewport settles with its start visible',oversized.rowHeight>oversized.viewport && Math.abs(oversized.top-oversized.headerBottom)<1,oversized);
     check('no unhandled page errors',errors.length === 0,errors);
   } catch (error) {
     console.log('failure state',await page.evaluate(()=>({focus:{tag:document.activeElement?.tagName,index:document.activeElement?.dataset.virtualIndex}, windows:[...document.querySelectorAll('[data-virtual-articles]')].map(e=>({rev:e.dataset.windowRevision,idle:e.__rssrVirtualWindow?.idle,rows:[...e.querySelectorAll('[data-virtual-index]')].map(r=>r.dataset.virtualIndex)})),top:document.querySelector('[data-directory-consumer="rail"]')?.scrollTop})).catch(()=>null));

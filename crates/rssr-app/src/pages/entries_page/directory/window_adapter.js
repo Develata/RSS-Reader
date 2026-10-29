@@ -49,7 +49,7 @@ function schedule() { if (!disposed && !frame) frame = requestAnimationFrame(mea
 function keepKeyboardFocusVisible() {
     if (!keyboardReveal || document.activeElement !== keyboardReveal) return;
     const view = viewport(), row = keyboardReveal.getBoundingClientRect();
-    if (row.top < view.top) rail.scrollTop += row.top - view.top;
+    if (row.top < view.top || row.height > view.height) rail.scrollTop += row.top - view.top;
     else if (row.bottom > view.top + view.height) rail.scrollTop += row.bottom - view.top - view.height;
 }
 function finish() {
