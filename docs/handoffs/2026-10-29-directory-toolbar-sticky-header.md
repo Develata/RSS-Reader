@@ -4,9 +4,10 @@
 - 作者 / Agent：Codex
 - 分支：`codex/directory-toolbar-sticky-header`
 - 基线 HEAD：`6e99706ce90026c70c9538eb35faf572f02781fd`
-- 相关 commit：pending
+- 相关 commit：代码 `9e20b56a3e151e1b3c5ca63268d02165470b8d53`；设计版本记录为本次后续文档提交。
+- PR：[#39](https://github.com/Develata/RSS-Reader/pull/39)，目标 `main`。
 - 相关 tag / release：N/A
-- 状态：`draft`
+- 状态：`validated`
 
 ## 工作摘要
 
@@ -41,7 +42,7 @@
 - 600 篇虚拟目录：25 项通过；End／Home 焦点位于固定标题下，保持有界挂载；覆盖来源／时间、关闭重开、选择、自动跟随、异常消息。
 - 虚拟目录边界：11 项通过；覆盖旧回复、筛选／分组／分页切换和阅读返回。
 - 真实浏览器视觉矩阵：浅色、深色及四套主题 × 360/390/600/601/760/1000/1001/1200，共 48 组通过，保存 36 张截图及几何 JSON；最终布局及长计数补充复测通过。
-- Penpot 几何检查及 `File.validate()`：通过；57 个 capture-key 唯一，代表画板导出复核通过。
+- Penpot 几何检查及 `File.validate()`：通过；57 个 capture-key 唯一，代表平板、桌面滚动、浮层滚动及 Atlas 主题画板导出复核通过。文件 rev 386，命名版本 `Directory toolbar and sticky heading · 9e20b56a · 2026-10-29` 已保存并回读，00 使用说明及图层元数据注明代码提交。
 
 ### 证据与实际发现
 
@@ -51,7 +52,7 @@
 
 ## 结果
 
-- 代码与设计同步已实现；最终命名版本、提交、PR 和远端 CI 待收尾。
+- 代码与设计同步已实现并通过本地验收，分支已推送并创建 PR #39。远端 CI 和审查结果以该 PR 的提交检查记录为准；用户已授权必要检查通过后合并。
 
 ## 风险与后续事项
 
