@@ -6,7 +6,8 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| PR #40 主线整合 | [逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新源码原生复验](./2026-10-29-pr40-native-retry.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
+| PR #40 主线整合 | [逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
+| 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md) |
 | 主题预览与设计细节 | [设计审查改进与验收](./2026-10-29-design-refinements.md)、[原始审查依据](./2026-10-29-design-audit.md) |
 | 订阅与设置顶部层级 | [导航与独立主面板统一](./2026-10-29-secondary-page-surfaces.md) |
 | 2026-10-29 | [目录入口、固定标题与 Penpot 同步](./2026-10-29-directory-toolbar-sticky-header.md) |
@@ -27,6 +28,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-29 | [PR #40 接入目录顺序主线与原生复验](./2026-10-29-pr40-directory-order-integration.md) |
 | 2026-10-29 | [PR #40 CI 等待边界与诊断](./2026-10-29-pr40-ci-wait-boundaries.md) |
 | 2026-10-29 | [PR #40 最新源码 Windows 原生验收重试](./2026-10-29-pr40-native-retry.md) |
 | 2026-10-29 | [解析与图片队列 PR 创建及 CI 验收](./2026-10-29-parse-image-pr-ci.md) |

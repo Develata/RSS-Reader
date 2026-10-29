@@ -75,6 +75,8 @@ pub(crate) struct EntryDateGroup {
     pub(crate) title: String,
     pub(crate) subtitle: String,
     pub(crate) target_page: u32,
+    /// Page-local source segments, in page then source order. A full-scope tree
+    /// can contain the same source on several pages; a rendered page cannot.
     pub(crate) sources: Vec<EntryDateSourceGroup>,
 }
 
@@ -409,26 +411,28 @@ fn group_date_sources<'a>(
     entries: &[EntryGroupKey<'a>],
     page_size: usize,
 ) -> Vec<EntryDateSourceGroup> {
-    // Leaves only expose card references. Build that final vector directly instead of
-    // allocating a temporary vector of complete keys and copying it into a second one.
-    let mut groups: BTreeMap<(&'a str, i64), Vec<EntryCardRef>> = BTreeMap::new();
+    // Both full-scope and current-page trees use this ordering. Pagination happens
+    // before the main list groups sources, so page identity must be part of the
+    // grouping key too. Flattening a date now yields the concatenated reading
+    // order of its pages, without a directory-only reorder or another sort rule.
+    let mut groups: BTreeMap<(u32, &'a str, i64), Vec<EntryCardRef>> = BTreeMap::new();
 
     for entry in entries {
         groups
-            .entry((entry.feed_title, entry.feed_id))
+            .entry((page_for_index(entry.index, page_size), entry.feed_title, entry.feed_id))
             .or_default()
             .push(EntryCardRef::from_key(entry));
     }
 
     groups
         .into_iter()
-        .map(|((feed_title, feed_id), items)| {
+        .map(|((page, feed_title, feed_id), items)| {
             let anchor_id = format!("entry-date-source-{feed_id}-{}", items[0].id);
             EntryDateSourceGroup {
                 anchor_id,
                 title: feed_title.to_string(),
                 subtitle: format!("{} 篇文章", items.len()),
-                target_page: page_for_index(items[0].index, page_size),
+                target_page: page,
                 entry_cards: items,
             }
         })
@@ -651,6 +655,96 @@ mod tests {
 
         assert_eq!(group_anchor.as_deref(), Some(groups[0].anchor_id.as_str()));
         assert_eq!(directory_anchor.as_deref(), Some(groups[0].dates[1].anchor_id.as_str()));
+    }
+
+    #[test]
+    fn time_directory_follows_each_pages_reading_order_across_sources() {
+        let entries: Vec<_> = (0..12)
+            .map(|index| {
+                key(
+                    index,
+                    100 - index as i64,
+                    if index % 2 == 0 { "Beta" } else { "Alpha" },
+                    Some("2026-09-02T12:00:00Z"),
+                )
+            })
+            .collect();
+        let groups = group_entries_by_time_tree(&entries, 4);
+        let directory = build_directory_months(&groups, None, None);
+        let actual = cards(&directory[0].dates[0].entry_cards);
+        assert_eq!(
+            groups[0].dates[0].sources.iter().map(|source| source.target_page).collect::<Vec<_>>(),
+            vec![1, 1, 2, 2, 3, 3],
+            "page identity belongs to the shared grouping model, not a directory-only sort"
+        );
+        assert_eq!(
+            actual,
+            vec![
+                (1, 99),
+                (3, 97),
+                (0, 100),
+                (2, 98),
+                (5, 95),
+                (7, 93),
+                (4, 96),
+                (6, 94),
+                (9, 91),
+                (11, 89),
+                (8, 92),
+                (10, 90),
+            ],
+            "crossing sources in one page must not skip articles from other pages"
+        );
+        for (page, page_entries) in entries.chunks(4).enumerate() {
+            let main = group_entries_by_time_tree(page_entries, 4);
+            let expected: Vec<_> = main[0].dates[0]
+                .sources
+                .iter()
+                .flat_map(|source| cards(&source.entry_cards))
+                .collect();
+            assert_eq!(&actual[page * 4..(page + 1) * 4], expected.as_slice());
+        }
+        let resized = build_directory_months(&group_entries_by_time_tree(&entries, 5), None, None);
+        assert_eq!(
+            cards(&resized[0].dates[0].entry_cards),
+            vec![
+                (1, 99),
+                (3, 97),
+                (0, 100),
+                (2, 98),
+                (4, 96),
+                (5, 95),
+                (7, 93),
+                (9, 91),
+                (6, 94),
+                (8, 92),
+                (11, 89),
+                (10, 90)
+            ]
+        );
+    }
+
+    #[test]
+    fn undated_directory_keeps_global_refs_and_clamps_zero_page_size() {
+        let entries = vec![
+            key(7, 93, "Beta", None),
+            key(8, 92, "Alpha", None),
+            key(9, 91, "Beta", None),
+            key(10, 90, "Alpha", None),
+        ];
+        let groups = group_entries_by_time_tree(&entries, 3);
+        let directory = build_directory_months(&groups, None, None);
+        assert_eq!(directory[0].dates[0].title, "未标注日期");
+        assert_eq!(
+            cards(&directory[0].dates[0].entry_cards),
+            vec![(8, 92), (7, 93), (10, 90), (9, 91)]
+        );
+        let directory =
+            build_directory_months(&group_entries_by_time_tree(&entries, 0), None, None);
+        assert_eq!(
+            cards(&directory[0].dates[0].entry_cards),
+            vec![(7, 93), (8, 92), (9, 91), (10, 90)]
+        );
     }
 
     #[test]
