@@ -66,7 +66,7 @@ const LONG_POLL = /^\/api\/v1\/jobs\/[0-9a-f]{32}$/;
 const BANNER = {
   entries: '[data-layout="entries-main"] > [data-layout="status-banner"]',
   feeds: '[data-page="feeds"] [data-layout="page-main"] > [data-layout="status-banner"]',
-  settings: '[data-page="settings"] [data-layout="page-main"] > [data-layout="status-banner"]',
+  settings: '[data-page="settings"] [data-layout="settings-save-region"] [data-layout="status-banner"]',
   reader: '[data-page="reader"] [data-layout="status-banner"]',
 };
 const busy = (message) => JSON.stringify({ code: 'unavailable', message });
@@ -184,6 +184,13 @@ const choose = (page, field, value) => evaluate(page.client, chooseScript(field,
 const fieldValue = (page, field) => evaluate(page.client, `document.querySelector('[data-field="${field}"]')?.value`);
 const draft = (page) => evaluate(page.client, `sessionStorage.getItem('rssr.settings-draft')`);
 const RESTORED = '已恢复重新加载前未保存的设置修改，尚未保存。';
+
+async function openThemeAdvanced(page) {
+  if (!(await evaluate(page.client, `document.querySelector('[data-layout="theme-advanced"]')?.open`))) {
+    await pointerClick(page.client, '[data-slot="theme-advanced-toggle"]');
+  }
+  await waitFor(page.client, `(field => !!field && ${VISIBLE}(field))(document.querySelector('[data-field="custom-css"]'))`);
+}
 
 /// Marks the document: a full reload loses the mark.
 const markDocument = (page) => evaluate(page.client, 'window.__acceptanceDocument = true');
@@ -568,10 +575,93 @@ define('two-browsers', {}, async (s) => {
 
 // --- R2-07: build mismatch; V1: drafts ----------------------------------------------------------
 
+define('settings-preview-explicit-save', {}, async (s) => {
+  await seedDemo('/settings', SETTINGS, { edit: ({ core }) => {
+    core.settings.theme = 'light';
+    core.settings.list_density = 'comfortable';
+    core.settings.refresh_interval_minutes = 30;
+    core.settings.custom_css = '';
+  } });
+  await main.traffic.settled();
+  await markDocument(main);
+  const stored = await state('/api/v1/settings');
+  const preview = main.traffic.mark();
+  s.check('advanced CSS is folded initially; there is one set of five theme cards',
+    !(await shown(main, '[data-field="custom-css"]'))
+    && await evaluate(main.client, `document.querySelectorAll('[data-layout="theme-gallery"] [data-layout="theme-card"]').length === 5
+      && document.querySelectorAll('button[data-action="apply-theme-preset"]').length === 4
+      && !document.querySelector('[data-field="preset-theme-select"]')`));
+
+  await choose(main, 'theme-mode', 'dark');
+  await choose(main, 'list-density', 'compact');
+  await fillField(main.client, '[data-field="refresh-interval"]', '75');
+  await pointerClick(main.client, 'button[data-action="apply-theme-preset"][data-theme-preset="newsprint"]');
+  await waitFor(main.client, `document.querySelector('#user-custom-css')?.textContent.includes('Newsprint')
+    && document.querySelector('.app-shell')?.classList.contains('theme-dark')
+    && document.querySelector('.app-shell')?.dataset.density === 'compact'`);
+  s.check('the chosen card exposes selected state and includes its visible label in its accessible name',
+    await evaluate(main.client, `(() => { const button = document.querySelector('button[data-theme-preset="newsprint"]');
+      return button?.getAttribute('aria-pressed') === 'true'
+        && button.getAttribute('aria-label').includes(button.textContent.trim()); })()`));
+  await pointerClick(main.client, '[data-action="clear-custom-css"]');
+  await waitFor(main.client, `!document.querySelector('#user-custom-css')`);
+  await openThemeAdvanced(main);
+  const css = ':root { --acceptance-mark: #123456; }';
+  await fillField(main.client, '[data-field="custom-css"]', css);
+  await waitFor(main.client, `document.querySelector('[data-field="custom-css"]')?.value === ${JSON.stringify(css)}`);
+  s.check('typing CSS changes only the draft, until preview is requested',
+    await evaluate(main.client, `!document.querySelector('#user-custom-css')`));
+  await pointerClick(main.client, '[data-action="apply-custom-css"]');
+  await waitFor(main.client, `getComputedStyle(document.documentElement).getPropertyValue('--acceptance-mark').trim() === '#123456'`);
+  await main.traffic.settled();
+  s.check('mode, density, preset, reset and CSS preview sent no settings write',
+    main.traffic.count(preview, 'PATCH', '/api/v1/settings') === 0, main.traffic.log(preview));
+  s.check('the server still holds the saved settings; unsaved state is beside the save button',
+    JSON.stringify(await state('/api/v1/settings')) === JSON.stringify(stored)
+    && await shown(main, '[data-layout="settings-save-region"][data-state="dirty"] [data-slot="settings-save-status"]'));
+  await capturePage(main.client, artifactDir, 'settings-preview-unsaved');
+
+  const save = main.traffic.mark();
+  await pointerClick(main.client, '[data-action="save-settings"]');
+  await waitBanner(main, BANNER.settings, 'info', '设置已保存');
+  await main.traffic.settled();
+  const saved = await state('/api/v1/settings');
+  s.check('one explicit save commits all edited fields together',
+    main.traffic.count(save, 'PATCH', '/api/v1/settings') === 1
+    && saved.theme === 'dark' && saved.list_density === 'compact'
+    && saved.refresh_interval_minutes === 75 && saved.custom_css === css,
+    { saved, traffic: main.traffic.log(save) });
+  s.check('the save result and clean state are shown beside the button',
+    await shown(main, '[data-layout="settings-save-region"][data-state="clean"]')
+    && await shown(main, BANNER.settings));
+
+  const leaving = main.traffic.mark();
+  await choose(main, 'theme-mode', 'light');
+  await pointerClick(main.client, '[data-action="clear-custom-css"]');
+  await waitFor(main.client, `!document.querySelector('#user-custom-css')
+    && document.querySelector('.app-shell')?.classList.contains('theme-light')`);
+  await clickSelector(main.client, '[data-action="activate-home"]');
+  await selectorExists(main.client, ENTRIES);
+  await waitFor(main.client, `document.querySelector('.app-shell')?.classList.contains('theme-dark')
+    && getComputedStyle(document.documentElement).getPropertyValue('--acceptance-mark').trim() === '#123456'`);
+  s.check('ordinary navigation restores the saved appearance in the same document',
+    await sameDocument(main) && (await draft(main)) === null);
+  await clickSelector(main.client, '[data-nav="settings"]');
+  await selectorExists(main.client, SETTINGS);
+  await main.traffic.settled();
+  s.check('reopening starts clean from saved values and does not write the discarded preview',
+    (await fieldValue(main, 'theme-mode')) === 'dark'
+    && (await fieldValue(main, 'custom-css')) === css
+    && await shown(main, '[data-layout="settings-save-region"][data-state="clean"]')
+    && main.traffic.count(leaving, 'PATCH', '/api/v1/settings') === 0
+    && JSON.stringify(await state('/api/v1/settings')) === JSON.stringify(saved), main.traffic.log(leaving));
+});
+
 define('build-mismatch-keeps-edits', {}, async (s) => {
   await seedDemo('/settings', SETTINGS);
   const stored = await state('/api/v1/settings');
   await choose(main, 'theme-mode', 'dark');
+  await openThemeAdvanced(main);
   await fillField(main.client, '[data-field="custom-css"]', ':root { --acceptance-mark: #123456; }');
   const stale = await staleBuild(main);
   await clickSelector(main.client, '[data-action="save-settings"]');
@@ -585,10 +675,16 @@ define('build-mismatch-keeps-edits', {}, async (s) => {
   await clickSelector(main.client, '[data-action="reload-page"]');
   await waitUntil('the reload', 15000, async () => !(await sameDocument(main).catch(() => true)));
   await selectorExists(main.client, SETTINGS);
-  await textShown(main.client, RESTORED);
+  await waitBanner(main, BANNER.settings, 'info', RESTORED);
+  await waitBanner(main, BANNER.settings, 'info', 'CSS 草稿已恢复，需重新预览');
   const restored = { theme: await fieldValue(main, 'theme-mode'), density: await fieldValue(main, 'list-density'), css: await fieldValue(main, 'custom-css') };
   s.check('after the reload the committed and the later edits are back', restored.theme === 'dark' && restored.density === 'compact'
     && restored.css.includes('#123456'), restored);
+  s.check('restored raw CSS remains unapplied until explicitly previewed', await evaluate(main.client,
+    `getComputedStyle(document.documentElement).getPropertyValue('--acceptance-mark').trim() === ''`));
+  await openThemeAdvanced(main);
+  await pointerClick(main.client, '[data-action="apply-custom-css"]');
+  await waitFor(main.client, `getComputedStyle(document.documentElement).getPropertyValue('--acceptance-mark').trim() === '#123456'`);
   await main.traffic.settled();
   s.check('restored, not saved by itself', main.traffic.count(mark, 'PATCH', '/api/v1/settings') === 0
     && JSON.stringify(await state('/api/v1/settings')) === JSON.stringify(stored), main.traffic.log(mark));

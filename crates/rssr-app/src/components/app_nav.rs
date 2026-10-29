@@ -12,10 +12,11 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
     let submit_shell = shell.clone();
     let update_shell = shell.clone();
     let refresh = shell.refresh_state();
+    let home_label = shell.home_label();
     let home_title = if refresh.label().is_empty() {
-        "Read / 首页；在首页再次点击刷新全部订阅".to_string()
+        home_label.to_string()
     } else {
-        format!("Read / 首页；{}；在首页再次点击刷新全部订阅", refresh.label())
+        format!("{home_label}；{}", refresh.label())
     };
     let toggle_title = match (shell.is_collapsed(), refresh.label()) {
         (true, "") => "向右展开导航".to_string(),
@@ -42,7 +43,7 @@ pub fn AppNav(on_back: Option<EventHandler<()>>) -> Element {
                 button {
                     class: "icon-link-button", "data-slot": "app-nav-brand",
                     "data-action": "activate-home", "data-refresh-state": refresh.phase(),
-                    r#type: "button", aria_label: "Read / 首页", title: home_title,
+                    r#type: "button", aria_label: home_label, title: home_title,
                     aria_busy: refresh.is_refreshing(),
                     onclick: move |_| home_shell.activate_home(),
                     span { "data-slot": "app-nav-brand-mark", aria_hidden: "true", "R" }

@@ -6,7 +6,7 @@ use rssr_domain::UserSettings;
 
 use super::{browser::open_repository_url, intent::SettingsPageIntent, themes::detect_preset_key};
 use crate::{
-    theme::ThemeController,
+    theme::{ThemeAppearance, ThemeController},
     ui::{
         AppShellState, SettingsCommand, UiCommand, UiIntent, apply_projected_ui_intents, drafts,
         run_ui_command,
@@ -23,6 +23,10 @@ use crate::{
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct SettingsPageSession {
     theme: ThemeController,
+    preview_owner: u64,
+    /// Explicit CSS preview, or the current stored CSS when none was requested on this page.
+    /// Typing and restoring an editor draft never implicitly apply that draft.
+    preview_css: Signal<Option<String>>,
     stored: Signal<UserSettings>,
     edits: Signal<Edits>,
     /// `stored` with the edits on top; what the form shows.
@@ -94,11 +98,18 @@ impl SettingsPageSession {
             use_signal(|| Edits { submitted: None, pending: drafts::peek().unwrap_or_default() });
         let restored = !edits.peek().pending.is_empty();
         let draft = use_signal(|| edits.peek().over(&stored.peek()));
+        let preview_owner = use_hook(move || theme.begin_preview());
+        let preview_css = use_signal(|| None);
+        use_drop(move || theme.end_preview(preview_owner));
         let writes = use_signal(Writes::default);
         let preset_choice = use_signal(|| detect_preset_key(&draft.peek().custom_css).to_string());
         let status = use_signal(|| {
             if restored {
-                "已恢复重新加载前未保存的设置修改，尚未保存。".to_string()
+                let mut message = "已恢复重新加载前未保存的设置修改，尚未保存。".to_string();
+                if edits.peek().pending.custom_css.is_some() {
+                    message.push_str(" CSS 草稿已恢复，需重新预览。");
+                }
+                message
             } else {
                 String::new()
             }
@@ -106,11 +117,23 @@ impl SettingsPageSession {
         let status_tone = use_signal(|| "info".to_string());
         let shell = try_consume_context::<AppShellState>();
 
-        let session =
-            Self { theme, stored, edits, draft, writes, preset_choice, status, status_tone, shell };
+        let session = Self {
+            theme,
+            preview_owner,
+            preview_css,
+            stored,
+            edits,
+            draft,
+            writes,
+            preset_choice,
+            status,
+            status_tone,
+            shell,
+        };
         // A restored draft is the shell's to keep from now on; then it leaves the storage.
         use_effect(move || {
             session.publish_draft();
+            session.refresh_preview();
             if restored {
                 drafts::forget();
             }
@@ -142,7 +165,38 @@ impl SettingsPageSession {
             edits.pending = std::mem::take(&mut edits.pending).followed_by(changed);
         });
         self.draft.set(next);
+        // A previous save result describes the previous draft, not these newer edits.
+        self.set_status(String::new(), "info");
         self.publish_draft();
+        self.refresh_preview();
+    }
+
+    fn refresh_preview(self) {
+        let mut appearance = ThemeAppearance::from(&*self.draft.peek());
+        appearance.custom_css = self
+            .preview_css
+            .peek()
+            .clone()
+            .unwrap_or_else(|| self.stored.peek().custom_css.clone());
+        // Numeric inputs may hold an out-of-range draft until save reports validation. Do not
+        // turn that intermediate value into unusable typography during a visual preview.
+        if !(rssr_domain::validation::MIN_READER_FONT_SCALE
+            ..=rssr_domain::validation::MAX_READER_FONT_SCALE)
+            .contains(&appearance.reader_font_scale)
+        {
+            appearance.reader_font_scale = self.stored.peek().reader_font_scale;
+        }
+        self.theme.preview(self.preview_owner, appearance);
+    }
+
+    pub(crate) fn preview_custom_css(mut self, css: String) {
+        self.preview_css.set(Some(css));
+        self.refresh_preview();
+    }
+
+    pub(crate) fn has_unsaved_changes(self) -> bool {
+        let edits = self.edits.read();
+        !edits.pending.is_empty() || edits.submitted.is_some()
     }
 
     /// The edits a save would send.
@@ -313,9 +367,11 @@ impl SettingsPageSession {
         let draft = self.edits.peek().over(&settings);
         if !self.edits.peek().edit_custom_css() {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
+            self.preview_css.set(None);
         }
         self.draft.set(draft);
         self.stored.set(settings);
+        self.refresh_preview();
     }
 
     /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset
@@ -334,9 +390,13 @@ impl SettingsPageSession {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
         let has_unsaved_edits = !self.edits.peek().pending.is_empty();
+        if self.edits.peek().pending.custom_css.is_none() {
+            self.preview_css.set(None);
+        }
         self.draft.set(draft);
         self.stored.set(settings.clone());
         self.theme.store(settings);
+        self.refresh_preview();
         has_unsaved_edits
     }
 

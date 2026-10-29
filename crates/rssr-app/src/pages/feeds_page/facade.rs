@@ -114,6 +114,14 @@ impl FeedsPageFacade {
         self.session.is_delete_pending_for(feed_id)
     }
 
+    pub(crate) fn is_removing_feed(&self, feed_id: i64) -> bool {
+        self.snapshot.removing_feed == Some(feed_id)
+    }
+
+    pub(crate) fn is_delete_busy(&self) -> bool {
+        self.snapshot.removing_feed.is_some()
+    }
+
     pub(crate) fn empty_feeds_message(&self) -> &'static str {
         "还没有订阅，先添加一个 feed URL。"
     }
@@ -123,15 +131,31 @@ impl FeedsPageFacade {
     }
 
     pub(crate) fn remove_feed_button_variant(&self, feed_id: i64) -> &'static str {
-        if self.is_delete_pending_for(feed_id) { "danger" } else { "danger-outline" }
+        if self.is_delete_pending_for(feed_id) || self.is_removing_feed(feed_id) {
+            "danger"
+        } else {
+            "danger-outline"
+        }
     }
 
     pub(crate) fn remove_feed_button_label(&self, feed_id: i64) -> &'static str {
-        if self.is_delete_pending_for(feed_id) { "确认删除" } else { "删除订阅" }
+        if self.is_removing_feed(feed_id) {
+            "正在删除…"
+        } else if self.is_delete_pending_for(feed_id) {
+            "确认删除"
+        } else {
+            "删除订阅"
+        }
     }
 
     pub(crate) fn remove_feed_state(&self, feed_id: i64) -> &'static str {
-        if self.is_delete_pending_for(feed_id) { "confirm" } else { "idle" }
+        if self.is_removing_feed(feed_id) {
+            "busy"
+        } else if self.is_delete_pending_for(feed_id) {
+            "confirm"
+        } else {
+            "idle"
+        }
     }
 
     pub(crate) fn feeds(&self) -> &[FeedSummary] {
@@ -184,5 +208,9 @@ impl FeedsPageFacade {
 
     pub(crate) fn remove_feed(&self, feed_id: i64, feed_title: String) {
         self.session.remove_feed(feed_id, feed_title);
+    }
+
+    pub(crate) fn cancel_remove_feed(&self, feed_id: i64) {
+        self.session.cancel_remove_feed(feed_id);
     }
 }

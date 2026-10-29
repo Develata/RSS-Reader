@@ -19,7 +19,7 @@ pub(crate) use rssr_domain::validation::validate_custom_css;
 #[component]
 pub(crate) fn ThemeSettingsSections(facade: SettingsPageFacade) -> Element {
     rsx! {
-        ThemeLabSection { facade: facade.clone() }
-        ThemePresetSections { facade }
+        ThemePresetSections { facade: facade.clone() }
+        ThemeLabSection { facade }
     }
 }

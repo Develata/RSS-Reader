@@ -176,15 +176,15 @@
     width: 100%;
   }
 
-  /* 文章列表的动作保持内容宽度的胶囊并排；整行按钮会让每篇文章被两条色带压住。
-     订阅卡片的动作（刷新 / 删除）仍按整行排列。 */
+  /* Keep icon hit areas together; confirmation text may wrap without shrinking targets. */
   [data-layout="feed-card-actions"] {
-    display: grid;
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-wrap: wrap;
   }
 
   [data-layout="feed-card-actions"] [data-slot="entry-card-action"] {
-    width: 100%;
+    width: auto;
+    min-width: 44px;
   }
 
   [data-layout="entry-group-header"] {
@@ -257,7 +257,6 @@
   [data-layout="entry-organize-bar"],
   [data-layout="entry-filters"],
   [data-layout="entry-overview-metric"],
-  [data-layout="settings-card"],
   [data-layout="exchange-card"] {
     padding-left: 14px;
     padding-right: 14px;

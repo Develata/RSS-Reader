@@ -43,6 +43,8 @@ CLI 直接复用 `AppUseCases`，不依赖 UI 命令类型。实现边界见
 
 顶部展开态为 `[R] [搜索图标] [RSS 图标] [齿轮图标] [收起箭头]`，Reader 最左侧增加返回图标。R 同时是 brand / Read / Home，没有独立“文章”导航按钮。
 
+R 的可访问名称随实际动作变化：全局文章页为“Read / 刷新全部订阅”，其他路由为“Read / 首页”。`title` 在此基础上附加当前刷新反馈；名称变化不改变导航或刷新命令。
+
 | 稳定接口 | Rust 语义 / 结果 |
 | --- | --- |
 | `data-action="activate-home"` | `resolve_home_action(AppRoute)`：只有全局 `EntriesPage` 返回 `ManualRefresh`；其他路由只导航到全局文章页 |
@@ -89,7 +91,7 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 
 搜索输入框保持 shell 级状态；窄屏或持久化的旧版侧栏 CSS 把导航压窄时，导航行允许换行，输入框占满下一行。换行预算包含收起按钮预留的 48px，避免新增箭头把输入框挤窄。
 
-文章列表在筛选栏下显示 `entry-filter-summary`，其中 `entry-filter-summary-text` 概括当前搜索、已读、收藏与来源条件；单订阅页不显示未参与查询的来源偏好。`clear-entry-filters` 清空 shell 搜索和上述状态条件，重置第一页，沿既有查询、偏好保存和清空选择路径生效；分组、归档显示偏好与路由订阅范围保留。空结果区分没有订阅、订阅尚无文章、文章已归档及当前筛选无匹配，筛选摘要在无匹配时仍提供清除入口。首次文章查询成功后才显示空结果说明；加载中或首次读取失败时只显示相应状态，不推断文章库为空。
+文章列表在筛选栏下显示 `entry-filter-summary`，其中 `entry-filter-summary-text` 概括当前搜索、已读、收藏与来源条件；单订阅页不显示未参与查询的来源偏好。`clear-entry-filters` 清空 shell 搜索和上述状态条件，重置第一页，沿既有查询、偏好保存和清空选择路径生效；分组、归档显示偏好与路由订阅范围保留。列表选项保留清除入口；有生效筛选且无匹配结果时，`entries-page-state[data-state="empty"]` 内另有同一动作的“清除筛选”按钮，操作后焦点回到可用的搜索框或列表选项。自动化应限定所在区域，不能假定该动作只有一个节点。空结果继续区分没有订阅、订阅尚无文章、文章已归档及当前筛选无匹配；没有生效筛选时不添加这个清除按钮。首次文章查询成功后才显示空结果说明；加载中或首次读取失败时只显示相应状态，不推断文章库为空。
 
 来源选择使用 `open-source-filter` 打开原生 dialog，Rust 管理草稿；全部／部分入口分别显示“全部来源”／“…”。完整名称在可搜索、可滚动的勾选列表内显示。旧 `entry-filters-source-chip` 与来源未读数槽位已退役；统计移至订阅页。分页只渲染一份 `entry-pagination`，位于页面 panel 的同级，固定于视口下方并预留 safe-area / 内容末尾空间。
 
@@ -125,12 +127,15 @@ Android 外壳通过 `OnBackPressedDispatcher` 将系统返回经 JNI 放入有�
 
 - 添加订阅
 - 删除订阅
+- 取消尚未提交的删除确认
 - 刷新单个订阅
 - 刷新全部订阅
 
-`feed-form` 使用原生 submit；地址输入 Enter 与 `data-action="add-feed"` 调用同一添加命令。`refresh-all` 为独立 button，不提交地址输入。
+`feed-form` 使用原生 submit；地址输入 Enter 与 `data-action="add-feed"` 调用同一添加命令。`refresh-all` 位于 `exchange-header[data-section="saved-feeds"]` 的“已保存订阅”标题旁，不属于新增订阅表单，也不提交地址输入。
 
 订阅页“刷新全部”直接读取 shell 的共享刷新状态；任一入口启动刷新后，该按钮同步显示“正在刷新…”、原生 `disabled` 与 `aria-busy="true"`，结束后恢复。页面不另建刷新中的局部状态。
+
+`remove-feed` 第一次点击只进入该来源的确认态，显示来源名称、删除本地文章的后果、危险色“确认删除”和就近“取消”。`cancel-remove-feed` 经 facade/session 取消匹配来源的未提交确认，并把焦点还给该行删除按钮；再次删除需要重新确认。确认提交后进入 `busy`，显示“正在删除…”并移除取消入口；同页所有删除入口暂时禁用，该行编辑／刷新也禁用，reducer 拒绝排队的重复删除。原命令的成功或失败回执释放忙碌状态，失败后的重试仍需重新确认。取消不撤回已提交的删除，也不新增恢复或撤销能力；原有其他操作及快照变化清除待确认状态的规则保留。
 
 Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以 disabled / `aria-busy` 提示；输入仍可编辑，成功仅清空未变化的已提交地址，失败释放 pending 并保留输入。`LoadSnapshot` 以页面内 query generation 丢弃旧查询的成功和错误，避免刷新、添加与删除交错时旧统计覆盖新结果。两者均属于共享 Rust 页面交互，不改变 application 用例或增加平台分支。
 
@@ -161,15 +166,23 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 ### 设置与主题相关
 
 - 保存设置
-- 应用当前 CSS
-- 导入主题文件
+- 预览当前 CSS
+- 导入主题文件并预览
 - 导出当前 CSS
-- 应用所选主题
-- 清空当前自定义 CSS
+- 从主题卡片选择并预览内置主题
+- 恢复默认主题的预览
 - 上传 WebDAV 配置
 - 下载 WebDAV 配置
 
-所有外观保存入口共用同步 pending gate。一次保存针对点击时的草稿快照；期间的新编辑继续留在草稿中，完成提示明确其尚未保存。失败不会恢复旧值覆盖草稿。该策略属于页面 session，不改变 settings application 用例。
+设置页采用“本页预览 → 显式保存”的统一模型。主题卡片 `apply-theme-preset`、`apply-custom-css`、导入 CSS 和 `clear-custom-css` 都只修改草稿及本页预览，不写入资料库，也不顺带保存其他字段。浅色／深色、密度与阅读字号的草稿修改可即时预览；CSS 文本输入本身不注入样式，须点击“预览当前 CSS”或显式保存。预览前校验 CSS，失败保留当前预览。
+
+内置主题入口合并为默认主题及四个预设的卡片；`aria-pressed` 与 `theme-card[data-state="active|inactive"]` 表示草稿选择，可访问名称包含可见按钮文字及主题名。CSS 编辑和文件操作位于可展开的 `theme-advanced`。旧 `apply-selected-theme`、`remove-theme-preset`、`preset-theme-select`、`theme-preset-selector` 与 `theme-preset-quick-actions` 已退役；恢复默认统一使用 `clear-custom-css`，不再为每个预设提供移除按钮。
+
+`save-settings` 是上述草稿的统一保存入口，位于 `settings-save-region`，与未保存／保存中状态、结果 live region 和离页提示相邻。该区域的 `data-state` 为 `clean | dirty | pending`；结果的成功／失败色调仍由 `StatusBanner` 表达。保存共用同步 pending gate，一次只提交点击时已编辑字段的补丁；期间的新编辑继续留在草稿中，完成提示明确其尚未保存。失败保留草稿及当前预览。WebDAV 端点和远端路径仍是会话字段，不由这个按钮写入配置；上传／下载沿用独立命令。
+
+预览与实际已存设置分离，不增加资料库写入版本。普通页内导航离开设置时丢弃该页草稿及预览，恢复实际已存外观；旧页面的迟到预览或清理不能覆盖新页面。正式 Web 的版本更新／重新登录恢复流程仍按既有规则暂存草稿，返回设置后待用户保存，不把该恢复流程改成普通导航丢弃。
+
+已保存的内置主题 CSS 是当时的文本快照，升级保留原样并继续识别旧版本身份。要采用新版样式，重新点击对应卡片预览，再点“保存设置”；旧版本显示“当前已选”不代表已替换成最新 CSS。以上变更属于页面呈现与 session，不改变 settings application 用例或配置格式。
 
 ### 配置交换相关
 
@@ -275,6 +288,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-action="select-feed-candidate"`
 - `data-action="cancel-feed-discovery"`
 - `data-action="remove-feed"`
+- `data-action="cancel-remove-feed"`
 - `data-action="refresh-feed"`
 - `data-action="refresh-all"`
 - `data-action="export-config"`
@@ -290,9 +304,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-action="apply-custom-css"`
 - `data-action="export-custom-css-file"`
 - `data-action="import-custom-css-file"`
-- `data-action="apply-selected-theme"`
 - `data-action="apply-theme-preset"`
-- `data-action="remove-theme-preset"`
 - `data-action="clear-custom-css"`
 - `data-action="open-github-repo"`
 - `data-action="activate-home"`
@@ -404,7 +416,6 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-field="refresh-interval"`
 - `data-field="archive-after-months"`
 - `data-field="reader-font-scale"`
-- `data-field="preset-theme-select"`
 - `data-field="custom-css"`
 - `data-field="webdav-endpoint"`
 - `data-field="webdav-remote-path"`
@@ -422,6 +433,8 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-state="info" | "error" | "success"`
 - `data-state="pending" | "idle"`
 - `data-state="confirm" | "idle"`
+- 订阅行与其操作组：`data-state="idle" | "confirm" | "busy"`
+- 设置保存区：`data-state="clean" | "dirty" | "pending"`
 - `data-state="active" | "inactive"`
 - `data-state="available" | "unavailable"`
 - `data-state="read" | "unread"`

@@ -29,7 +29,6 @@ const APP_STYLESHEET: &str = concat!(
 pub fn App() -> Element {
     crate::ui::reading_position::use_reading_positions();
     let theme = use_theme_controller();
-    let settings = theme.settings;
     let shell = use_app_shell_state();
     use_context_provider(|| theme);
     use_context_provider(|| shell);
@@ -37,8 +36,8 @@ pub fn App() -> Element {
     use_authenticated_shell_bus(shell, theme);
     use_reread_triggers(shell);
 
-    // 每次 `settings()` 都会克隆一整份 UserSettings（含完整 custom_css 文本），只读一次后面复用。
-    let current_settings = settings();
+    // A settings-page preview only overrides presentation, never the stored settings signal.
+    let current_settings = theme.appearance();
 
     rsx! {
         document::Title { "{APP_NAME}" }
