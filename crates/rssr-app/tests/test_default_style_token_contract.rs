@@ -84,8 +84,12 @@ fn hardcoded_color_violations(name: &str, css: &str) -> Vec<String> {
     let mut violations = Vec::new();
     for (index, line) in css.lines().enumerate() {
         let lower = line.to_ascii_lowercase();
-        let has_color_function =
-            ["rgb(", "rgba(", "hsl(", "hsla("].iter().any(|prefix| lower.contains(prefix));
+        let has_color_function = ["rgb(", "rgba(", "hsl(", "hsla("].iter().any(|prefix| {
+            lower.match_indices(prefix).any(|(start, _)| {
+                // Relative colors may derive an opaque surface from a theme token.
+                !lower[start + prefix.len()..].trim_start().starts_with("from var(")
+            })
+        });
         let has_hex_color = line.char_indices().any(|(byte_index, character)| {
             character == '#'
                 && line[byte_index + 1..]
@@ -98,6 +102,17 @@ fn hardcoded_color_violations(name: &str, css: &str) -> Vec<String> {
         }
     }
     violations
+}
+
+#[test]
+fn relative_token_colors_are_not_literal_palette_values() {
+    assert!(
+        hardcoded_color_violations("test", "background: rgb(from var(--panel-strong) r g b / 1);")
+            .is_empty()
+    );
+    for literal in ["rgb(255 255 255)", "rgb(from white r g b)", "#ffffff"] {
+        assert_eq!(hardcoded_color_violations("test", literal).len(), 1);
+    }
 }
 
 #[test]

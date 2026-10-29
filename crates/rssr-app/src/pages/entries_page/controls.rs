@@ -17,6 +17,11 @@ pub(super) fn render_entry_controls(
     let time_mode = facade.clone();
     let archive = facade.clone();
     let clear = facade.clone();
+    let count_label = if facade.selected_count() > 0 {
+        format!("已选 {}", facade.selected_count())
+    } else {
+        format!("{} 篇", facade.visible_entries_len())
+    };
     rsx! {
         div { class: "entries-toolbar",
             div { class: "entries-toolbar-title",
@@ -25,10 +30,7 @@ pub(super) fn render_entry_controls(
                     span { class: "entry-select-box", "data-checked": facade.page_selection_state(), aria_hidden: "true" }
                 }
                 h1 { "data-slot": "page-title", "文章" }
-                span { class: "entries-count", aria_live: "polite", if facade.selected_count() > 0 { "已选 {facade.selected_count()}" } else { "{facade.visible_entries_len()} 篇" } }
-                button { class: "directory-open-button workspace-icon-button", "data-action": "open-directory", title: "打开目录", aria_label: "打开目录", aria_controls: "reading-directory", aria_expanded: directory_open, disabled: facade.group_nav_items().is_empty(),
-                    onclick: move |_| on_open_directory.call(()), Icon { name: "directory" }
-                }
+                span { class: "entries-count", aria_live: "polite", title: "{count_label}", "{count_label}" }
             }
             EntryFilters {
                 source_filter_open,
@@ -42,12 +44,17 @@ pub(super) fn render_entry_controls(
                 button { aria_pressed: facade.grouping_mode() == EntryGroupingMode::Source, "data-action": "group-by-source", onclick: move |_| source_mode.set_grouping_mode(EntryGroupingMode::Source), "来源" }
                 button { aria_pressed: facade.grouping_mode() == EntryGroupingMode::Time, "data-action": "group-by-time", onclick: move |_| time_mode.set_grouping_mode(EntryGroupingMode::Time), "时间" }
             }
-            { super::bulk::render_bulk_controls(facade) }
-            details { class: "entries-view-options",
-                summary { class: "workspace-icon-button", title: "列表选项", aria_label: "列表选项", Icon { name: "more" } }
-                div { class: "entries-view-options-body",
-                    label { input { r#type: "checkbox", checked: facade.show_archived(), onchange: move |event| archive.set_show_archived(event.checked()) } "显示已归档文章" }
-                    button { class: "button", "data-variant": "secondary", "data-action": "clear-entry-filters", onclick: move |_| clear.clear_filters(), "清除筛选" }
+            div { class: "entries-toolbar-actions",
+                { super::bulk::render_bulk_controls(facade) }
+                details { class: "entries-view-options",
+                    summary { class: "workspace-icon-button", title: "列表选项", aria_label: "列表选项", Icon { name: "more" } }
+                    div { class: "entries-view-options-body",
+                        label { input { r#type: "checkbox", checked: facade.show_archived(), onchange: move |event| archive.set_show_archived(event.checked()) } "显示已归档文章" }
+                        button { class: "button", "data-variant": "secondary", "data-action": "clear-entry-filters", onclick: move |_| clear.clear_filters(), "清除筛选" }
+                    }
+                }
+                button { class: "directory-open-button workspace-icon-button", "data-action": "open-directory", title: "打开目录", aria_label: "打开目录", aria_controls: "reading-directory", aria_expanded: directory_open, disabled: facade.group_nav_items().is_empty(),
+                    onclick: move |_| on_open_directory.call(()), Icon { name: "directory" }
                 }
             }
         }

@@ -2,9 +2,17 @@
 const root = document.getElementById(windowId);
 const rail = root?.closest('[data-directory-consumer="rail"]');
 if (!root || !rail) return;
+const heading = rail.querySelector('.directory-heading-row');
+function viewport() {
+    const r = rail.getBoundingClientRect(), edge = r.top + rail.clientTop;
+    const bottom = edge + rail.clientHeight;
+    const top = Math.min(bottom, Math.max(edge, heading?.getBoundingClientRect().bottom || edge));
+    return {top, height: bottom - top};
+}
 root.__rssrVirtualWindow?.cleanup();
 const directoryEpoch = rail.dataset.directoryEpoch;
 let disposed = false, frame = 0, sequence = 0, inFlight = null, reply = null, signature = '';
+let keyboardReveal = null;
 const pending = new Map(), abort = new AbortController();
 const listen = (target, type, fn, options = {}) => target.addEventListener(type, fn, {...options, signal: abort.signal});
 const number = value => Math.round(value * 4) / 4;
@@ -27,16 +35,23 @@ function queue(key, fact, resolve) {
 function measure() {
     frame = 0;
     if (!current()) { cleanup(); return; }
-    const r = rail.getBoundingClientRect(), b = root.getBoundingClientRect();
-    if (!r.width || !r.height || !b.width) return;
-    const fact = {kind: 'measure', top: number(r.top + rail.clientTop - b.top), viewport: rail.clientHeight,
+    const view = viewport(), b = root.getBoundingClientRect();
+    if (!view.height || !b.width) return;
+    const fact = {kind: 'measure', top: number(view.top - b.top), viewport: view.height,
         width: number(b.width), gap: parseFloat(getComputedStyle(root).rowGap) || 0,
         rows: [...root.querySelectorAll('[data-virtual-index]')].map(e => [Number(e.dataset.virtualIndex), number(e.getBoundingClientRect().height)]),
         focused: root.contains(document.activeElement) && document.activeElement.hasAttribute('data-virtual-index') ? Number(document.activeElement.dataset.virtualIndex) : null};
     const next = JSON.stringify(fact);
     if (next !== signature) { signature = next; queue('measure', fact); }
+    else keyboardReveal = null;
 }
 function schedule() { if (!disposed && !frame) frame = requestAnimationFrame(measure); }
+function keepKeyboardFocusVisible() {
+    if (!keyboardReveal || document.activeElement !== keyboardReveal) return;
+    const view = viewport(), row = keyboardReveal.getBoundingClientRect();
+    if (row.top < view.top) rail.scrollTop += row.top - view.top;
+    else if (row.bottom > view.top + view.height) rail.scrollTop += row.bottom - view.top - view.height;
+}
 function finish() {
     if (!current()) { cleanup(); return; }
     if (!reply || Number(root.dataset.windowRevision) < reply.revision) return;
@@ -52,14 +67,18 @@ function finish() {
         // Only explicit keyboard navigation owns scrolling here. Automatic
         // reveals materialize a row; the directory controller alone aligns it
         // after checking newer user intent. A late reveal must not undo a wheel.
-        const r = rail.getBoundingClientRect(), b = root.getBoundingClientRect();
-        rail.scrollTop += command.top - (r.top + rail.clientTop - b.top);
+        const b = root.getBoundingClientRect();
+        rail.scrollTop += command.top - (viewport().top - b.top);
     }
     if (command.focus != null) {
         const target = root.querySelector('[data-virtual-index="' + command.focus + '"]');
         target?.focus({preventScroll: true});
-        target?.scrollIntoView({block: 'nearest', behavior: 'instant'});
+        keyboardReveal = target;
     }
+    // Newly mounted rows can change height after an End/Home seek was clamped
+    // at the rail edge. Keep that keyboard target visible until measurements
+    // settle, but never counteract a newer pointer or wheel gesture.
+    keepKeyboardFocusVisible();
     const request = inFlight; inFlight = null;
     request?.resolve?.(command.found);
     sendNext(); schedule();
@@ -69,10 +88,15 @@ const observer = new MutationObserver(() => { finish(); schedule(); });
 observer.observe(root, {subtree: true, childList: true, attributes: true, attributeFilter: ['data-window-revision']});
 const resize = new ResizeObserver(schedule);
 resize.observe(rail); resize.observe(root);
+if (heading) resize.observe(heading);
 listen(rail, 'scroll', schedule, {passive:true});
 listen(root, 'focusin', schedule);
 listen(root, 'focusout', schedule);
+for (const type of ['wheel', 'pointerdown', 'touchstart']) {
+    listen(window, type, () => { keyboardReveal = null; }, {passive:true, capture:true});
+}
 listen(root, 'keydown', event => {
+    keyboardReveal = null;
     const target = event.target.closest?.('[data-virtual-index]');
     if (!target || !root.contains(target) || event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
     let index;

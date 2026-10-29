@@ -645,7 +645,9 @@ Web 使用 `_blank` 与 `rel="noopener noreferrer"`，不触发阅读状态重�
 
 默认样式补充于 `assets/styles/reading-workspace.css`，颜色继续消费主题 token。新增 `--selection-line`、`--selection-line-active`、`--selection-hover`、`--selection-row-bg` 从当前 shell 的主题派生；不要把变量固定在根节点造成深色模式失配。
 
-- 列表 `entries-main` 与 `entry-directory-rail` 为独立面板，12px 间距；目录 ≤1000px 收起，`open-directory` / `close-directory` 控制显示。旧横向 `entry-top-directory` / chip 已退役。
+- 列表 `entries-main` 与 `entry-directory-rail` 为独立面板，8px 间距；目录 ≤1000px 收起，`open-directory` / `close-directory` 控制显示。旧横向 `entry-top-directory` / chip 已退役。
+- 工具栏右侧依次为批量已读、批量归档、列表选项、目录，点击区域保持 44px。主面板内部宽度 ≤800px 时筛选和分组移到下行，手机进一步压缩按钮间距；不按主题名称硬编码布局。计数在标题区域内省略，保留完整文本及 title。
+- 目录标题及收起按钮整行内部吸顶；条目滚动容器不变。固定标题从 `--panel-strong` 派生不透明背景，主题应保留其遮挡能力及收起按钮的点击区域，不用透明覆盖破坏滚动可读性。
 - `open-source-filter` 打开 `#source-filter-dialog`；`.source-choice` 保留完整名称，`apply-source-filter` 应用。来源名称与 URL 的编辑只在 Subscribe 的 `edit-feed` / `#feed-edit-dialog` / `save-feed-edit`。
 - `select-entry`、`select-current-page`、`mark-selected-read`、`archive-selected` 是当前多选动作接口；已读／收藏状态按钮原 `mark-read` / `toggle-starred` 保留。旧 `entry-bulk-read` 和 preview/confirm/cancel-mark-filtered-read 已退役。
 - 来源／时间使用 `.entry-group-toggle`、`group-by-source` / `group-by-time`、`aria-pressed`，替代 `data-field=entry-grouping-mode` 的 select。
