@@ -3,7 +3,7 @@
 - 日期：2026-10-29
 - 作者 / Agent：Codex
 - 分支：本地 `codex/pr40-main-integration`；推送目标 `codex/native-ui-preparation-20261029`
-- 当前 HEAD：首轮合并 `a7107b8be682784c8ebd61c963de2c305fcea8da`；随后以普通合并纳入 main `9b17a4d5`
+- 当前 HEAD：追加优化基线 `72e0516bb809ce213b8b9decbdcc6e9a2fc4673c`；优化与本记录同一提交，见 PR #40 分支历史
 - 相关 commit：`a7107b8b`（PR `58157a1a` + main `6a201d5a`）；最终普通合并提交包含本记录，第二父提交为 `9b17a4d5`。后一次合并只有交接元数据变化，产品源码与本地最终验收一致
 - 相关 tag / release：无
 - 状态：`validated`（本地自动化范围；远端检查记录在 PR #40 的当前 head/run 回执中）
@@ -74,6 +74,16 @@
 
 - 本地最终自动化复验通过，按用户授权提交并 push 到 PR #40。推送后的 CI 通过 PR 当前 head 的自动 `pull_request` 运行核验，固定 head、run 链接与最终结果记录在 [PR #40](https://github.com/Develata/RSS-Reader/pull/40) 描述；本记录不把旧手动运行作为新结果。PR 保持草稿，不合并 main、不发布。
 - 合并包含 main 的架构和逐字段保存语义，私有规则模块不构成新的跨渲染器 SDK。
+
+## 用户追加：Settings 高内聚低耦合优化
+
+- 基线：72e0516b 的自动 [CI 40875772257](https://github.com/Develata/RSS-Reader/actions/runs/40875772257) 与 [Pages 40875772185](https://github.com/Develata/RSS-Reader/actions/runs/40875772185) 全部成功，37 项成功 / 1 项预期部署跳过。以下追加改动须另验，不能沿用该运行作为新 head 的 CI。
+- 问题：原 request_lifecycle 只是集中保存 Edits/Writes 字段，session 仍直接维护提交恢复、计数器、读取身份和暂存结果，规则与副作用耦合。
+- 改进：draft_edits 独占补丁记录、提交、成功清除和失败恢复；request_lifecycle 独占读写门禁、不可拆分的读取身份及暂存结果。内部状态字段均私有，session 只调用转换方法，负责命令、主题和 Shell 投影。
+- 保持行为：仍按实际字段构造补丁，保留后来编辑；只有携带已存储设置的写入作废旧读；后发读取即使失败，也不复活较早暂存结果；全局主题版本判断仍由 session 处理。
+- 新增 6 项无 Dioxus/I/O 的不变量测试，覆盖编辑回退、失败恢复与重试、保存归一化及字段归属、后发失败读取、成功写入前后到达的旧读、失败写入释放一次暂存结果。既有 Dioxus 接线测试保留。
+- 验证：`cargo test -p rssr-app --locked settings_page` 60/60；`cargo test --workspace --locked` 1057 通过、0 失败、4 既有忽略；fmt、Clippy 全工作区检查通过；Web release 与 rssr-web 重建通过；`rssr_native_preparation_acceptance.cjs` 8/8 通过，无页面/控制台异常。日志为 target/settings-cohesion-tests.log、workspace-cohesion-tests.log、clippy-cohesion.log、web-cohesion-build.log、server-cohesion-build.log、settings-cohesion-web.log，JSON 为 target/pr40-web-cohesion/acceptance.json。
+- 提交范围仅 Settings 的两个规则模块、session 接线及相关文档；本段追加完成后单独 commit/push 并复核新 head 的自动 PR CI。原生复跑的审批限制与未覆盖平台仍适用；不以基线原生结果声称本次追加的原生交互验收。
 
 ## 风险与后续事项
 

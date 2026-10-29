@@ -7,7 +7,7 @@
 - facade/session → UiCommand → runtime → Arc<dyn Backend>；application/domain 保持统一用例语义。平台差异留在 infra 和控件适配器。
 - Windows/Android 仍用 WebView；HTML dialog 不等同于 OS 窗口。系统文件选择器是单独的宿主能力。
 - 原生 LocalBackend 使用单个 library.sqlite3；正式 Web 使用同源 HTTP Backend 与服务器 SQLite。不得恢复 rssr-host、SQLx、双库或 BrowserStore。
-- 私有纯 Rust 规则仍由 Dioxus session 装配，不是稳定的跨渲染器 SDK，也不建立第二份业务状态。
+- 私有纯 Rust 规则仍由 Dioxus session 装配，不是稳定的跨渲染器 SDK，也不建立第二份业务状态。Settings 的 draft_edits 独占补丁转换，request_lifecycle 独占读写身份与暂存回执；session 不直接修改其内部字段，主题/Shell 投影仍留在 session。
 
 ## 输入和回填
 

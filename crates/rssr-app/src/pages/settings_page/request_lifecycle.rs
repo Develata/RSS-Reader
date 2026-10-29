@@ -1,65 +1,138 @@
-//! Stored settings, per-field overlays and the page write/read fence. No platform I/O.
-use rssr_application::SettingsPatch;
+//! Read/write ordering for one Settings page. The session owns commands and effects.
 use rssr_domain::UserSettings;
 
-/// The user's edits that are not stored yet.
-#[derive(Clone, Default, PartialEq)]
-pub(super) struct Edits {
-    /// Sent by the save in flight: stored by its reply, or edits again if it fails.
-    pub(super) submitted: Option<SettingsPatch>,
-    /// Made since (all of them while no save is in flight).
-    pub(super) pending: SettingsPatch,
+/// A read's identity and the app's stored-settings revision when it was issued.
+#[derive(Clone, Copy)]
+pub(super) struct SettingsLoadRequest {
+    written: u64,
+    read: u64,
+    applied: u64,
 }
 
-impl Edits {
-    pub(super) fn over(&self, stored: &UserSettings) -> UserSettings {
-        let submitted = self.submitted.as_ref().map(|patch| patch.applied(stored));
-        self.pending.applied(submitted.as_ref().unwrap_or(stored))
+/// An admitted read; the session compares `applied` with the live app revision
+/// before projecting it, since another page may have stored newer settings.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct LoadedSettings {
+    pub(super) settings: UserSettings,
+    pub(super) applied: u64,
+}
+
+#[derive(Clone, Default, PartialEq)]
+pub(super) struct SettingsRequestLifecycle {
+    in_flight: bool,
+    written: u64,
+    reads: u64,
+    held_load: Option<(LoadedSettings, u64)>,
+}
+
+impl SettingsRequestLifecycle {
+    pub(super) fn begin_load(&mut self, applied: u64) -> SettingsLoadRequest {
+        self.reads = self.reads.wrapping_add(1);
+        SettingsLoadRequest { written: self.written, read: self.reads, applied }
     }
 
-    pub(super) fn numeric_edits(&self) -> [bool; 4] {
-        let fields = |patch: &SettingsPatch| {
-            [
-                patch.refresh_interval_minutes.is_some(),
-                patch.archive_after_months.is_some(),
-                patch.entries_page_size.is_some(),
-                patch.reader_font_scale.is_some(),
-            ]
-        };
-        let pending = fields(&self.pending);
-        let submitted = self.submitted.as_ref().map(fields).unwrap_or([false; 4]);
-        std::array::from_fn(|i| pending[i] || submitted[i])
+    /// Gate the entire reply, including errors/statuses, before publishing effects.
+    pub(super) fn accepts(&self, request: SettingsLoadRequest) -> bool {
+        self.written == request.written && self.reads == request.read
     }
 
-    pub(super) fn edit_custom_css(&self) -> bool {
-        self.pending.custom_css.is_some()
-            || self.submitted.as_ref().is_some_and(|patch| patch.custom_css.is_some())
+    pub(super) fn receive_load(
+        &mut self,
+        request: SettingsLoadRequest,
+        settings: UserSettings,
+    ) -> Option<LoadedSettings> {
+        if !self.accepts(request) {
+            return None;
+        }
+        let loaded = LoadedSettings { settings, applied: request.applied };
+        if self.in_flight {
+            self.held_load = Some((loaded, request.read));
+            None
+        } else {
+            Some(loaded)
+        }
     }
 
-    /// All of them: the ones a save in flight sent, then the ones made since (C4b item 4).
-    pub(super) fn unsaved(&self) -> Option<SettingsPatch> {
-        let all = match &self.submitted {
-            Some(submitted) => submitted.clone().followed_by(self.pending.clone()),
-            None => self.pending.clone(),
-        };
-        (!all.is_empty()).then_some(all)
+    /// Saves and pulls share this admission gate. Rejection changes nothing.
+    pub(super) fn begin_write(&mut self) -> bool {
+        if self.in_flight {
+            return false;
+        }
+        self.in_flight = true;
+        true
+    }
+
+    /// Only a write carrying stored settings invalidates older reads.
+    pub(super) fn settings_stored(&mut self) {
+        self.written += 1;
+        self.held_load = None;
+    }
+
+    /// A failed/no-op write releases its held read only if no later read began.
+    /// A successful write already retired the held read via settings_stored.
+    pub(super) fn end_write(&mut self) -> Option<LoadedSettings> {
+        self.in_flight = false;
+        self.held_load.take().and_then(|(loaded, read)| (read == self.reads).then_some(loaded))
     }
 }
 
-/// The page's writes (saves, pulls) as its loads see them.
-#[derive(Clone, Default, PartialEq)]
-pub(super) struct Writes {
-    /// One write at a time: a pull replaces the stored settings a save in flight is measured
-    /// against, and a save would store over a pull it does not know of.
-    pub(super) in_flight: bool,
-    /// Writes whose reply carried the stored settings. A load issued before one of them may
-    /// predate it, so its reply is discarded.
-    pub(super) stored: u64,
-    /// A load answered while a write was in flight, with the app's count of applied settings when
-    /// it was issued and its read generation. It waits for the write: dropped if the write stores
-    /// settings or a later load was issued meanwhile (review C4B-B-R2-02), applied if not.
-    pub(super) held_load: Option<(UserSettings, u64, u64)>,
-    /// Loads issued: only the latest one's reply applies, whatever order the replies come in
-    /// (C4b item 2; review C4B-B-01).
-    pub(super) reads: u64,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings() -> UserSettings {
+        UserSettings { entries_page_size: 80, ..Default::default() }
+    }
+
+    #[test]
+    fn a_new_read_retires_old_replies_and_held_results_even_if_it_fails() {
+        let mut lifecycle = SettingsRequestLifecycle::default();
+        let old = lifecycle.begin_load(3);
+        assert!(lifecycle.begin_write());
+        assert!(lifecycle.receive_load(old, settings()).is_none());
+        let latest = lifecycle.begin_load(3);
+        assert!(!lifecycle.accepts(old), "old statuses are stale as well");
+        assert!(lifecycle.accepts(latest));
+        // The latest read fails: there is no replacement SettingsLoaded.
+        assert!(lifecycle.end_write().is_none(), "the old held result cannot revive");
+        assert!(lifecycle.receive_load(old, settings()).is_none());
+    }
+
+    #[test]
+    fn a_successful_write_retires_reads_answered_before_or_after_its_receipt() {
+        for answer_after_write in [false, true] {
+            let mut lifecycle = SettingsRequestLifecycle::default();
+            let read = lifecycle.begin_load(4);
+            assert!(lifecycle.begin_write());
+            if !answer_after_write {
+                assert!(lifecycle.receive_load(read, settings()).is_none());
+            }
+            lifecycle.settings_stored();
+            assert!(lifecycle.end_write().is_none());
+            assert!(!lifecycle.accepts(read));
+            if answer_after_write {
+                assert!(lifecycle.receive_load(read, settings()).is_none());
+            }
+            let next = lifecycle.begin_load(5);
+            assert_eq!(
+                lifecycle.receive_load(next, settings()),
+                Some(LoadedSettings { settings: settings(), applied: 5 })
+            );
+        }
+    }
+
+    #[test]
+    fn a_failed_write_releases_current_held_read_once_with_its_original_app_revision() {
+        let mut lifecycle = SettingsRequestLifecycle::default();
+        let read = lifecycle.begin_load(7);
+        assert!(lifecycle.begin_write());
+        assert!(lifecycle.receive_load(read, settings()).is_none());
+        assert!(!lifecycle.begin_write(), "rejection must not discard the held result");
+        assert_eq!(
+            lifecycle.end_write(),
+            Some(LoadedSettings { settings: settings(), applied: 7 })
+        );
+        assert!(lifecycle.end_write().is_none());
+        assert!(lifecycle.begin_write(), "the gate is reusable");
+    }
 }

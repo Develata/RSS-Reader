@@ -1,4 +1,7 @@
-use super::request_lifecycle::{Edits, Writes};
+use super::{
+    draft_edits::Edits,
+    request_lifecycle::{SettingsLoadRequest, SettingsRequestLifecycle},
+};
 use std::future::Future;
 
 use dioxus::prelude::*;
@@ -30,7 +33,7 @@ pub(crate) struct SettingsPageSession {
     edits: Signal<Edits>,
     /// `stored` with the edits on top; what the form shows.
     draft: Signal<UserSettings>,
-    writes: Signal<Writes>,
+    requests: Signal<SettingsRequestLifecycle>,
     preset_choice: Signal<String>,
     status: Signal<String>,
     status_tone: Signal<String>,
@@ -97,11 +100,10 @@ impl SettingsPageSession {
     /// the shell has it (review C4B-B-09).
     pub(crate) fn new(theme: ThemeController) -> Self {
         let stored = use_signal(|| theme.settings.peek().clone());
-        let edits =
-            use_signal(|| Edits { submitted: None, pending: drafts::peek().unwrap_or_default() });
-        let restored = !edits.peek().pending.is_empty();
+        let edits = use_signal(|| Edits::restored(drafts::peek().unwrap_or_default()));
+        let restored = !edits.peek().pending().is_empty();
         let draft = use_signal(|| edits.peek().over(&stored.peek()));
-        let writes = use_signal(Writes::default);
+        let requests = use_signal(SettingsRequestLifecycle::default);
         let theme_import_revision = use_signal(|| 0);
         let numeric_revisions = use_signal(|| [0; 4]);
         let preset_choice = use_signal(|| detect_preset_key(&draft.peek().custom_css).to_string());
@@ -120,7 +122,7 @@ impl SettingsPageSession {
             stored,
             edits,
             draft,
-            writes,
+            requests,
             preset_choice,
             status,
             status_tone,
@@ -159,71 +161,47 @@ impl SettingsPageSession {
         if changed.is_empty() {
             return;
         }
-        self.edits.with_mut(|edits| {
-            edits.pending = std::mem::take(&mut edits.pending).followed_by(changed);
-        });
+        self.edits.write().record(changed);
         self.draft.set(next);
         self.publish_draft();
     }
 
     /// The edits a save would send.
     pub(crate) fn pending_edits(self) -> SettingsPatch {
-        self.edits.peek().pending.clone()
+        self.edits.peek().pending().clone()
     }
 
     /// Hands the pending edits to a save; call after [`Self::begin_write`] succeeded.
     pub(crate) fn submit_edits(mut self) -> SettingsPatch {
-        let submitted = {
-            let mut edits = self.edits.write();
-            let submitted = std::mem::take(&mut edits.pending);
-            edits.submitted = Some(submitted.clone());
-            submitted
-        };
+        let submitted = self.edits.write().submit();
         self.publish_draft();
         submitted
     }
 
     /// The save failed: what it sent is an edit again, under the ones made since.
     pub(crate) fn restore_submitted_edits(mut self) {
-        {
-            let mut edits = self.edits.write();
-            if let Some(submitted) = edits.submitted.take() {
-                edits.pending = submitted.followed_by(std::mem::take(&mut edits.pending));
-            }
-        }
+        self.edits.write().failed();
         self.publish_draft();
     }
 
     /// Starts a write whose reply may carry the stored settings (a save, a pull). Returns false,
     /// changing nothing, while another write is in flight.
     pub(crate) fn begin_write(mut self) -> bool {
-        if self.writes.peek().in_flight {
-            return false;
-        }
-        self.writes.write().in_flight = true;
-        true
+        self.requests.write().begin_write()
     }
 
     /// Ends the write started by [`Self::begin_write`], after its reply has been applied. A load
     /// answered meanwhile applies now unless the write stored settings.
     pub(crate) fn end_write(mut self) {
-        let held_load = {
-            let mut writes = self.writes.write();
-            writes.in_flight = false;
-            writes.held_load.take()
-        };
-        if let Some((settings, applied, read)) = held_load
-            && read == self.writes.peek().reads
-        {
-            self.apply_load(settings, applied);
+        let held_load = self.requests.write().end_write();
+        if let Some(loaded) = held_load {
+            self.apply_load(loaded.settings, loaded.applied);
         }
     }
 
     /// Records that a write stored settings: loads issued before it are stale.
     fn note_stored(mut self) {
-        let mut writes = self.writes.write();
-        writes.stored += 1;
-        writes.held_load = None;
+        self.requests.write().settings_stored();
     }
 
     pub(crate) fn preset_choice(self) -> Signal<String> {
@@ -261,24 +239,17 @@ impl SettingsPageSession {
         mut self,
         execute: impl FnOnce(SettingsCommand) -> F,
     ) {
-        let (issued, read) = {
-            let mut writes = self.writes.write();
-            writes.reads = writes.reads.wrapping_add(1);
-            (writes.stored, writes.reads)
-        };
-        let applied = self.theme.stored_count();
+        let request = self.requests.write().begin_load(self.theme.stored_count());
         let loading = execute(SettingsCommand::Load);
         spawn(async move {
             let intents = loading.await;
-            let writes = self.writes.peek();
-            if writes.stored != issued || writes.reads != read {
+            if !self.requests.peek().accepts(request) {
                 return;
             }
-            drop(writes);
             apply_projected_ui_intents(intents, UiIntent::into_settings_page_intent, |intent| {
                 match intent {
                     SettingsPageIntent::SettingsLoaded(settings) => {
-                        self.receive_load(settings, applied, read)
+                        self.receive_load(request, settings)
                     }
                     status => self.dispatch(status),
                 }
@@ -286,11 +257,10 @@ impl SettingsPageSession {
         });
     }
 
-    fn receive_load(mut self, settings: UserSettings, applied: u64, read: u64) {
-        if self.writes.peek().in_flight {
-            self.writes.write().held_load = Some((settings, applied, read));
-        } else {
-            self.apply_load(settings, applied);
+    fn receive_load(mut self, request: SettingsLoadRequest, settings: UserSettings) {
+        let loaded = self.requests.write().receive_load(request, settings);
+        if let Some(loaded) = loaded {
+            self.apply_load(loaded.settings, loaded.applied);
         }
     }
 
@@ -352,7 +322,7 @@ impl SettingsPageSession {
         submitted_preset: &str,
     ) -> bool {
         self.note_stored();
-        self.edits.write().submitted = None;
+        self.edits.write().saved();
         self.publish_draft();
         self.note_numeric_projection();
         let draft = self.edits.peek().over(&settings);
@@ -362,7 +332,7 @@ impl SettingsPageSession {
         if self.preset_choice.peek().as_str() == submitted_preset {
             self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
         }
-        let has_unsaved_edits = !self.edits.peek().pending.is_empty();
+        let has_unsaved_edits = !self.edits.peek().pending().is_empty();
         self.draft.set(draft);
         self.stored.set(settings.clone());
         self.theme.store(settings);
@@ -468,7 +438,9 @@ mod tests {
             assert!(page.begin_write());
             page.submit_edits();
             let before = page.numeric_revisions();
-            page.receive_load(UserSettings::default(), page.theme.stored_count(), 0);
+            let mut requests = page.requests;
+            let request = requests.write().begin_load(page.theme.stored_count());
+            page.receive_load(request, UserSettings::default());
             page.restore_submitted_edits();
             page.end_write();
             assert_eq!(page.draft().entries_page_size, 80);

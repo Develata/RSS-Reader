@@ -1,5 +1,5 @@
 //! Preparation and receipt folding for per-field SettingsPatch saves. Draft overlays
-//! and write/read ordering live in request_lifecycle; the session owns effects.
+//! live in draft_edits, read/write ordering in request_lifecycle; the session owns effects.
 use super::{intent::SettingsPageIntent, themes::validate_custom_css};
 use rssr_application::SettingsPatch;
 use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, UserSettings};
