@@ -3,8 +3,8 @@
 - 日期：2026-10-29
 - 作者 / Agent：Codex
 - 分支：本地 `codex/pr40-main-integration`；推送目标 `codex/native-ui-preparation-20261029`
-- 当前 HEAD：整合起点 `58157a1a90796f8a17624bf9958b0be75bb15bf4`
-- 相关 commit：包含本记录的普通合并提交（父提交为 PR 起点与 main；提交前状态 pending），见 PR #40 分支历史
+- 当前 HEAD：首轮合并 `a7107b8be682784c8ebd61c963de2c305fcea8da`；随后以普通合并纳入 main `9b17a4d5`
+- 相关 commit：`a7107b8b`（PR `58157a1a` + main `6a201d5a`）；最终普通合并提交包含本记录，第二父提交为 `9b17a4d5`。后一次合并只有交接元数据变化，产品源码与本地最终验收一致
 - 相关 tag / release：无
 - 状态：`validated`（本地自动化范围；远端检查记录在 PR #40 的当前 head/run 回执中）
 
