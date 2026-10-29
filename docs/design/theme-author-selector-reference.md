@@ -32,6 +32,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 
 ## 使用原则
 
+订阅与设置页采用与文章工作区相同的两层布局：`app-nav-shell` 与 `page-main` 是 `data-page` 下的同级区域，外层页面不再绘制包住导航的大卡片。`page-main` 承载标题、状态信息和内容，默认使用 `surface-reader`、`radius-panel` 及 16px 内边距（600px 以下 12px）；页面外侧留白和导航的吸顶／收起行为保持共享。主题应通过 `data-page` 与 `page-main` 限定内容区域，不依赖内容是页面直属子节点。Atlas 的侧栏仍使用第一列、主面板使用第二列。
+
 - 优先使用：
   - `data-page`
   - `data-layout`

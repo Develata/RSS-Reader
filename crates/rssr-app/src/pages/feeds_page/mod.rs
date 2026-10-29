@@ -28,31 +28,33 @@ pub fn FeedsPage() -> Element {
     rsx! {
         section { "data-page": "feeds",
             AppNav {}
-            div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "feeds",
-                h1 { "data-slot": "page-title", "订阅" }
+            div { "data-layout": "page-main",
+                div { "data-layout": "page-header", "data-slot": "page-section-header", "data-section": "feeds",
+                    h1 { "data-slot": "page-title", "订阅" }
+                }
+                div { "data-layout": "stats-grid", "data-layout-variant": "airy",
+                    div { "data-layout": "stat-card", "data-stat": "feeds",
+                        div { "data-slot": "stat-card-label", "订阅数" }
+                        div { "data-slot": "stat-card-value", "{facade.total_feed_count()}" }
+                    }
+                    div { "data-layout": "stat-card", "data-stat": "entries",
+                        div { "data-slot": "stat-card-label", "文章数" }
+                        div { "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
+                    }
+                    div { "data-layout": "stat-card", "data-stat": "unread",
+                        div { "data-slot": "stat-card-label", "未读" }
+                        div { "data-slot": "stat-card-value", "{facade.unread_count()}" }
+                    }
+                    div { "data-layout": "stat-card", "data-stat": "archived",
+                        div { "data-slot": "stat-card-label", "已归档" }
+                        div { "data-slot": "stat-card-value", "{facade.archived_count()}" }
+                    }
+                }
+                StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string(), announce: true }
+                FeedComposeSection { facade: facade.clone() }
+                SavedFeedsSection { facade: facade.clone() }
+                ConfigExchangeSection { facade: facade.clone() }
             }
-            div { "data-layout": "stats-grid", "data-layout-variant": "airy",
-                div { "data-layout": "stat-card", "data-stat": "feeds",
-                    div { "data-slot": "stat-card-label", "订阅数" }
-                    div { "data-slot": "stat-card-value", "{facade.total_feed_count()}" }
-                }
-                div { "data-layout": "stat-card", "data-stat": "entries",
-                    div { "data-slot": "stat-card-label", "文章数" }
-                    div { "data-slot": "stat-card-value", "{facade.total_entry_count()}" }
-                }
-                div { "data-layout": "stat-card", "data-stat": "unread",
-                    div { "data-slot": "stat-card-label", "未读" }
-                    div { "data-slot": "stat-card-value", "{facade.unread_count()}" }
-                }
-                div { "data-layout": "stat-card", "data-stat": "archived",
-                    div { "data-slot": "stat-card-label", "已归档" }
-                    div { "data-slot": "stat-card-value", "{facade.archived_count()}" }
-                }
-            }
-            StatusBanner { message: facade.status_message().to_string(), tone: facade.status_tone().to_string(), announce: true }
-            FeedComposeSection { facade: facade.clone() }
-            SavedFeedsSection { facade: facade.clone() }
-            ConfigExchangeSection { facade: facade.clone() }
             if facade.edit_open() { edit::FeedEditDialog { facade } }
         }
     }

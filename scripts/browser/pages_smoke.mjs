@@ -124,7 +124,7 @@ try {
   await pointerClick(client, '[data-nav="feeds"]');
   await waitFor(`!!document.querySelector('[data-page="feeds"] [data-feed-id="1"]')`);
   await pointerClick(client, '[data-action="refresh-feed"]');
-  const feedError = `document.querySelector('[data-page="feeds"] > [data-layout="status-banner"][data-state="error"]')?.textContent`;
+  const feedError = `document.querySelector('[data-page="feeds"] [data-layout="page-main"] > [data-layout="status-banner"][data-state="error"]')?.textContent`;
   await waitFor(`(${feedError})?.includes('静态演示已禁用此网络操作')`);
   await fillField(client, '#feed-url-input', 'https://example.com/pages-must-not-fetch.xml');
   await pointerClick(client, '[data-action="add-feed"]');
