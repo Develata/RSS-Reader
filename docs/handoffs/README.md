@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| Reader 快捷键定义与同步输入边界 | [单一 Rust 定义、输入过滤、捕获顺序及三端回归](./2026-10-30-reader-shortcut-definition.md) |
 | Reader 宿主入口与生命周期 | [图片、dialog、快捷键桥接收敛及三端实际回归](./2026-10-30-reader-host-boundary.md) |
 | Reader 规则独立性与 PR #49 整合 | [无 Dioxus 编译、读取归属及宿主回归](./2026-10-30-reader-rule-boundary.md) |
 | Android 主题文件导入与 PR #48 整合 | [实现和实际系统选择器验收](./2026-10-30-android-theme-import.md)、[首 BOM 呈现问题的独立复现与修复](./2026-10-30-css-leading-bom-render.md) |
@@ -30,6 +31,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-30 | [Reader 快捷键定义去重与同步宿主回归](./2026-10-30-reader-shortcut-definition.md) |
 | 2026-10-30 | [Reader 宿主入口、卸载清理与基线/候选验收](./2026-10-30-reader-host-boundary.md) |
 | 2026-10-30 | [Reader 规则与装配边界、PR #49 整合](./2026-10-30-reader-rule-boundary.md) |
 | 2026-10-30 | [Android 主题文件导入与 PR #48 整合](./2026-10-30-android-theme-import.md)、[首 BOM 呈现修复](./2026-10-30-css-leading-bom-render.md) |

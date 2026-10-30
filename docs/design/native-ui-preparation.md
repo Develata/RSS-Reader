@@ -16,19 +16,29 @@
 - `ReaderResultScope` 读取现有状态中的文章 ID 与访问代次。加载、图片处理回执和标记写入共用访问归属；只读刷新在 `RereadIssued` 后额外捕获刷新代次，后续刷新或已应用标记使旧刷新失效。刷新代次不能作废同一次访问的标记写入，旧载荷不遍历、不复制正文。
 - 刷新准入按原顺序判定：非当前文章忽略，读取失败走恢复加载，加载中记一次待刷新，内容就绪仅读标记与邻居。恢复加载仍先 `BeginLoading`、再标记不重复本地化图片；加载回执发布后才处理待刷新。执行与发布次序仍由 session 装配，保留原 Dioxus 集成测试。
 - 加载和自动图片处理属于页面访问；用户已确认的标记写入属于 App。离页后写入继续，回执交给原有 Shell 提示与重读；不把取消页面等待解释为撤销写入。UI runtime 整体仍依赖当前装配，本批不声称全部 session/runtime 可原样移植。
-- 图片开关状态只接收资源引用与替代文本。当前宿主继续解释 rendered source、图片点击/键盘激活、dialog 焦点、滚动锁定、关闭后的恢复和卸载；快捷键与切文前位置捕获脚本保持不变。
+- 图片开关状态只接收资源引用与替代文本。当前宿主继续解释 rendered source、图片点击/键盘激活、dialog 焦点、滚动锁定、关闭后的恢复和卸载；快捷键与切文前位置捕获仍由宿主同步执行。
 - `scripts/check_reader_rule_boundary.py` 用同一生产源码和既有测试编译独立测试程序，仅显式链接 `rssr-api`、`rssr-domain`、serde；依赖构建不得出现 Dioxus/web-sys/Wry/Tao。不创建 Cargo package，也不使用替身状态。CI 在 `rssr-api` job 执行此检查；完整 app 测试继续验证装配。具体证据见[本批交接](../handoffs/2026-10-30-reader-rule-boundary.md)。
 
 ## Reader 宿主入口（2026-10-30）
 
-`pages/reader_page/webview/` 集中当前 Reader 的图片激活、图片 dialog 和快捷键桥接。页面装配只接收 `ReaderImage`、原始按键字符串、关闭请求，并在 dialog 挂载后通知适配器；不再持有这些监听的 `Eval`、停止消息或脚本路径。三个 JS 脚本仅移动，内容不变。
+`pages/reader_page/webview/` 集中当前 Reader 的图片激活、图片 dialog 和快捷键桥接。页面装配只接收 `ReaderImage`、原始按键字符串、关闭请求，并在 dialog 挂载后通知适配器；不再持有这些监听的 `Eval`、停止消息或脚本路径。宿主提取批次原样移动三个脚本；后续快捷键去重见下节，图片脚本继续保持原实现。
 
 - `use_image_activations` 仍在 Reader 页作用域运行；`image_viewer.rs` 独占现有图片状态，换文章时关闭。资源引用与替代文本沿用原规则，不复制正文或另建浮层状态。
 - `use_image_dialog` 仍在图片组件挂载后启动，负责原生 HTML dialog 的取消/背景输入、焦点、body 滚动锁与恢复。`use_listener_cleanup` 仅复用原 `use_drop` 停止消息，保留页面/组件任务作用域及等待中卸载的清理，不新加取消语义、代次或重试。
-- `use_shortcut_keys` 仍在宿主同步过滤输入、阻止默认动作，并在切文前通过既有阅读位置入口捕获。Rust 快捷键策略及 session/navigation 派发保持原位置；本批没有合并重复的快捷键定义。
+- `use_shortcut_keys` 仍在宿主同步过滤输入、阻止默认动作，并在切文前通过既有阅读位置入口捕获。Rust 快捷键策略及 session/navigation 派发保持原位置。
 - 阅读位置继续复用 `ui/reading_position`，不为 Reader 再包装一套位置服务。该适配模块仍依赖 Dioxus 和 DOM，不是跨渲染器接口；独立性证据继续来自同一生产规则的无框架编译。
 
-验收覆盖真实 Windows WebView2、Android 真机和正式 Web 的反复进入、键盘激活图片、关闭后回焦与恢复滚动、带浮层离页清理。离页后 Reader 监听和 observer 归零；受控路由切换、物理键盘/系统 IME 等边界见[宿主提取交接](../handoffs/2026-10-30-reader-host-boundary.md)。下一批快捷键定义去重须独立保持同步默认动作、过滤与切文捕获顺序；正文渲染兼容契约随后推进。
+验收覆盖真实 Windows WebView2、Android 真机和正式 Web 的反复进入、键盘激活图片、关闭后回焦与恢复滚动、带浮层离页清理。离页后 Reader 监听和 observer 归零；受控路由切换、物理键盘/系统 IME 等边界见[宿主提取交接](../handoffs/2026-10-30-reader-host-boundary.md)。
+
+## Reader 快捷键定义与同步边界（2026-10-30）
+
+- `hooks/reader_shortcut_policy.rs` 的 `BINDINGS` 是按键与动作的唯一生产定义：左右方向键、J/K 导航、M 已读、F 收藏。逻辑键名是普通字符串；Rust 只对单字符绑定接受 ASCII 大写，命名键保持精确匹配，未知输入忽略。修饰键/组字排除仍可在读取键值前结束；规则不依赖 Dioxus、DOM 或路由。
+- `ReaderShortcut::captures_position` 标识离开文章的动作。当前 `webview::shortcut_script` 在各桥接启动时生成只读配置，沿用宿主小写键名匹配，将配置和 `shortcut_input.js` 一起放进该次 Eval；不依赖全局注册、额外异步握手或挂载顺序。此配置不是另一份交互状态，按键路径不重新生成配置。
+- 两处监听共用输入过滤：重复、组字、Alt/Ctrl/Meta/Shift、表单/可编辑祖先、已打开的 dialog 和 Reader 页面存在性。**捕获阶段**仅为导航键测量并发出位置事实，按原行为忽略 `defaultPrevented`；**冒泡阶段**额外检查 `defaultPrevented`，同步阻止默认动作后才发送原始键值。目标节点后续停止传播不撤销已经发生的捕获。
+- 位置监听仍属于原 App 适配器，快捷键监听仍属于 Reader 页；测量、消息序号、恢复、任务作用域和卸载规则不变。没有把同步默认动作交给异步 Rust 回执，也没有把两个监听合并到新的调度器。
+- 同一生产规则的独立编译现为 24 项。实际宿主用每个视口 70 个受控边界、10 个有效键值及离页后的输入检查约束同步顺序，并验证导航/返回和标记写入；它们不是物理键盘或系统 IME 验收。源码、产物和结果见[快捷键去重交接](../handoffs/2026-10-30-reader-shortcut-definition.md)。
+
+下一阶段先收口已完成的依赖批次，再梳理正文内容、图片资源、阅读锚点、HTML/CSS、复制、IME 和无障碍的兼容契约；候选渲染器另行实测，不从本批推断整页已可直接迁移。
 
 ## 已有可独立测试的 Rust 规则
 
