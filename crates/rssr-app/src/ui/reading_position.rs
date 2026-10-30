@@ -47,7 +47,9 @@ pub(crate) fn use_reading_positions() {
     use_future(move || {
         let bridge = Rc::clone(&bridge);
         async move {
-            let mut eval = document::eval(include_str!("reading_position.js"));
+            let mut eval = document::eval(&crate::pages::reader_page::webview::shortcut_script(
+                include_str!("reading_position.js"),
+            ));
             bridge.set(Some(eval));
             let mut restorer = Restorer::default();
             while let Ok(fact) = eval.recv::<Fact>().await {

@@ -7,6 +7,20 @@ use dioxus::prelude::*;
 
 use super::image_viewer_state::ReaderImage;
 
+// Each bridge gets the same synchronous predicate and a projection of the Rust
+// bindings. Keep them local to Eval: no global registration or readiness race.
+pub(crate) fn shortcut_script(body: &str) -> String {
+    let bindings = crate::hooks::reader_shortcut_policy::BINDINGS
+        .map(|(key, action)| (key.to_ascii_lowercase(), action.captures_position()))
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    format!(
+        "const readerShortcutBindings = {};\n{}\n{body}",
+        serde_json::json!(bindings),
+        include_str!("shortcut_input.js"),
+    )
+}
+
 // Keep cancellation in the owning Dioxus scope, including a scope dropped while
 // its receive task is waiting. The task itself keeps its existing scope lifetime.
 fn use_listener_cleanup() -> Rc<Cell<Option<document::Eval>>> {
@@ -54,7 +68,7 @@ pub(crate) fn use_shortcut_keys(on_key: Callback<String>) {
     use_future(move || {
         let bridge = Rc::clone(&bridge);
         async move {
-            let mut eval = document::eval(include_str!("reader_shortcuts.js"));
+            let mut eval = document::eval(&shortcut_script(include_str!("reader_shortcuts.js")));
             bridge.set(Some(eval));
             while let Ok(key) = eval.recv::<String>().await {
                 on_key.call(key);

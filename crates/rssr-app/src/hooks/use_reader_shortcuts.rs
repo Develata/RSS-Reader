@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use super::reader_shortcut_policy::{self, ReaderShortcut, ShortcutKey};
+use super::reader_shortcut_policy::{self, ReaderShortcut};
 
 use crate::{
     pages::reader_page::{ReaderPageSession, webview},
@@ -16,17 +16,7 @@ pub fn use_reader_shortcuts(session: ReaderPageSession) {
     let navigator = use_navigator();
     // 每次渲染都换成最新的 session：换文章时组件不重建，页面监听只建一次。
     let handle = use_callback(move |key: String| {
-        match reader_shortcut_policy::resolve(false, false, || match key.as_str() {
-            "ArrowLeft" => ShortcutKey::Previous,
-            "ArrowRight" => ShortcutKey::Next,
-            value => {
-                let mut chars = value.chars();
-                match (chars.next(), chars.next()) {
-                    (Some(c), None) => ShortcutKey::Character(c),
-                    _ => ShortcutKey::Other,
-                }
-            }
-        }) {
+        match reader_shortcut_policy::resolve(false, false, || key.as_str()) {
             Some(ReaderShortcut::Previous) => {
                 if let Some(target) = session.previous_entry_target() {
                     navigator.push(AppRoute::ReaderPage { entry_id: target });
