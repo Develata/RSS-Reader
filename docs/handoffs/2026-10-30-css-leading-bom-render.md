@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`codex/android-theme-import`
 - 基线：main `ef04ded9955699e1175b3904d470c2e9046edf9f`
-- 相关 commit：pending；与 Android 导入适配单独提交
+- 相关 commit：`58501e56cbaf44302f6be541d4bdbf96ef438bb5`；与 Android 导入适配单独提交
 - 相关 tag / release：无
 - 状态：`validated`
 
@@ -32,4 +32,4 @@ Android 导入真机验收发现带 BOM 的 CSS 虽然被原样交给 `<style>`�
 
 ## 当前状态、风险与交接
 
-commit: pending。这是有意改变样式呈现的缺陷修复，与文件导入功能分开记录和提交。已完成所列真实设备和桌面回归；系统 IME、辅助技术、更广设备和 Web GUI 不在本地验收覆盖内。完整接续见[Android 导入交接](./2026-10-30-android-theme-import.md)。
+修复已单独提交为 `58501e56`。这是有意改变样式呈现的缺陷修复，与文件导入功能分开记录和提交。已完成所列真实设备和桌面回归，紧凑证据见[回执](../testing/evidence/2026-10-30-css-leading-bom-render/receipt.json)；系统 IME、辅助技术、更广设备和 Web GUI 不在本地验收覆盖内。完整接续见[Android 导入交接](./2026-10-30-android-theme-import.md)。

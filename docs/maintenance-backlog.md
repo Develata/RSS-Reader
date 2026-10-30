@@ -9,7 +9,8 @@
 - 返回策略 `62113c4f` 及后续验收已通过 PR #46 合入 main `6a75fb83`；[实际宿主回执](./handoffs/2026-10-30-native-back-validation.md)保留其 Windows / Android 场景和包身份，不再列为待合并或缺设备。
 - App 设置读取已通过 PR #47 合入 `663ef4ee`，原批普通 Rust、Dioxus、正式 Web 与实际 Windows 结果见[实现交接](./handoffs/2026-10-30-shell-settings-lifecycle.md)。随后完成 Windows / Android 主题选择专项，见[宿主评估](./design/native-theme-selector-assessment.md)；不扩大为所有 Android 生命周期通过。前置提取在此收口，不继续扩大 Shell 重构。
 - 检查全部 20 个不同分支名后完成旧引用清理、历史资料保全和 5 个旧工作树 / 3 个分支退役，见[分支审计](./handoffs/2026-10-30-branch-consolidation.md)。本批复用现有工作树，当前数量统一见[维护状态](./current-status.md)；主 checkout 的既有改动继续保留。
-- PR #38、#40、#46、#47 已合并，不再作为待实现事项。主题模式选择已有可用宿主控件，本轮不重复实现。下一设计候选为 Windows 独立原生设置面板的小样，先明确窗口、session、CSS 和回退边界；未批准整页替换、渲染器、数据库或新 crate 迁移。
+- PR #38、#40、#46–#48 已合并，不再作为待实现事项。PR #48 收录列表密度退役、主题选择评估与 `.agents` 清理；其 head / main CI 均为 36/36。
+- 本批已完成 Android 主题文件导入和实际系统选择器验收，复用现有 Settings 规则；发现的 CSS 开头 BOM 呈现问题已先在旧包复现，再独立修复，见[接续交接](./handoffs/2026-10-30-android-theme-import.md)。独立原生设置面板仍只是下一设计候选，须明确窗口、session、CSS 和回退边界；未批准整页替换、渲染器、数据库或新 crate 迁移。
 
 ## 0.3.x 移除旧列表密度参数
 

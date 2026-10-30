@@ -15,6 +15,7 @@
 | 原生字符串表 | rssr_native_transport_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> | 实际 Windows EXE/WebView2、单库与传输；不操作 OS 选择器 |
 | 原生返回专项 | rssr_back_navigation_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> --fixture-dir <fixture> | Windows 实际 WebView2；Android 独立测试包的系统返回、保存门禁、采集失败/超时/取消、首页提示与恢复前台 |
 | 主题选择宿主专项 | rssr_theme_selector_windows.mjs / rssr_theme_selector_android.mjs | Windows 实际 EXE + UIA + CDP；Android 真机系统列表、adb 选择/返回、预览及显式保存。不是新增 OS 控件或完整辅助技术验收 |
+| Android 主题文件导入 | rssr_theme_import_android.mjs | 实际 DocumentsUI + ContentResolver + JNI；测试包专属提供器控制文件、读取错误和延迟；与真实云端提供器、正式包权限验收区分 |
 | Android 编译 | cargo check -p rssr-app --target aarch64-linux-android --locked 及 PR android-smoke | 仅编译/CI smoke，不能替代上行真机检查；选择器、IME 和辅助技术另验 |
 
 Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library.sqlite3，须同时准备本次源码的 rssr-web、browser_fixture_library 和 Web 包。用 RSSR_WEB_BIN、RSSR_FIXTURE_BIN、PUBLIC_DIR 指定产物，ARTIFACT_DIR 指定证据；Playwright 使用 CHROME_BIN 或 Chrome channel。运行器控制 HTTP 响应和 FileReader 的完成时机，不能把这些延迟注入宣称为真实网络故障。
@@ -52,6 +53,14 @@ Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library
 - 从未提交快照构建时，`source` 记录基线提交，同时提供 `sourcePatchSha256` 和逐文件输入清单。不同源码快照使用独立 Android 构建目录；打包后核对 APK 内 `libmain.so` 与本轮编译输出相同，不能只凭 `dx build` 成功沿用共享 target 的旧 APK。
 - Android 记录真实设备截图与 UI 树；系统返回使用 adb keyevent 4，不冒充手势返回。UIAutomator 的只读快照最多重试一次，失败也留在报告中。SQLite 在稳定 UI 检查点复制主文件及 WAL；安装前的保全备份则先停止测试包再完整归档。
 - 本批未运行夹具 RSS 服务，启动刷新对本机地址失败不属于主题专项断言。未访问线上订阅，也不据此宣称离线刷新功能通过。
+
+## Android 主题导入的复跑
+
+沿用上文独立包、资料库与 `process.json` 约束。先归档并校验旧测试 APK / files，在独立源码副本仅修改包 identifier / BuildConfig 引用；用独立 target 构建，保留不含测试提供器的 APK。对生成的 `app/src/main` 运行 `node scripts/android/theme-import/install-fixture.cjs <main目录>`，再 Gradle `assembleDebug`。该脚本限定当前工作树 target 下的独立测试包，把 [ThemeImportDocuments.kt](../../scripts/android/theme-import/ThemeImportDocuments.kt) 加入生成工程，不修改产品 manifest；比较两份 APK 的 `libmain.so` 与本轮编译输出。
+
+安装并启动已核验的测试包后运行 `node scripts/browser/rssr_theme_import_android.mjs --process-file <run>/process.json --artifact-dir <target下新目录>`。它用实际系统列表选择、系统返回取消和真实 JNI，检查 UTF-8 / BOM / CRLF、65536 / 65537 字节、无效 CSS、提供器错误、后续编辑、离页取消 / 忙碌 / 重试、明确保存与重开。提供器大小元数据故意不可信；延迟和错误是受控夹具，不代表云盘服务实测。界面状态改变使用 CDP，系统文件交互使用受前台 Activity 约束的 adb 输入。
+
+`--bom-mode baseline|fixed` 单独复现和回归样式首 BOM 问题，适用于不含提供器的旧测试包；基线应保留缺陷证据，不能列为产品验收通过。失败时只关闭确认由该测试包打开的前台选择器。调用者始终停止自己的测试进程、恢复原资料库、校验日常包并移除本轮 forward；保留失败回执，不覆盖成功记录。实际版本与范围见[本批交接](../handoffs/2026-10-30-android-theme-import.md)。
 
 ## 已退役的旧分支运行器
 

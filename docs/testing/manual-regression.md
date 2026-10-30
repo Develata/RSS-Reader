@@ -96,7 +96,7 @@ node scripts/browser/rssr_small_viewport_assertions.mjs \
 - 再点当前主题卡片的 `移除这套主题`
 - 确认只移除了当前主题，不是异常清空别的内容
 - 点 `导出当前 CSS`，确认能导出
-- Web / 桌面再点 `导入主题文件` 导回一份 CSS；Android 此入口尚未实现。
+- Web / 桌面 / Android 再点 `导入主题文件` 导回一份 CSS；Android 使用系统文档选择器。
 - 默认和四套内置主题分别检查浅色/深色/跟随系统，Tab 焦点、禁用状态和实际背景对比度；断点职责见主题参考。
 
 ### 6. Android 主题导出（SAF，有设备时执行）
@@ -106,7 +106,9 @@ node scripts/browser/rssr_small_viewport_assertions.mjs \
 - 再次导出并保存，确认文件字节与当前 CSS 完全一致
 - 保存器显示期间再次触发导出应被拒绝，不覆盖已有在途请求
 - 使用拒绝写入或返回空输出流的测试 provider，确认页面报告错误且应用不崩溃
-- 确认生成 manifest 不含存储权限；Android 主题文件导入仍是已知未实现项
+- 确认生成 manifest 不含存储权限。
+- 导入时覆盖取消、UTF-8 / BOM / CRLF、64 KiB 边界、超限、CSS 无效和提供器读取失败；出错不改变草稿 / 已应用样式 / 存储。
+- 延迟导入后编辑或离页，旧成功 / 错误不得改变新页面；结束旧读取后可再次导入。明确保存后重新进入设置，原文及样式都保留。自动化复跑见[原生控件验收](./native-control-acceptance.md)。
 
 ### 7. 设置持久化
 

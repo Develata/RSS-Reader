@@ -2,7 +2,7 @@
 pub(super) async fn pick_css_file_contents() -> anyhow::Result<Option<String>> {
     #[cfg(target_os = "android")]
     {
-        anyhow::bail!("Android 端暂未接入系统文件选择器，请先手动粘贴 CSS 内容。");
+        super::theme_android_import::pick_css_bytes().await?.map(decode_css_file).transpose()
     }
 
     #[cfg(not(target_os = "android"))]
@@ -20,7 +20,6 @@ async fn read_css_file_selection(file: Option<rfd::FileHandle>) -> anyhow::Resul
     decode_css_file(bytes).map(Some)
 }
 
-#[cfg(not(target_os = "android"))]
 fn decode_css_file(bytes: Vec<u8>) -> anyhow::Result<String> {
     String::from_utf8(bytes).map_err(|err| anyhow::anyhow!("CSS 文件不是有效 UTF-8：{err}"))
 }

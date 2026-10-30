@@ -2,6 +2,8 @@ mod lab;
 mod presets;
 #[cfg(target_os = "android")]
 mod theme_android_export;
+#[cfg(any(target_os = "android", all(test, not(target_arch = "wasm32"))))]
+mod theme_android_import;
 mod theme_apply;
 mod theme_file_io;
 mod theme_io;
