@@ -139,7 +139,7 @@ async function eventually(read, expected, label) {
       const beforePreview = settings();
       await page.locator(field('custom-css')).fill(raw);
       await page.locator(action('apply-custom-css')).click();
-      await eventually(() => page.locator('#user-custom-css').textContent(), css, 'explicit preview');
+      await eventually(() => page.locator('#user-custom-css').textContent(), css.replace(/^\uFEFF/, ''), 'explicit preview');
       assert.deepEqual(settings(), beforePreview, 'preview does not store settings');
       await page.locator(action('save-settings')).click();
       await eventually(settings, { ...original, custom_css: css }, 'exact SQLite settings');
@@ -177,12 +177,18 @@ async function eventually(read, expected, label) {
         break;
       }
       await eventually(fields, expectedFields(css), 'BOM and neighboring fields ' + index);
-      await eventually(() => page.locator('#user-custom-css').textContent(), css, 'applied CSS retains exact text');
+      await eventually(() => page.locator('#user-custom-css').textContent(), css.replace(/^\uFEFF/, ''), 'rendering omits only the leading file signature');
+      if (index !== 1) {
+        await eventually(() => page.evaluate(() => getComputedStyle(document.documentElement)
+          .getPropertyValue('--rssr-transport-probe').trim()), index === 0 ? '2' : '4', 'first CSS rule applies');
+      }
       check('BOM/Unicode field and applied-style alignment ' + index, true);
     }
     report.transportReads = await page.evaluate(() => window.__rssrTransportProbe.reads);
     if (!report.baseline) {
-      check('actual BOM-prefixed Rust batches were decoded', report.transportReads.length >= 2);
+      // Rendering omits the first file signature; the consecutive-BOM case still sends a
+      // real leading BOM through Rust's table and protects the transport decoder contract.
+      check('actual BOM-prefixed Rust batch was decoded', report.transportReads.some(r => r.raw.startsWith('\uFEFF/* consecutive BOM */')));
       check('all BOM-prefixed tables are preserved', report.transportReads.every(r => r.raw === r.actual));
       const saved = settings();
       await page.locator('[data-nav="feeds"]').click();

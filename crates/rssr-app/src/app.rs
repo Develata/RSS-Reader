@@ -38,6 +38,13 @@ pub fn App() -> Element {
 
     // A settings-page preview only overrides presentation, never the stored settings signal.
     let current_settings = theme.appearance();
+    // Inline style text is already decoded: its parser treats a leading file BOM as part of
+    // the first selector. Remove that one signature only for rendering, preserving the draft,
+    // export and stored text (including interior BOMs and original line endings).
+    let custom_css = current_settings
+        .custom_css
+        .strip_prefix('\u{feff}')
+        .unwrap_or(&current_settings.custom_css);
 
     rsx! {
         document::Title { "{APP_NAME}" }
@@ -46,8 +53,8 @@ pub fn App() -> Element {
             content: "width=device-width, initial-scale=1, viewport-fit=cover"
         }
         style { {APP_STYLESHEET} }
-        if !current_settings.custom_css.trim().is_empty() {
-            style { id: "user-custom-css", "{current_settings.custom_css}" }
+        if !custom_css.trim().is_empty() {
+            style { id: "user-custom-css", "{custom_css}" }
         }
         div {
             class: "app-shell {theme_class(current_settings.theme)}",
