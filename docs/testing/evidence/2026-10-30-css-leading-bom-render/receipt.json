@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-30",
+  "productBaseline": "ef04ded9955699e1175b3904d470c2e9046edf9f",
+  "baseline": {
+    "apkSha256": "0044b89d149ba9a4e103bd2c96d85cb7b07eb6a698b9a5d85351f8dae55c7db5",
+    "source": "200ebfe907c9dc1ccb8e2196478e3b7dd19fd233",
+    "sourcePatchSha256": "3b5304e7828601cd170838e743a1f0e61d2a5e0a955e9b6d5fc174afcb4d12cd",
+    "appRendererMatchesMergedMain": true,
+    "cases": [
+      {
+        "draft": "/* Android 导入 */\n:root { --rssr-import-test: 37; }\n",
+        "style": "/* Android 导入 */\n:root { --rssr-import-test: 37; }\n",
+        "rules": [
+          ":root { --rssr-import-test: 37; }"
+        ],
+        "preview": "37"
+      },
+      {
+        "draft": "﻿/* Android 导入 */\n:root { --rssr-import-test: 37; }\n",
+        "style": "﻿/* Android 导入 */\n:root { --rssr-import-test: 37; }\n",
+        "rules": [
+          "﻿ :root { --rssr-import-test: 37; }"
+        ],
+        "preview": ""
+      }
+    ],
+    "result": "reproduced existing defect; no settings were stored"
+  },
+  "correction": "Omit one leading U+FEFF only from inline style text; preserve draft, export, stored bytes and interior BOMs",
+  "current": {
+    "source": "ef04ded9955699e1175b3904d470c2e9046edf9f",
+    "sourcePatchSha256": "750d754c1399cc56d08e08ac4c7bddbcaffc64f19d427d54d524be0df72a277e",
+    "androidApk": "80723aa721f43084a06338edc5e4e85b1e03c20dc9f07581125160b538116352",
+    "windowsExe": "7b2d2bd0ac8ffe9522e6bc3db2e61ff3d7b341624bec22dd8d27e95add7f7f47",
+    "androidImportChecks": [
+      {
+        "name": "system-picker-cancel-preserves-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "utf8-bom-crlf-import-previews-exact-text-without-saving",
+        "pass": true
+      },
+      {
+        "name": "invalid-utf8-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "oversize-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "invalid-css-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "read-failure-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "exact-65536-byte-file-is-admitted",
+        "pass": true
+      },
+      {
+        "name": "later-edit-rejects-delayed-file-and-feedback",
+        "pass": true
+      },
+      {
+        "name": "page-disposal-releases-waiter-and-old-provider-cannot-revive",
+        "pass": true
+      },
+      {
+        "name": "explicit-save-persists-only-current-import-and-reopens",
+        "pass": true
+      }
+    ],
+    "windowsChecks": [
+      {
+        "name": "locked interpreter decoder exists",
+        "pass": true
+      },
+      {
+        "name": "startup preserves BOM before page edits",
+        "pass": true
+      },
+      {
+        "name": "ordinary text applies and preserves every field",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 1280",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 390",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 0",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 1",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 2",
+        "pass": true
+      },
+      {
+        "name": "actual BOM-prefixed Rust batch was decoded",
+        "pass": true
+      },
+      {
+        "name": "all BOM-prefixed tables are preserved",
+        "pass": true
+      },
+      {
+        "name": "remount and subsequent Save remain usable",
+        "pass": true
+      },
+      {
+        "name": "all 5000 flags and 6 subscriptions unchanged",
+        "pass": true
+      },
+      {
+        "name": "no page or console errors",
+        "pass": true
+      }
+    ]
+  },
+  "evidenceDirectory": "target/android-theme-import-20261030",
+  "limits": "Native CDP and adb input; no physical IME, accessibility or Web GUI claim"
+}

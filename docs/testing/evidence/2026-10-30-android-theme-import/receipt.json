@@ -1,0 +1,236 @@
+{
+  "date": "2026-10-30",
+  "source": "ef04ded9955699e1175b3904d470c2e9046edf9f",
+  "sourcePatchSha256": "750d754c1399cc56d08e08ac4c7bddbcaffc64f19d427d54d524be0df72a277e",
+  "artifactIdentity": {
+    "source": "ef04ded9955699e1175b3904d470c2e9046edf9f",
+    "patchSha256": "750d754c1399cc56d08e08ac4c7bddbcaffc64f19d427d54d524be0df72a277e",
+    "sourceArchiveSha256": "10ab4b42faa32f6101cbcbea760fad2e41d0699bee25cc58e433b1cbe2367946",
+    "productFiles": 458,
+    "buildId": "android-theme-import-ef04ded99556-750d754c1399",
+    "androidIdentityOverlay": [
+      "Dioxus.toml",
+      "android/MainActivity.kt"
+    ],
+    "apkSha256": "80723aa721f43084a06338edc5e4e85b1e03c20dc9f07581125160b538116352",
+    "baseApkSha256": "558449cd20b52f0c00088d7fa6e848418245b24f719739c568f45f8dcd0629ea",
+    "librarySha256": "e5a7860d1027404842d3671ef71e76999a5d86a221754041509d7bd66e02e320",
+    "generatedActivityMatches": true,
+    "currentProductFilesMatch": true,
+    "providerSha256": "5c2da0c89cda0f687db802ab138161e5d3682687a44cb1a5c3ba50baf34894f2",
+    "fixtureOnlyInTestApk": true,
+    "dependencySourceMatches": true
+  },
+  "productManifestSha256": "c77e0afe897d87b170278febe47f3e0a52455c1deed596c4c59de24764940c64",
+  "productInputsVerified": 458,
+  "evidenceDirectory": "target/android-theme-import-20261030",
+  "rust": {
+    "passed": 391,
+    "ignored": 1,
+    "newTransportTests": 4
+  },
+  "fmt": "pass",
+  "clippy": "pass",
+  "wasmCheck": "pass",
+  "androidBuild": "pass; fresh target, JDK 21, NDK 28.2",
+  "review": "no unresolved blocking finding; BOM rendering defect reproduced and fixed separately",
+  "pr48": {
+    "base": "663ef4ee5d19458c815a6921f0e418321cf75464",
+    "head": "8ace1781d222ca03009711adda33dc0a823cde34",
+    "merge_commit_sha": "ef04ded9955699e1175b3904d470c2e9046edf9f",
+    "merged": true,
+    "merged_at": "2026-10-30T19:27:52Z",
+    "number": 48,
+    "state": "closed"
+  },
+  "pr48Ci": {
+    "run": 41114043342,
+    "jobs": {
+      "total": 36,
+      "success": 36,
+      "fullReceipt": "pr48-ci-jobs.json",
+      "fullReceiptSha256": "8fbe870354927c55980ee7c9c19683ede3ff9b43c5b58246fa699b84a1f9b42e"
+    }
+  },
+  "mainCi": {
+    "run": 41115461369,
+    "jobs": {
+      "total": 36,
+      "success": 36,
+      "fullReceipt": "main-ci-jobs.json",
+      "fullReceiptSha256": "b2ebca3303cf959b225f56942871042b95dcdf8f3373c6e7437787702038da63"
+    }
+  },
+  "pr48Pages": {
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "build",
+        "status": "completed"
+      },
+      {
+        "conclusion": "skipped",
+        "name": "deploy",
+        "status": "completed"
+      }
+    ],
+    "total_count": 2
+  },
+  "android": {
+    "serial": "caa0c283",
+    "pkg": "io.github.develata.rssreader.backpolicytest",
+    "apkHash": "80723aa721f43084a06338edc5e4e85b1e03c20dc9f07581125160b538116352",
+    "webViewVersion": "Chrome/156.0.8078.47",
+    "androidVersion": "15",
+    "sdk": "35",
+    "checks": [
+      {
+        "name": "system-picker-cancel-preserves-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "utf8-bom-crlf-import-previews-exact-text-without-saving",
+        "pass": true
+      },
+      {
+        "name": "invalid-utf8-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "oversize-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "invalid-css-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "read-failure-keeps-current-draft-preview-and-storage",
+        "pass": true
+      },
+      {
+        "name": "exact-65536-byte-file-is-admitted",
+        "pass": true
+      },
+      {
+        "name": "later-edit-rejects-delayed-file-and-feedback",
+        "pass": true
+      },
+      {
+        "name": "page-disposal-releases-waiter-and-old-provider-cannot-revive",
+        "pass": true
+      },
+      {
+        "name": "explicit-save-persists-only-current-import-and-reopens",
+        "pass": true
+      }
+    ],
+    "pageErrors": [],
+    "scriptSha256": "b2bbccf2c8240ce6dcf7a65457082ae2cc3705ba5d92d8cbaf9ece0f508e9088",
+    "fixture": "test-only DocumentsProvider; actual system picker and ContentResolver; injected read failure/delay"
+  },
+  "windows": {
+    "exeSha256": "7b2d2bd0ac8ffe9522e6bc3db2e61ff3d7b341624bec22dd8d27e95add7f7f47",
+    "webViewVersion": "156.0.4314.50",
+    "checks": [
+      {
+        "name": "locked interpreter decoder exists",
+        "pass": true
+      },
+      {
+        "name": "startup preserves BOM before page edits",
+        "pass": true
+      },
+      {
+        "name": "ordinary text applies and preserves every field",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 1280",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 390",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 0",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 1",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 2",
+        "pass": true
+      },
+      {
+        "name": "actual BOM-prefixed Rust batch was decoded",
+        "pass": true
+      },
+      {
+        "name": "all BOM-prefixed tables are preserved",
+        "pass": true
+      },
+      {
+        "name": "remount and subsequent Save remain usable",
+        "pass": true
+      },
+      {
+        "name": "all 5000 flags and 6 subscriptions unchanged",
+        "pass": true
+      },
+      {
+        "name": "no page or console errors",
+        "pass": true
+      }
+    ],
+    "pageErrors": [],
+    "consoleErrors": [],
+    "scriptSha256": "81d2a02d4d1edc713f747d4c402df78e50542470617b75305cf439ffda6c8293",
+    "boundary": "Native CDP inputs and real Rust transport/SQLite; no OS picker or real IME claim"
+  },
+  "preservation": {
+    "dailyPackageUnchanged": true,
+    "testDataRestored": true,
+    "restoredHash": "13a5449fa88b4fd9332670ca7bff4834c9ea740e906e825751ad48a487ebca0a",
+    "forward": "caa0c283 tcp:9243 localabstract:webview_devtools_remote_8615\r\ncaa0c283 tcp:9252 localabstract:webview_devtools_remote_30728\r\ncaa0c283 tcp:9262 localabstract:webview_devtools_remote_2790",
+    "reverse": "UsbFfs tcp:8111 tcp:8111"
+  },
+  "originalTestData": {
+    "files": 6,
+    "allOriginalLibraryFilesMatch": true,
+    "manifest": {
+      ".android-storage-v1": "ce3933cc8fdf0b9c2303732cca082c525a3ed2738018a04eecc3a3262669ea62",
+      "library.sqlite3": "13a5449fa88b4fd9332670ca7bff4834c9ea740e906e825751ad48a487ebca0a",
+      "library.sqlite3-shm": "848380a6bf632bca6c10ea2436625e395eda12359a8e5782f29cce48de3051db",
+      "library.sqlite3-wal": "f44dd02404af0d11ac21f06657be2a9752a16620c620d48711baf1b983410237",
+      "library.sqlite3.create-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outbound.json": "e109501aad41ad166377d03387f9fec0301aec5b10e8cb28a1206f71edd0bda1"
+    }
+  },
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "priorStatusCount": 40,
+    "statusCount": 41,
+    "indexSha256": "028B18448166CD5CA5B91300EBC8CC52EBEBA0F0F1D47F6B76EC87B66F8DFB59",
+    "verifiedPaths": 42,
+    "priorContentUnchanged": true,
+    "concurrentAdditions": [
+      "?? docs/handoffs/2026-10-30-main-javascript-audit.md"
+    ]
+  },
+  "failuresPreserved": [
+    "android-01 picker grid offscreen fixture; runner fixed",
+    "android-02 residual owned DocumentsUI task prevented test Activity launch; runner cleanup fixed",
+    "android-03/04 leading BOM CSS rendering defect; separately fixed",
+    "windows initial transport batch count assumption updated for rendered BOM removal; second run had wrong starting page; third passed"
+  ],
+  "limits": [
+    "test-only DocumentsProvider supplies injected failures and delay, not a cloud-provider test",
+    "provider blocking I/O is not guaranteed to stop on page cancellation; physical slot remains occupied until return",
+    "no Activity recreation/process-death, release signing/upgrade, system IME, accessibility, macOS/Linux GUI or performance acceptance",
+    "Web GUI not rerun locally; new branch remote checks are separate from PR48/main baseline"
+  ]
+}

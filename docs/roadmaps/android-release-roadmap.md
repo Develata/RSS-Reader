@@ -42,6 +42,6 @@ python3 scripts/prepare_android_bundle.py target/dx/rssr-app/release/android/app
 2. 真实远端订阅的添加与刷新、后台恢复及数据保留；核对实际发布包仍符合本轮已验证的阅读与写入行为。
 3. Reader 图片查看器的系统返回关闭顺序、正文长按选择，以及文章首页下拉刷新只在顶部触发。
 4. 360px 级窄视口来源名、搜索、分页、safe area、图片点击放大与正文选择手柄。
-5. JSON / OPML、主题文件 SAF 导出、WebDAV（CSS 文件导入当前未实现），以及失败重试和权限拒绝路径。
+5. JSON / OPML、主题文件 SAF 导入 / 导出、WebDAV，以及失败重试和权限拒绝路径。CSS 导入专项见[10 月 30 日交接](../handoffs/2026-10-30-android-theme-import.md)，仍须与实际发布候选身份分别核对。
 
 记录设备型号、Android 版本、APK 来源和签名身份，以及实际操作结果。当前 [手工回归清单](../testing/manual-regression.md) 与 [主线验证矩阵](../testing/mainline-validation-matrix.md) 提供通用路径；已有专项通过不等于上述未覆盖场景、其他设备或正式包已完成验收。
