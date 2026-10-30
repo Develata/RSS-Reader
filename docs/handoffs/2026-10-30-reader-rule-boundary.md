@@ -6,6 +6,7 @@
 - 工作树：`E:/gitclone/RSS-Reader-worktrees/native-back-policy`
 - 产品基线：`4cef074c54d7df54808e7892f950f56a7a750232`
 - 产品 commit：`82beaf5219988117b2908a05afff6c2222e1c32a`
+- PR：[Reader 规则独立性 #50](https://github.com/Develata/RSS-Reader/pull/50)，已推送，保持未合并
 - 本交接和维护文档：随本文件的文档提交；以 `git log -1 -- docs/handoffs/2026-10-30-reader-rule-boundary.md` 定位
 - 相关 tag / release：无；未发布
 - 状态：`validated`（本地、正式 Web 与所列实际宿主）；本批分支尚未合并，远端检查以分支 PR 当前 head 为准
@@ -39,6 +40,7 @@
 | 正式 Web / 当前 rssr-web / SQLite | 复用 `readerWritesSurviveNavigation`，已读与收藏两种延迟写入在离页后成功；HTTP 延迟来自受控路由，不称作真实网络故障 |
 | 页面异常与截图 | 所列最终宿主/Web 回执的 page/console errors 为空；Windows 8 张、Android 4 张对应 PNG **逐字节相同**。另查看候选 Windows 阅读与 Android 图片窗口截图；不推广为所有页面/设备视觉验收 |
 | 文档、输入与脚本检查 | 329 份 Markdown / 1542 个本地链接，无新增或变更文档错误；回执 JSON 可解析，393 个产品输入与构建快照匹配，`git diff --check` 与脚本语法通过 |
+| PR #50 的 `050efdd7` / CI | [run 41127100378](https://github.com/Develata/RSS-Reader/actions/runs/41127100378) 首轮 34 成功、偏好事件等待及汇总门禁失败；不改代码仅重跑失败作业后，最终 **36/36**。新增无 UI 框架编译步骤成功；Pages 构建通过。此结果属于该提交，后续仅文档提交的 Checks 仍按 PR 当前 head 核对 |
 
 ### 失败记录与验证边界
 
@@ -46,6 +48,7 @@
 - 最初调用全局 dx 0.7.10，Web 命令遗漏 `--debug-symbols false`，复现既有 wasm-opt DWARF 崩溃；dx 仍退出 0。按仓库记录使用已验证 SHA256 的 dx 0.7.9 并加参数后重新构建 Web/Android，最终产物与日志另存。没有覆盖全局工具或降低优化级别。
 - Android 首个产物定位脚本用了错误目录；备份已完成，未进入资料库切换。安装 helper 首次因实际 debug 标签为 `RssrApp` 而拒绝；仅在本批副本中匹配已核验标签与固定测试包 ID 后安装。一次设备端目录名与历史证据冲突，保护检查在移动前拒绝，改用本批专用名字继续，未删除旧目录。
 - Pillow 的本机二进制导入失败；未改全局安装。12 对 PNG 文件直接逐字节比较相同，足以证明这些图片一致。
+- PR #50 的 `050efdd7` 首轮 CI（run `41127100378`）在既有 `preferenceOrdering` 等待最终 PUT 的 `requestfinished` 事件时超时；响应成功断言已通过，其余 34 个作业通过，汇总门禁随该失败而失败。列表偏好和这份测试均未被本批修改。保存了原始日志与失败页面；本地 Chrome `155.0.8059.40` 按原顺序运行前置 9 场景，再连续 5 轮原偏好测试，均通过，未记录到 workspace 请求失败或页面异常。随后同一提交仅重跑失败作业，完整 reading-workspace 与汇总门禁均通过，最终 36/36。尚未复现，也未确认根因；没有扩大超时、放宽断言或修改产品逻辑。后续若再出现，应增加该请求的结束/失败事件诊断，不把本次重跑通过当作根因修复。
 - 重复按键/composing 是受控事件事实；不声称真实硬件键盘、系统输入法、辅助技术、macOS/Linux GUI、正式签名升级或性能验收。当前宿主通过也不证明任何新渲染器已可用；完整 session/runtime 仍有 Dioxus 装配职责。
 
 ## 产物、证据与数据保全

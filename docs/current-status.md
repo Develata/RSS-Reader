@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | 最新 main | `4cef074c`；本地 main 已快进到同一提交 | PR #38–#49 已合并；PR #49 head 与合并 main 的 CI 各 36/36，main Pages / Docker workflow 成功。合并树与 head `b03ebc4e` 相同，见[整合回执](./handoffs/2026-10-30-android-theme-import.md#后续整合回执2026-10-30) |
-| 当前工作分支 | `codex/reader-rule-boundary`，复用原 E 盘工作树；产品提交 `82beaf52`，尚未合并 | app 418 通过 / 1 忽略；独立无框架编译 23 项通过。Windows 基线/候选各 4 组、Android 真机各 2 组、正式 Web 两种离页写入通过；12 张宿主截图逐字节相同。产物与范围见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)，远端 Checks 以该分支 PR 当前 head 为准 |
+| 当前工作分支 | `codex/reader-rule-boundary`，[PR #50](https://github.com/Develata/RSS-Reader/pull/50)；复用原 E 盘工作树，产品提交 `82beaf52`，尚未合并 | app 418 通过 / 1 忽略；独立无框架编译 23 项通过。Windows 基线/候选各 4 组、Android 真机各 2 组、正式 Web 两种离页写入通过；12 张宿主截图逐字节相同。产物、首次 CI 超时与重查范围见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)，远端 Checks 以 PR 当前 head 为准 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 

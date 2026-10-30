@@ -140,6 +140,35 @@
     "success": 36,
     "total": 36
   },
+  "prCi": {
+    "pr": 50,
+    "run": 41127100378,
+    "head": "050efdd7c53dba2e0460b07c8980032576e42b93",
+    "attempt": 2,
+    "success": 36,
+    "total": 36,
+    "retryScope": "Only failed jobs; no source changes",
+    "firstAttempt": {
+      "success": 34,
+      "failure": 2,
+      "failedJobs": ["reading-workspace", "lint-and-test"],
+      "assertion": "preferenceOrdering: the final workspace response must finish",
+      "rootCause": "unconfirmed; not reproduced locally",
+      "evidence": "target/reader-rule-boundary-20261030/pr50-workspace-first"
+    },
+    "localDiagnostic": {
+      "browser": "Chrome 155.0.8059.40 on Windows",
+      "precedingScenariosPassed": 9,
+      "preferenceOrderingTrialsPassed": 5,
+      "workspaceRequestFailures": 0,
+      "pageErrors": 0,
+      "evidence": "target/reader-rule-boundary-20261030/pr50-workspace-local-candidate-01/diagnostic.json"
+    },
+    "retryEvidence": "target/reader-rule-boundary-20261030/pr50-workspace-retry",
+    "pagesRun": 41127100466,
+    "pagesConclusion": "success",
+    "laterDocumentationHead": "Check the current PR head separately; this receipt is bound to 050efdd7"
+  },
   "evidenceDirectory": "target/reader-rule-boundary-20261030",
   "notCovered": [
     "physical keyboard/IME",
