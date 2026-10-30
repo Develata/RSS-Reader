@@ -1,0 +1,407 @@
+{
+  "date": "2026-10-30",
+  "branch": "codex/shell-settings-lifecycle",
+  "implementationCommit": "14f334d92711a526c3b7d0126b75f7651ae4e904",
+  "base": "6a75fb835170589a14b31d8deff16ec3a678de97",
+  "pr46": {
+    "url": "https://github.com/Develata/RSS-Reader/pull/46",
+    "head": "a3da94d0dc053f543a5c97cde03943aa154a4f49",
+    "merge": "6a75fb835170589a14b31d8deff16ec3a678de97",
+    "headCiRun": 41090441523,
+    "headCiJobs": 36,
+    "headCiConclusion": "success",
+    "pagesRun": 41090441643,
+    "pagesConclusion": "success",
+    "reviewSubmissions": 0,
+    "reviewThreads": 0
+  },
+  "baseline": {
+    "artifactSource": "62113c4fc181e245bc077dcd46eda56a969d7b96",
+    "productBuildInputsEqualMergedMain": true,
+    "shellTestsPassed": 11,
+    "reusedArtifactsFreshlyExercised": true
+  },
+  "candidateBuildId": "dev-6a75fb835170-dirty-a467516b802b",
+  "checks": {
+    "policyStandalone": {
+      "passed": 7
+    },
+    "app": {
+      "passed": 383,
+      "ignored": 1
+    },
+    "clippy": "pass",
+    "fmt": "pass",
+    "gitDiffCheck": "pass",
+    "formalWebBuild": "pass",
+    "windowsAndServerBuild": "pass",
+    "androidAarch64Check": {
+      "status": "pass",
+      "ndk": "28.2.13676358",
+      "api": 24,
+      "warning": "pre-existing rssr-infra LOCAL_DATA_DIR_NAME unused"
+    },
+    "newBranchRemoteCi": "not-run",
+    "docsLinks": {
+      "checked": 1486,
+      "introducedErrors": 0,
+      "changedDocumentErrors": 0
+    }
+  },
+  "runtime": {
+    "webServer": [
+      {
+        "artifact": "target/shell-settings-20261030/web-baseline-cdp/assertions.json",
+        "receiptSha256": "fcd82e7f6e8e7d1087c72b24c9eb5e2fa203f1bb93a18e6effbb5ef2ec7cdc88",
+        "status": "pass",
+        "checks": [
+          {
+            "name": "reread-triggers",
+            "status": "pass",
+            "checks": 24,
+            "unexpectedConsole": 0
+          },
+          {
+            "name": "settings-read-fails-at-start",
+            "status": "pass",
+            "checks": 4,
+            "unexpectedConsole": 0
+          },
+          {
+            "name": "startup-target-fails",
+            "status": "pass",
+            "checks": 2,
+            "unexpectedConsole": 0
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": []
+      },
+      {
+        "artifact": "target/shell-settings-20261030/web-candidate-cdp/assertions.json",
+        "receiptSha256": "e4d9c445dd8715f128ca5c8cb6af5e30d25f01e43e0014df42c4fa38b7ccb4d2",
+        "status": "pass",
+        "checks": [
+          {
+            "name": "reread-triggers",
+            "status": "pass",
+            "checks": 24,
+            "unexpectedConsole": 0
+          },
+          {
+            "name": "settings-read-fails-at-start",
+            "status": "pass",
+            "checks": 4,
+            "unexpectedConsole": 0
+          },
+          {
+            "name": "startup-target-fails",
+            "status": "pass",
+            "checks": 2,
+            "unexpectedConsole": 0
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": []
+      }
+    ],
+    "webSettings": [
+      {
+        "artifact": "target/shell-settings-20261030/web-baseline-preparation/acceptance.json",
+        "receiptSha256": "da6b90bf8716e4e086c3a7514a4e67df215a45cc9c2a9560c8ff6042fc9924a7",
+        "status": "passed",
+        "checks": [
+          {
+            "name": "per-field-save-and-later-edit-1536",
+            "pass": true
+          },
+          {
+            "name": "equal-value-save-retires-parse-feedback-1536",
+            "pass": true
+          },
+          {
+            "name": "download-merges-per-field-and-retains-edit-feedback-1536",
+            "pass": true
+          },
+          {
+            "name": "theme-utf8-bom-export-and-stale-file-1536",
+            "pass": true
+          },
+          {
+            "name": "per-field-save-and-later-edit-390",
+            "pass": true
+          },
+          {
+            "name": "equal-value-save-retires-parse-feedback-390",
+            "pass": true
+          },
+          {
+            "name": "download-merges-per-field-and-retains-edit-feedback-390",
+            "pass": true
+          },
+          {
+            "name": "theme-utf8-bom-export-and-stale-file-390",
+            "pass": true
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": []
+      },
+      {
+        "artifact": "target/shell-settings-20261030/web-candidate-preparation/acceptance.json",
+        "receiptSha256": "da6b90bf8716e4e086c3a7514a4e67df215a45cc9c2a9560c8ff6042fc9924a7",
+        "status": "passed",
+        "checks": [
+          {
+            "name": "per-field-save-and-later-edit-1536",
+            "pass": true
+          },
+          {
+            "name": "equal-value-save-retires-parse-feedback-1536",
+            "pass": true
+          },
+          {
+            "name": "download-merges-per-field-and-retains-edit-feedback-1536",
+            "pass": true
+          },
+          {
+            "name": "theme-utf8-bom-export-and-stale-file-1536",
+            "pass": true
+          },
+          {
+            "name": "per-field-save-and-later-edit-390",
+            "pass": true
+          },
+          {
+            "name": "equal-value-save-retires-parse-feedback-390",
+            "pass": true
+          },
+          {
+            "name": "download-merges-per-field-and-retains-edit-feedback-390",
+            "pass": true
+          },
+          {
+            "name": "theme-utf8-bom-export-and-stale-file-390",
+            "pass": true
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": []
+      }
+    ],
+    "windows": [
+      {
+        "artifact": "target/shell-settings-20261030/windows-baseline-03/acceptance.json",
+        "receiptSha256": "0f1013d2d57a3bcf2a1b6cf8109175cc6d2566f05540ff6bcc11eef76d4c7533",
+        "status": "pass",
+        "checks": [
+          {
+            "name": "startup-applies-stored-settings",
+            "pass": true
+          },
+          {
+            "name": "app-reread-applies-external-settings-without-writing",
+            "pass": true
+          },
+          {
+            "name": "settings-page-reread-preserves-pending-fields",
+            "pass": true
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": []
+      },
+      {
+        "artifact": "target/shell-settings-20261030/windows-candidate/acceptance.json",
+        "receiptSha256": "5f85294b219e081b2ad40a0e7d21af30bf1223e40de3e7a2b3f004f6ab56172c",
+        "status": "pass",
+        "checks": [
+          {
+            "name": "startup-applies-stored-settings",
+            "pass": true
+          },
+          {
+            "name": "app-reread-applies-external-settings-without-writing",
+            "pass": true
+          },
+          {
+            "name": "settings-page-reread-preserves-pending-fields",
+            "pass": true
+          }
+        ],
+        "pageErrors": [],
+        "consoleErrors": []
+      }
+    ]
+  },
+  "windowsVisual": [
+    {
+      "name": "startup",
+      "size": [
+        1280,
+        900
+      ],
+      "bounds": [
+        116,
+        40,
+        129,
+        55
+      ],
+      "differentPixels": 112
+    },
+    {
+      "name": "reread",
+      "size": [
+        1280,
+        900
+      ],
+      "bounds": null,
+      "differentPixels": 0
+    },
+    {
+      "name": "settings-pending",
+      "size": [
+        1280,
+        900
+      ],
+      "bounds": null,
+      "differentPixels": 0
+    }
+  ],
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "headUnchanged": true,
+    "statusCount": 40,
+    "statusUnchanged": true,
+    "indexSha256": "028B18448166CD5CA5B91300EBC8CC52EBEBA0F0F1D47F6B76EC87B66F8DFB59",
+    "indexUnchanged": true,
+    "filesChecked": 42,
+    "changedFiles": []
+  },
+  "uncovered": [
+    "New Android artifact/host interaction",
+    "OS foreground switching in Windows settings tests",
+    "IME and accessibility",
+    "macOS/Linux GUI",
+    "Docker",
+    "Signed package upgrade"
+  ],
+  "knownTestDriverFailures": [
+    "Playwright focus emulation prevented document.hidden; direct Chrome/CDP baseline passed unchanged assertions",
+    "Initial Windows helper call used wrapped client; fixed before final paired runs"
+  ],
+  "sources": [
+    {
+      "path": "crates/rssr-app/src/ui/shell.rs",
+      "sha256": "9f9291ccb643b1f6c2c0aa96b0d978e66b3a6f21cfabd8b2fc8118eb02a16d6b",
+      "bytes": 44720
+    },
+    {
+      "path": "crates/rssr-app/src/ui/shell/settings_read_lifecycle.rs",
+      "sha256": "7f40b32480a1fa89df0267e1c37ccf8ae6ee9f5ee8c6b48bfa95e8e4a550193d",
+      "bytes": 9130
+    },
+    {
+      "path": "scripts/browser/rssr_shell_settings_acceptance.mjs",
+      "sha256": "9510c4979d065442d8ff68690e1ac2b9332bf7c263d1537ef7325403512da821",
+      "bytes": 8659
+    },
+    {
+      "path": "scripts/browser/rssr_server_acceptance.mjs",
+      "sha256": "e886e3b2784662d8528642f3d47b19068f6516c79011af86564cb8e5c880e99c",
+      "bytes": 78470
+    },
+    {
+      "path": "scripts/browser/rssr_native_preparation_acceptance.cjs",
+      "sha256": "bbd8989cbbe6d4a7ecc2c52f22b03216cc0d99d3579806891ddb80d60055b767",
+      "bytes": 11866
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "target/back-policy-native-20261030/seed/library.sqlite3",
+      "sha256": "529eed9823d1a4ec207ec3c725e467feabb0cade7c6e694a22b7097195383ef3",
+      "bytes": 974848
+    },
+    {
+      "path": "target/shell-settings-20261030/windows-baseline-03/startup.png",
+      "sha256": "7aa88982835615dd7bf7b9988b343dd37b0b8cda885b3f9888942f834bbe9fe1",
+      "bytes": 266682
+    },
+    {
+      "path": "target/shell-settings-20261030/windows-baseline-03/reread.png",
+      "sha256": "0bbf95dc483e28c726472e325d64e39a23182a093cbd1eff2aa5173c16e799e3",
+      "bytes": 299076
+    },
+    {
+      "path": "target/shell-settings-20261030/windows-baseline-03/settings-pending.png",
+      "sha256": "19f1dfe8f2cf3b32d94f0dba80b0fe25b740bda63692b0a9e8706c0b0bed31a5",
+      "bytes": 72623
+    },
+    {
+      "path": "target/shell-settings-20261030/windows-candidate/startup.png",
+      "sha256": "92b769dd45235b8dc919a39b51a1f048e9d2731e4441dd591f1c71ac16a2f1a5",
+      "bytes": 266684
+    },
+    {
+      "path": "target/shell-settings-20261030/windows-candidate/reread.png",
+      "sha256": "0bbf95dc483e28c726472e325d64e39a23182a093cbd1eff2aa5173c16e799e3",
+      "bytes": 299076
+    },
+    {
+      "path": "target/shell-settings-20261030/windows-candidate/settings-pending.png",
+      "sha256": "19f1dfe8f2cf3b32d94f0dba80b0fe25b740bda63692b0a9e8706c0b0bed31a5",
+      "bytes": 72623
+    },
+    {
+      "path": "target/back-policy-20261029/windows-candidate/rssr-app.exe",
+      "sha256": "172bfb1a0ecafa2c94aa832fdd4f102f2d4f9b00e463e5fa15a251ebfa375967",
+      "bytes": 43649024
+    },
+    {
+      "path": "target/back-policy-20261029/web-candidate-server/rssr-web.exe",
+      "sha256": "3d5eeee8d4b5a38a7d001a4179070c4ee9fc996f1bc8be2962394bf596fcc3ea",
+      "bytes": 29634048
+    },
+    {
+      "path": "target/back-policy-20261029/web-candidate/index.html",
+      "sha256": "7456b0f093e90cd75020f02fe9a1c2cabf28787c7d45583d4458a3abe3620a76",
+      "bytes": 563
+    },
+    {
+      "path": "target/back-policy-20261029/web-candidate/assets/rssr-app-dxh2111b5ccc6eb1175.js",
+      "sha256": "d7aad0dca70747868cc97802791ddbad223deff1cb5a22cc13caca14963ef8a4",
+      "bytes": 58130
+    },
+    {
+      "path": "target/back-policy-20261029/web-candidate/assets/rssr-app_bg-dxh10cc162bf9d3c6e2.wasm",
+      "sha256": "2cd3e58c3b63dd350971611f16de621863c36c6d02e3ec968b4e511dfd42d90f",
+      "bytes": 3134815
+    },
+    {
+      "path": "target/shell-settings-20261030/bin/rssr-app.exe",
+      "sha256": "dc05668809d3aad7a9e96079c0437ec24a3eabccc1228fbae5aea0c02fce0d3a",
+      "bytes": 44653568
+    },
+    {
+      "path": "target/shell-settings-20261030/bin/rssr-web.exe",
+      "sha256": "8359b03b8d9e2e7602e6b05d9a3a6c3c7ee820a4e67cf44fb5b606bdcc59e3dd",
+      "bytes": 29710848
+    },
+    {
+      "path": "target/shell-settings-20261030/web-candidate-final/index.html",
+      "sha256": "b19cef885fb2cfc049682ba38823ab401a5a72bc4b459eecfc13bb9aca02eb72",
+      "bytes": 563
+    },
+    {
+      "path": "target/shell-settings-20261030/web-candidate-final/assets/rssr-app-dxh7f1a5865a0dbc2b4.js",
+      "sha256": "7d8c22b3860082f051986a8672abd46dc7b0ef59df3af5f0ad058a0e866d1de6",
+      "bytes": 58130
+    },
+    {
+      "path": "target/shell-settings-20261030/web-candidate-final/assets/rssr-app_bg-dxh46e27e1cd334b1b9.wasm",
+      "sha256": "079c439d4c73c77e7addb5cd4a2cfff4cc2c2e62a20d13ac3f085cc5f4f331ce",
+      "bytes": 3135298
+    }
+  ]
+}
