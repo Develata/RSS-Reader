@@ -7,6 +7,7 @@
 | 范围 | 命令/入口 | 证明的边界 |
 | --- | --- | --- |
 | Rust 规则与 Dioxus 接线 | cargo test --workspace --locked | 保留 main 全部用例，补写入规则、编辑状态、文件归属、逐字段数值提示；不证明 OS 控件 |
+| Reader 规则独立性 | python scripts/check_reader_rule_boundary.py | 用生产模块及其测试编译独立程序，仅链接现有 API/domain/serde，拒绝框架依赖；不创建替身状态或新 Cargo package。app 集成测试继续约束任务与发布顺序 |
 | 返回与退出提示 | cargo test -p rssr-app --locked use_mobile_back_navigation | 普通 Rust 事件序列、Dioxus 提示投影、捕获完成/失败/超时/取消/路由变化与旧监听清理；不证明实际 Android 返回 |
 | 静态检查 | cargo fmt --all --check；cargo clippy --workspace --all-targets --locked -- -D warnings | 编译、格式与 lint |
 | 正式 Web | dx build --platform web --package rssr-app --locked --release --debug-symbols false | 当前 HTTP Backend 包；不使用 pages-demo |
@@ -14,6 +15,7 @@
 | Settings/主题接入 | node scripts/browser/rssr_native_preparation_acceptance.cjs | 1536/390 两视口，PATCH 字段边界、保存与后续编辑、下载回填、字段提示、导入仅预览与显式保存、UTF-8/导出、迟到文件 |
 | 原生字符串表 | rssr_native_transport_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> | 实际 Windows EXE/WebView2、单库与传输；不操作 OS 选择器 |
 | 原生返回专项 | rssr_back_navigation_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> --fixture-dir <fixture> | Windows 实际 WebView2；Android 独立测试包的系统返回、保存门禁、采集失败/超时/取消、首页提示与恢复前台 |
+| Reader 宿主专项 | 上行命令加 --reader-only true | 只运行图片关闭/回焦/位置恢复、M/F 写入保留正文、输入排除、J/方向键切文与工具栏返回；Android 图片关闭使用实际系统返回。repeat/composing 为受控事件，不证明物理键盘/系统 IME；不需要保存锁工具 |
 | 主题选择宿主专项 | rssr_theme_selector_windows.mjs / rssr_theme_selector_android.mjs | Windows 实际 EXE + UIA + CDP；Android 真机系统列表、adb 选择/返回、预览及显式保存。不是新增 OS 控件或完整辅助技术验收 |
 | Android 主题文件导入 | rssr_theme_import_android.mjs | 实际 DocumentsUI + ContentResolver + JNI；测试包专属提供器控制文件、读取错误和延迟；与真实云端提供器、正式包权限验收区分 |
 | Android 编译 | cargo check -p rssr-app --target aarch64-linux-android --locked 及 PR android-smoke | 仅编译/CI smoke，不能替代上行真机检查；选择器、IME 和辅助技术另验 |
