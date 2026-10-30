@@ -2,6 +2,7 @@ mod commands;
 pub(crate) mod drafts;
 pub(crate) mod failure;
 mod helpers;
+pub(crate) mod reader_shortcuts;
 pub(crate) mod reading_position;
 pub(crate) mod recovery;
 pub(crate) mod runtime;

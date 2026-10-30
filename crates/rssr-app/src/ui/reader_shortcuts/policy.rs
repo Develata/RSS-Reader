@@ -10,7 +10,7 @@ pub(crate) enum ReaderShortcut {
 
 // Logical key names, shared by Rust dispatch and the current host projection.
 // Single-character bindings accept ASCII capitals; named keys remain exact.
-pub(crate) const BINDINGS: [(&str, ReaderShortcut); 6] = [
+pub(super) const BINDINGS: [(&str, ReaderShortcut); 6] = [
     ("ArrowLeft", ReaderShortcut::Previous),
     ("k", ReaderShortcut::Previous),
     ("ArrowRight", ReaderShortcut::Next),
@@ -20,7 +20,7 @@ pub(crate) const BINDINGS: [(&str, ReaderShortcut); 6] = [
 ];
 
 impl ReaderShortcut {
-    pub(crate) const fn captures_position(self) -> bool {
+    pub(super) const fn captures_position(self) -> bool {
         matches!(self, Self::Previous | Self::Next)
     }
 }

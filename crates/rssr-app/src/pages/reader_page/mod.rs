@@ -5,9 +5,10 @@ pub(crate) mod intent;
 pub(crate) mod reducer;
 mod result_lifecycle;
 mod session;
+mod shortcuts;
 pub(crate) mod state;
 pub(crate) mod support;
-pub(crate) mod webview;
+mod webview;
 
 use dioxus::prelude::*;
 
@@ -15,7 +16,6 @@ use crate::{
     app::AppNav,
     components::status_banner::StatusBanner,
     hooks::use_mobile_back_navigation::{navigate_back, use_mobile_back_navigation_with_dismiss},
-    hooks::use_reader_shortcuts::use_reader_shortcuts,
     router::AppRoute,
     ui::{AppShellState, use_reactive_side_effect, use_reactive_task},
 };
@@ -24,6 +24,7 @@ pub(crate) use self::session::ReaderPageSession;
 
 use self::facade::ReaderPageFacade;
 use self::session::dispatch_reader_page_intent;
+use self::shortcuts::use_reader_shortcuts;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
@@ -52,7 +53,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             AppNav { on_back: move |_| {
                 if !viewer.write().close() { navigate_back(navigator, Some(AppRoute::EntriesPage {})); }
             } }
-            // 快捷键监听整个页面（hooks/use_reader_shortcuts.rs），输入框里的按键不算；阅读区
+            // 快捷键监听整个页面（shortcuts.rs），输入框里的按键不算；阅读区
             // 仍可用 Tab 进入，读屏在这里读出快捷键说明。
             div {
                 "data-layout": "reader-shortcut-scope",

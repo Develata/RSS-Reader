@@ -25,18 +25,33 @@
 
 - `use_image_activations` 仍在 Reader 页作用域运行；`image_viewer.rs` 独占现有图片状态，换文章时关闭。资源引用与替代文本沿用原规则，不复制正文或另建浮层状态。
 - `use_image_dialog` 仍在图片组件挂载后启动，负责原生 HTML dialog 的取消/背景输入、焦点、body 滚动锁与恢复。`use_listener_cleanup` 仅复用原 `use_drop` 停止消息，保留页面/组件任务作用域及等待中卸载的清理，不新加取消语义、代次或重试。
-- `use_shortcut_keys` 仍在宿主同步过滤输入、阻止默认动作，并在切文前通过既有阅读位置入口捕获。Rust 快捷键策略及 session/navigation 派发保持原位置。
+- `use_shortcut_keys` 仍在宿主同步过滤输入、阻止默认动作，并在切文前通过既有阅读位置入口捕获。普通 Rust 策略和共享脚本生成归 `ui/reader_shortcuts/`，session/navigation 派发归页面私有 `shortcuts.rs`；具体依赖见下节。
 - 阅读位置继续复用 `ui/reading_position`，不为 Reader 再包装一套位置服务。该适配模块仍依赖 Dioxus 和 DOM，不是跨渲染器接口；独立性证据继续来自同一生产规则的无框架编译。
 
 验收覆盖真实 Windows WebView2、Android 真机和正式 Web 的反复进入、键盘激活图片、关闭后回焦与恢复滚动、带浮层离页清理。离页后 Reader 监听和 observer 归零；受控路由切换、物理键盘/系统 IME 等边界见[宿主提取交接](../handoffs/2026-10-30-reader-host-boundary.md)。
 
 ## Reader 快捷键定义与同步边界（2026-10-30）
 
-- `hooks/reader_shortcut_policy.rs` 的 `BINDINGS` 是按键与动作的唯一生产定义：左右方向键、J/K 导航、M 已读、F 收藏。逻辑键名是普通字符串；Rust 只对单字符绑定接受 ASCII 大写，命名键保持精确匹配，未知输入忽略。修饰键/组字排除仍可在读取键值前结束；规则不依赖 Dioxus、DOM 或路由。
-- `ReaderShortcut::captures_position` 标识离开文章的动作。当前 `webview::shortcut_script` 在各桥接启动时生成只读配置，沿用宿主小写键名匹配，将配置和 `shortcut_input.js` 一起放进该次 Eval；不依赖全局注册、额外异步握手或挂载顺序。此配置不是另一份交互状态，按键路径不重新生成配置。
+- `ui/reader_shortcuts/policy.rs` 的 `BINDINGS` 是按键与动作的唯一生产定义：左右方向键、J/K 导航、M 已读、F 收藏。逻辑键名是普通字符串；Rust 只对单字符绑定接受 ASCII 大写，命名键保持精确匹配，未知输入忽略。修饰键/组字排除仍可在读取键值前结束；规则不依赖 Dioxus、DOM 或路由。
+- `ReaderShortcut::captures_position` 标识离开文章的动作。当前 `ui::reader_shortcuts::webview::script` 在各桥接启动时生成只读配置，沿用宿主小写键名匹配，将配置和同目录的 `shortcut_input.js` 一起放进该次 Eval；不依赖全局注册、额外异步握手或挂载顺序。此配置不是另一份交互状态，按键路径不重新生成配置。
 - 两处监听共用输入过滤：重复、组字、Alt/Ctrl/Meta/Shift、表单/可编辑祖先、已打开的 dialog 和 Reader 页面存在性。**捕获阶段**仅为导航键测量并发出位置事实，按原行为忽略 `defaultPrevented`；**冒泡阶段**额外检查 `defaultPrevented`，同步阻止默认动作后才发送原始键值。目标节点后续停止传播不撤销已经发生的捕获。
 - 位置监听仍属于原 App 适配器，快捷键监听仍属于 Reader 页；测量、消息序号、恢复、任务作用域和卸载规则不变。没有把同步默认动作交给异步 Rust 回执，也没有把两个监听合并到新的调度器。
 - 同一生产规则的独立编译现为 24 项。实际宿主用每个视口 70 个受控边界、10 个有效键值及离页后的输入检查约束同步顺序，并验证导航/返回和标记写入；它们不是物理键盘或系统 IME 验收。源码、产物和结果见[快捷键去重交接](../handoffs/2026-10-30-reader-shortcut-definition.md)。
+
+### 模块归属与依赖方向
+
+Reader 专用的 Dioxus/session/router 装配位于 `pages/reader_page/shortcuts.rs`，不再放在全局 `hooks`。页面的 `webview` 模块为私有；App 阅读位置适配器只依赖共享快捷键脚本生成，不反向引用 Reader 页面。`ui/reader_shortcuts/` 不导入页面、路由或 Dioxus；其中 `policy.rs` 是普通规则，`webview.rs` 与 JS 只服务当前 WebView。规则独立性不能扩张为整个 `ui` 已脱离框架。
+
+```mermaid
+flowchart TD
+    Page[Reader shortcuts 装配] --> Rules[ui reader_shortcuts 规则]
+    Page --> Listener[Reader webview 监听]
+    Listener --> Script[ui reader_shortcuts WebView 脚本生成]
+    Position[App reading_position 监听] --> Script
+    Script --> Rules
+```
+
+共享的是规则和脚本文本；页面和 App 继续各自持有监听生命周期，原回调及状态归属不变。此次移动的等价核对和三端基线/候选结果见[模块归属交接](../handoffs/2026-10-30-reader-shortcut-cohesion.md)。
 
 下一阶段先收口已完成的依赖批次，再梳理正文内容、图片资源、阅读锚点、HTML/CSS、复制、IME 和无障碍的兼容契约；候选渲染器另行实测，不从本批推断整页已可直接迁移。
 
@@ -49,7 +64,7 @@
 | `components/entry_filters` 的 `SourceFilterDraft` | 来源草稿、搜索、选择、取消、来源集合变化 | 表单、焦点、弹窗、原生半选外观 |
 | `pages/entries_page/directory/controller.rs` | 上下文重置、活动路径、展开集合、跟随/手动、消息校验、回复和导航请求 | presenter 身份、Dioxus signal、事件桥接、渲染确认、滚动执行 |
 | `pages/entries_page/directory/window.rs` | 可变行高缓存、可见范围、占位高度、测量变化时的锚点补偿、未挂载目标与焦点保留 | 当前挂载行与视口测量、同步键盘默认动作、提交确认后的滚动/聚焦 |
-| `hooks/reader_shortcut_policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，执行导航和 session 命令 |
+| `ui/reader_shortcuts/policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，由 Reader 私有装配执行导航和 session 命令 |
 | `hooks/use_mobile_back_navigation/policy.rs` | history/fallback 选择、系统返回决策、首页提示及代次、超时和恢复前台 | 页面 dismiss 事实、路由事实、signal 投影、计时器、位置采集和 Android 退后台 |
 | `ui/shell/settings_read_lifecycle.rs` | App 设置启动/只读读取、在途请求合并、页面读取归属、旧回执与错误归属 | App 任务作用域、命令执行、ThemeController 存储与响应式状态发布 |
 | `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |

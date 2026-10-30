@@ -13,7 +13,7 @@ mod ui {
 mod image_viewer_state;
 #[path = "../src/pages/reader_page/intent.rs"]
 pub(crate) mod intent;
-#[path = "../src/hooks/reader_shortcut_policy.rs"]
+#[path = "../src/ui/reader_shortcuts/policy.rs"]
 mod reader_shortcut_policy;
 #[path = "../src/pages/reader_page/reducer.rs"]
 pub(crate) mod reducer;
