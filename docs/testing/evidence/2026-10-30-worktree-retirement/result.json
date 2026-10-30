@@ -1,0 +1,135 @@
+{
+  "date": "2026-10-30",
+  "source_head": "451ddc7c97b2d8fe0f1e1726ec5acc2f0deaed8e",
+  "main": "4101520c33266026747db867c33e2b13baea3d23",
+  "authorization": "Back up and verify historical acceptance material and Claude local configuration, remove the five reviewed old worktrees and three branches, preserve primary checkout and native-back-policy, update handoff, commit locally and push the candidate branch.",
+  "backup": {
+    "backup": "E:\\gitclone\\RSS-Reader-backups\\2026-10-30-worktree-retirement",
+    "source_head": "451ddc7c97b2d8fe0f1e1726ec5acc2f0deaed8e",
+    "evidence_files": 4004,
+    "evidence_bytes": 1620334144,
+    "evidence_manifest_sha256": "EE835603D1787E144781980F8B02E4543189E60557947C6654AB65AF825EEAA3",
+    "reparse_points": 5,
+    "reparse_manifest_sha256": "C6117F0798D6A6179634C25AFB528A142E00EF034EE20F735B0A99E0F504DC64",
+    "claude_config_bytes": 231,
+    "claude_config_sha256": "0D2A5BF1753BC73E7C1EC0D32A0FAEE85303903796A8B948F563CEB754317DAC",
+    "metadata_files": 38,
+    "bundle_sha256": "98792920777DA8D974FDB39723134FFC7A076D81905DC224B2F7F65897772E4A",
+    "bundle_verified": true,
+    "copied_and_hash_verified": true,
+    "pre_delete_recheck": "passed"
+  },
+  "removals": [
+    {
+      "path": "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\determined-mestorf-560b15",
+      "head": "e4c4a8260d5890a4da99713deb69185cad4cd2bf",
+      "exit_code": 0,
+      "output": [],
+      "path_absent": true
+    },
+    {
+      "path": "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\nostalgic-perlman-51793d",
+      "head": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "exit_code": 0,
+      "output": [],
+      "path_absent": true
+    },
+    {
+      "path": "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\reader-mathml",
+      "head": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "exit_code": 0,
+      "output": [],
+      "path_absent": true
+    },
+    {
+      "path": "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\youthful-curie-5447de",
+      "head": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+      "exit_code": 0,
+      "output": [],
+      "path_absent": true
+    },
+    {
+      "path": "E:\\gitclone\\RSS-Reader-integration-20261023",
+      "head": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "exit_code": 0,
+      "output": [],
+      "path_absent": true
+    }
+  ],
+  "git_worktree_remove_used_force": false,
+  "git_branch_delete_used_force": false,
+  "verification": {
+    "source_head": "451ddc7c97b2d8fe0f1e1726ec5acc2f0deaed8e",
+    "removed_worktrees": [
+      "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\determined-mestorf-560b15",
+      "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\nostalgic-perlman-51793d",
+      "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\reader-mathml",
+      "E:\\gitclone\\RSS-Reader\\.claude\\worktrees\\youthful-curie-5447de",
+      "E:\\gitclone\\RSS-Reader-integration-20261023"
+    ],
+    "removed_branches": [
+      "claude/wonderful-engelbart-fdac91",
+      "feat/reader-mathml",
+      "codex/integration-final-20261023"
+    ],
+    "remaining_worktrees": [
+      "E:/gitclone/RSS-Reader",
+      "E:/gitclone/RSS-Reader-worktrees/native-back-policy"
+    ],
+    "remaining_local_branches": [
+      "codex/native-back-policy",
+      "feat/reading-workspace-20261024",
+      "main"
+    ],
+    "backup_files_rehashed_after_deletion": 4004,
+    "metadata_and_reparse_and_config_verified": true,
+    "retained_refs_and_local_tags_unchanged": true,
+    "primary_head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "primary_status_entries": 40,
+    "primary_file_hashes_verified": 20,
+    "primary_index_unchanged": true,
+    "primary_status_and_files_unchanged": true,
+    "backup": "E:\\gitclone\\RSS-Reader-backups\\2026-10-30-worktree-retirement"
+  },
+  "counts": {
+    "before": {
+      "local_branches": 6,
+      "worktrees": 7,
+      "remote_branches": 1
+    },
+    "after_cleanup": {
+      "local_branches": 3,
+      "worktrees": 2,
+      "remote_branches": 1
+    }
+  },
+  "private_backup_material_committed": false,
+  "documentation_check": {
+    "markdown_files": 321,
+    "local_links": 1466,
+    "anchors": 15,
+    "archived_handoffs": 201,
+    "json_files": [
+      "docs/testing/evidence/2026-10-29-native-main-integration/result.json",
+      "docs/testing/evidence/2026-10-29-settings-cohesion/result.json",
+      "docs/testing/evidence/2026-10-30-branch-consolidation/result.json",
+      "docs/testing/evidence/2026-10-30-worktree-retirement/result.json"
+    ],
+    "errors": []
+  },
+  "product_changes_in_this_batch": false,
+  "new_product_tests_run": false,
+  "push": {
+    "branch": "codex/native-back-policy",
+    "status": "pending",
+    "target": "origin",
+    "main_or_tags_pushed": false
+  },
+  "limitations": [
+    "Native Windows/Android back-policy host acceptance remains outstanding.",
+    "No new PR, merge, release or manual workflow dispatch.",
+    "Reparse points are preserved as raw tag/data and query records; targets were not followed.",
+    "Filesystem sizes are logical file lengths, not measured disk-space reclamation."
+  ],
+  "commit_subject": "docs: preserve evidence and retire old worktrees"
+}

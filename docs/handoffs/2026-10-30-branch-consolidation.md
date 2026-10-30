@@ -1,5 +1,7 @@
 # 全部分支审计与历史引用清理
 
+> 本页按顺序保留同日各阶段的事实。最新执行结果见文末“历史资料保全与 5 个旧工作树退役”；前面 6 个分支 / 7 个工作树及“未删除”均为当时快照。当前状态统一见[维护状态](../current-status.md)。
+
 - 日期：2026-10-30
 - 作者 / Agent：Codex
 - 分支：`codex/native-back-policy`
@@ -164,3 +166,59 @@ Git 没有工作树 `locked` 标记；本次读取的可见 Codex 任务没有�
 建议下一批先把旧整合目录的证据及 Claude 本地配置复制到工作树外并逐文件校验，再退役这 5 个已合并、无源码改动的工作树，同时删除其 3 个本地分支。这样可收敛为 **2 个工作树、3 个本地分支**：主 checkout 的 `feat/reading-workspace-20261024`、当前 `codex/native-back-policy` 和未检出的 main。现有 Git bundle 不含上述 ignored 文件，不能跳过保全步骤。
 
 本次不扫描或处理旧 C 盘目录，不改主 checkout 的既有内容。验证仅为 Git 身份/状态、忽略项、文件元数据与逻辑大小、有限进程/任务快照及文档检查；没有执行产品测试、宿主验收或清理操作。
+
+## 同日执行：历史资料保全与 5 个旧工作树退役
+
+- 起点：`451ddc7c97b2d8fe0f1e1726ec5acc2f0deaed8e`，main 保持 `4101520c`。
+- 授权：用户确认先备份、校验，再删除上节列出的 5 个工作树和 3 个分支；保留主 checkout 及当前返回策略工作树，更新交接、本地提交，并允许 push。
+- 相关 commit：本节所在的 `docs: preserve evidence and retire old worktrees` 本地提交；本批只修改文档和保全/清理回执。
+- 状态：清理与保全验证通过；候选推送待回执。没有新增产品行为修改。
+
+### 备份与校验
+
+完整保全目录位于 `E:/gitclone/RSS-Reader-backups/2026-10-30-worktree-retirement/`，在全部待删目录及当前工作树之外：
+
+| 内容 | 保全结果 |
+| --- | --- |
+| `integration-handoff/` | 4004 个普通文件，1,620,334,144 字节；复制时逐文件 SHA256 比较，删除前再次对照源文件和副本，删除后再次复核副本，全部一致 |
+| `claude-local/settings.local.json` | 231 字节；源文件和副本散列一致，未将配置内容写入交接或提交到仓库 |
+| `reparse-points.json` | 5 个 Linux 链接的原始 reparse tag、完整数据（base64）及 `fsutil reparsepoint query` 输出；删除前逐条复核相同，未跟随链接访问其他路径 |
+| `worktree-metadata/` | 5 个旧工作树的 Git 登记/索引等 38 个文件，逐文件散列一致 |
+| `before-retirement.bundle` | 删除前全部 Git 引用与提交，`git bundle verify` 成功；3 个待删分支的完整 tip 在 bundle 内，另外 2 个 detached HEAD 已是 main 的祖先 |
+| 清单及回执 | `evidence-sha256.json`、`metadata-sha256.json`、前后引用/登记、主 checkout 保护快照、删除回执与验证报告 |
+
+关键 SHA256：
+
+- Git bundle：`98792920777DA8D974FDB39723134FFC7A076D81905DC224B2F7F65897772E4A`。
+- 4004 个文件的清单：`EE835603D1787E144781980F8B02E4543189E60557947C6654AB65AF825EEAA3`。
+- Linux 链接记录：`C6117F0798D6A6179634C25AFB528A142E00EF034EE20F735B0A99E0F504DC64`。
+- Claude 本地配置：`0D2A5BF1753BC73E7C1EC0D32A0FAEE85303903796A8B948F563CEB754317DAC`。
+
+Linux 链接在 Windows 显示为无可识别 LinkTarget 的重解析点，本轮保存其原始数据，没有复制链接指向的临时 socket/其他目录，也没有将它们伪装成普通文件。证据副本包含历史浏览器 profile，仅保存在本机备份目录；推送范围只有仓库中的文档/结构化摘要和既有候选提交。
+
+### 删除执行与保护范围
+
+重新核对 5 个明确的绝对路径、各自 `.git` 文件、仓库顶层、完整 HEAD、清洁状态、main 祖先关系及 Git lock。删除前确认路径及祖先目录没有重解析点，且备份校验为通过。对 5 个目录分别执行 `git worktree remove -- <精确路径>`，全部成功，无需 `--force`；随后对 tip 再次核验，使用 `git branch -d` 删除：
+
+- `claude/wonderful-engelbart-fdac91`
+- `feat/reader-mathml`
+- `codex/integration-final-20261023`
+
+5 个旧目录均已不存在，Git 登记仅剩以下两处；本地分支仅剩 main 和它们各自的分支：
+
+| 保留工作树 | 分支 / 状态 |
+| --- | --- |
+| `E:/gitclone/RSS-Reader` | `feat/reading-workspace-20261024`，仍为 `020f9d40`，40 条既有状态保留 |
+| `E:/gitclone/RSS-Reader-worktrees/native-back-policy` | `codex/native-back-policy`，当前候选继续保留 |
+
+主 checkout 的 HEAD、展开未跟踪文件后的状态、`.git/index` SHA256 以及快照中 20 个现存文件的散列全部一致，包含原有资料库与相关本地文件。main、其他保留引用及本地 tag 在清理阶段均未变化。未删除主 checkout 自身、其余 ignored 内容、旧 C 盘目录或本次备份。
+
+### 验证与当前边界
+
+结构化摘要见[退役回执](../testing/evidence/2026-10-30-worktree-retirement/result.json)。本轮运行的是 Git/文件身份、散列、路径/登记、保护范围和文档验证；321 份 Markdown 的 1466 个本地链接、15 个锚点、新增 JSON 解析及 `git diff --check` 均通过。产品代码未变，未重复执行上一批 531 项 Rust 测试，也未将其写成此次新结果。
+
+返回策略实现仍为 `62113c4f`，实际 Windows WebView2 / Android 系统返回验收仍未完成。本次允许推送当前候选分支，不代表合并或发布准入；不修改已合并的 PR #40，不新建 PR、不推送 main/tag、不手动触发工作流。推送完成后的远端 SHA 单独补在本节。
+
+### 恢复提示
+
+恢复 Git 历史可先校验上述 bundle，再从其中的原引用取到新的恢复分支；旧源码已在 main，不依赖被删工作树。历史验收资料直接从 `integration-handoff/` 读取，逐文件散列见同目录外层的 `evidence-sha256.json`。Claude 配置有独立副本；Linux 链接由 `reparse-points.json` 保留原 tag/data，恢复时需明确目标环境，不能在 Windows 上跟随旧的临时路径。当前 Git bundle 与 ignored 资料副本承担不同职责，二者都应保留。
