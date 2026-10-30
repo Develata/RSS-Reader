@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | 最新 main | `6a75fb83`；本地 main 已快进到同一提交 | PR #38–#46 已合并；PR #46 head 的 CI 36/36 与 Pages demo 通过，见[合并及本批交接](./handoffs/2026-10-30-shell-settings-lifecycle.md) |
-| 候选分支 | `codex/shell-settings-lifecycle`，基于上述 main；App 设置读取有界提取 | app 383 通过、1 忽略，独立策略 7/7；基线/候选正式 Web 各 3 + 8 组，实际 Windows WebView2 各 3 组通过。Android 本批仅编译检查，提交与身份见[本批交接](./handoffs/2026-10-30-shell-settings-lifecycle.md) |
+| 候选分支 | `codex/shell-settings-lifecycle`，实现 `14f334d9`，基于上述 main，已推送；App 设置读取有界提取 | app 383 通过、1 忽略，独立策略 7/7；基线/候选正式 Web 各 3 + 8 组，实际 Windows WebView2 各 3 组通过。Android 本批仅编译检查，提交与身份见[本批交接](./handoffs/2026-10-30-shell-settings-lifecycle.md) |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -30,7 +30,7 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 ## 分支与工作树快照
 
-截至本批本地验证（推送前）：**4 个本地分支、2 个工作树、2 个真实远端分支（main、codex/native-back-policy）**。不把 `origin/HEAD` 当作分支。此前的 4 条失效登记和 5 个旧工作树均已清理；本批只在现有工作树创建新候选分支。
+截至本批提交与推送：**4 个本地分支、2 个工作树、3 个真实远端分支（main、codex/native-back-policy、codex/shell-settings-lifecycle）**。不把 `origin/HEAD` 当作分支。此前的 4 条失效登记和 5 个旧工作树均已清理；本批只在现有工作树创建新候选分支。
 
 本地保留 main、已合并的 `codex/native-back-policy`、新候选 `codex/shell-settings-lifecycle` 和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout `E:/gitclone/RSS-Reader` 的 40 条既有状态、暂存区及 42 个文件/缺失路径本批复核无变化；E 盘工作树路径不变，实际分支已切至新候选。旧源码由已验证的 Git bundle 保全，4004 个历史验收文件、Claude 配置及 5 个 Linux 链接元数据另有独立备份，详见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 
