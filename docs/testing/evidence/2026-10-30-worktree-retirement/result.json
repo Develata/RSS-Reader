@@ -101,12 +101,17 @@
       "local_branches": 3,
       "worktrees": 2,
       "remote_branches": 1
+    },
+    "after_push": {
+      "local_branches": 3,
+      "worktrees": 2,
+      "remote_branches": 2
     }
   },
   "private_backup_material_committed": false,
   "documentation_check": {
     "markdown_files": 321,
-    "local_links": 1466,
+    "local_links": 1467,
     "anchors": 15,
     "archived_handoffs": 201,
     "json_files": [
@@ -121,9 +126,12 @@
   "new_product_tests_run": false,
   "push": {
     "branch": "codex/native-back-policy",
-    "status": "pending",
+    "status": "verified_initial_push",
     "target": "origin",
-    "main_or_tags_pushed": false
+    "main_or_tags_pushed": false,
+    "verified_payload_head": "e627799938710fae46a3266d8d1dcab0426d8529",
+    "receipt_note": "The receipt-only successor is fast-forwarded on the same branch; its final SHA is recorded in the local backup final-receipt.json.",
+    "manual_ci_dispatched": false
   },
   "limitations": [
     "Native Windows/Android back-policy host acceptance remains outstanding.",

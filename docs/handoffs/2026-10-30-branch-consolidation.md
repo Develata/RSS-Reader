@@ -171,8 +171,8 @@ Git 没有工作树 `locked` 标记；本次读取的可见 Codex 任务没有�
 
 - 起点：`451ddc7c97b2d8fe0f1e1726ec5acc2f0deaed8e`，main 保持 `4101520c`。
 - 授权：用户确认先备份、校验，再删除上节列出的 5 个工作树和 3 个分支；保留主 checkout 及当前返回策略工作树，更新交接、本地提交，并允许 push。
-- 相关 commit：本节所在的 `docs: preserve evidence and retire old worktrees` 本地提交；本批只修改文档和保全/清理回执。
-- 状态：清理与保全验证通过；候选推送待回执。没有新增产品行为修改。
+- 相关 commit：`e627799938710fae46a3266d8d1dcab0426d8529`（保全、清理和交接）；推送回执对应本节后续的 `docs: record worktree cleanup push receipt` 提交。本批只修改文档和保全/清理回执。
+- 状态：清理与保全验证通过，候选已推送并回读确认。没有新增产品行为修改。
 
 ### 备份与校验
 
@@ -215,9 +215,17 @@ Linux 链接在 Windows 显示为无可识别 LinkTarget 的重解析点，本�
 
 ### 验证与当前边界
 
-结构化摘要见[退役回执](../testing/evidence/2026-10-30-worktree-retirement/result.json)。本轮运行的是 Git/文件身份、散列、路径/登记、保护范围和文档验证；321 份 Markdown 的 1466 个本地链接、15 个锚点、新增 JSON 解析及 `git diff --check` 均通过。产品代码未变，未重复执行上一批 531 项 Rust 测试，也未将其写成此次新结果。
+结构化摘要见[退役回执](../testing/evidence/2026-10-30-worktree-retirement/result.json)。本轮运行的是 Git/文件身份、散列、路径/登记、保护范围和文档验证；321 份 Markdown 的 1467 个本地链接、15 个锚点、新增 JSON 解析及 `git diff --check` 均通过。产品代码未变，未重复执行上一批 531 项 Rust 测试，也未将其写成此次新结果。
 
-返回策略实现仍为 `62113c4f`，实际 Windows WebView2 / Android 系统返回验收仍未完成。本次允许推送当前候选分支，不代表合并或发布准入；不修改已合并的 PR #40，不新建 PR、不推送 main/tag、不手动触发工作流。推送完成后的远端 SHA 单独补在本节。
+返回策略实现仍为 `62113c4f`，实际 Windows WebView2 / Android 系统返回验收仍未完成。本次推送当前候选分支，不代表合并或发布准入；没有修改已合并的 PR #40，没有新建 PR、推送 main/tag 或手动触发工作流。
+
+### 推送回执
+
+首次推送创建 `origin/codex/native-back-policy`，远端 `ls-remote` 回读为 `e627799938710fae46a3266d8d1dcab0426d8529`，与本地清理提交完全一致；main 保持 `4101520c`。推送前先 dry-run，并用“远端引用必须不存在”的 lease 防止覆盖并发创建的分支；明确关闭 follow-tags，只指定本候选引用。
+
+本次回执提交仅更新文档和结构化状态，继续沿同一分支普通快进推送。最终文档提交的 SHA 以 Git 历史和本机保全目录中的 `final-receipt.json` 为准，不将已核验的首个 payload SHA 冒充最新回执提交。保全目录保存两次推送输出、远端 head/tag 回读以及最终保护范围核验。
+
+当前 CI 的 push 触发范围为 main，另支持 PR 和手动运行；此次候选分支 push 不构成新的 CI 验收，本轮没有手动启动 CI。历史测试与实际宿主验收边界维持上文说明。
 
 ### 恢复提示
 

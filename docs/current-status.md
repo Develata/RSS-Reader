@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | 最新 main | `4101520c`；本地 main 已快进到同一提交 | PR #38–#45 均已合并；[PR #38 回执](./handoffs/2026-10-29-parse-image-pr-ci.md)、[PR #40 最终审查](./handoffs/2026-10-29-pr40-final-review-merge.md)、[设计与目录整合](./handoffs/2026-10-29-completed-design-cleanup.md) |
-| 候选分支 | `codex/native-back-policy`，返回策略实现 `62113c4f`，基于上述 main；随后仅整理文档 | 本轮已获推送授权，待远端回执，尚未进入 main。Rust / Web 检查及 Windows / Android 构建已完成；实际 Windows / Android 宿主交互未完成，见[返回策略交接](./handoffs/2026-10-29-native-back-policy.md) |
+| 候选分支 | `codex/native-back-policy`，返回策略实现 `62113c4f`，基于上述 main；随后仅整理文档 | 已推送至 `origin/codex/native-back-policy`，尚未进入 main，清理提交及回执见[本轮记录](./handoffs/2026-10-30-branch-consolidation.md)。Rust / Web 检查及 Windows / Android 构建已完成；实际 Windows / Android 宿主交互未完成，见[返回策略交接](./handoffs/2026-10-29-native-back-policy.md) |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -24,12 +24,12 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 ## 现在还要做什么
 
 1. **补返回策略实际宿主验收。** Windows 使用真实 WebView2 / CDP；Android 使用隔离测试包和资料库验证系统返回、首页 5 秒提示、恢复前台、位置采集失败/超时。上一轮被自动执行审批阻止，未运行这些场景；设备存在和编译成功均不等于已验收。
-2. **收口候选。** 文档整合和全部分支审计完成后，已将历史验收资料和 Claude 本地配置复制到工作树外并校验，退役 5 个旧工作树及对应的 3 个分支，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。用户已授权推送当前候选；新 PR 和合并仍待宿主验证及后续授权，不向已合并的 PR #40 追加实现，不发布。
+2. **收口候选。** 文档整合和全部分支审计完成后，已将历史验收资料和 Claude 本地配置复制到工作树外并校验，退役 5 个旧工作树及对应的 3 个分支，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。当前候选已按授权推送；新 PR 和合并仍待宿主验证及后续授权，不向已合并的 PR #40 追加实现，不发布。
 3. **后续工作按具体收益选择。** 原生控件接入尚未开始；没有批准 Shell 重构、渲染器替换、新 crate 或数据库迁移。旧库升级、更多设备与输入方式等持续维护事项保留在待办，不要求先完成所有历史风险才结束本批。
 
 ## 分支与工作树快照
 
-截至清理完成：**3 个本地分支、2 个工作树**；远端暂为 main，候选分支待本批推送回执。不把 `origin/HEAD` 当作分支。此前的 4 条失效登记和本次 5 个旧工作树均已清理。
+截至清理及推送完成：**3 个本地分支、2 个工作树、2 个真实远端分支（main、codex/native-back-policy）**。不把 `origin/HEAD` 当作分支。此前的 4 条失效登记和本次 5 个旧工作树均已清理。
 
 保留 main、`codex/native-back-policy` 和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout `E:/gitclone/RSS-Reader` 的 40 条既有状态、暂存区和已记录文件散列保持原样；当前返回策略工作树继续保留。旧源码由已验证的 Git bundle 保全，4004 个历史验收文件、Claude 配置及 5 个 Linux 链接元数据另有独立备份，详见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 
