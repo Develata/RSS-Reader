@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-30",
+  "status": "native-acceptance-blocked",
+  "branch": "codex/native-back-policy",
+  "reviewedHead": "7a0403e0778ca590458a6347a4372bdb414961ea",
+  "implementationCommit": "62113c4fc181e245bc077dcd46eda56a969d7b96",
+  "productBaseline": "4101520c33266026747db867c33e2b13baea3d23",
+  "productionChangesSinceImplementation": [],
+  "review": {
+    "kind": "self-review against main",
+    "actionableFindings": [],
+    "boundary": "Source review and Rust tests; no native host execution or independent agent review"
+  },
+  "tests": [
+    {
+      "command": "cargo test -p rssr-app --locked use_mobile_back_navigation",
+      "exitCode": 0,
+      "passed": 16,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "command": "cargo test -p rssr-app --locked dismiss_edit_consumes_back_without_leaving_a_save_in_flight",
+      "exitCode": 0,
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "artifactRecheck": {
+    "manifest": "target/back-policy-20261029/identity.json",
+    "artifactHashesMatched": 7,
+    "sourceHashesMatched": 3,
+    "androidPackage": "io.github.develata.rssreader.backpolicytest",
+    "androidActivity": "dev.dioxus.main.MainActivity",
+    "androidDebuggable": true
+  },
+  "device": {
+    "serial": "caa0c283",
+    "model": "2201123C",
+    "product": "cupid",
+    "state": "device",
+    "testPackageInstalled": false
+  },
+  "blockedOperation": {
+    "command": "python scripts/seed_reading_native.py target/back-policy-native-20261030/seed --fixture-dir target/back-policy-native-20261030/fixture --fixture-base http://127.0.0.1:9299 --entries 100 --paragraphs 120",
+    "reason": "approval required by policy, but AskForApproval is set to Never",
+    "executed": false,
+    "targetDirectoryExists": false,
+    "retried": false,
+    "workaroundAttempted": false
+  },
+  "nativeExecution": {
+    "windows": "not run",
+    "android": "not run",
+    "artifactInstallation": "not run",
+    "real500msMeasurement": "not run"
+  },
+  "primaryCheckoutPreservation": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "statusEntriesUnchanged": 40,
+    "indexHashUnchanged": true,
+    "existingFileHashesMatched": 20,
+    "absentPathsStillAbsent": 22
+  },
+  "documentation": {
+    "markdownFiles": 322,
+    "localLinks": 1474,
+    "anchors": 15,
+    "archivedHandoffs": 201,
+    "errors": [],
+    "newResultJsonParsed": true,
+    "diffCheckPassed": true
+  }
+}
