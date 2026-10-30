@@ -34,7 +34,7 @@ pub(crate) enum ReaderPageIntent {
         entry_id: i64,
         is_read: bool,
         is_starred: bool,
-        navigation_state: crate::bootstrap::ReaderNavigation,
+        navigation_state: rssr_domain::EntryNavigation,
     },
     /// The read-only refresh found the entry gone; what is shown stays readable.
     RereadMissing {

@@ -6,12 +6,24 @@ use super::{intent::ReaderPageIntent, state::ReaderPageState};
 pub(super) struct ReaderResultScope {
     entry_id: i64,
     load_generation: u64,
+    reread_generation: Option<u64>,
 }
 
 impl ReaderResultScope {
     /// Loads capture after BeginLoading; other commands share the current visit.
     pub(super) fn capture(entry_id: i64, state: &ReaderPageState) -> Self {
-        Self { entry_id, load_generation: state.load_generation }
+        Self { entry_id, load_generation: state.load_generation, reread_generation: None }
+    }
+
+    /// Capture after RereadIssued. A later refresh or applied flag write also retires this read.
+    pub(super) fn capture_reread(entry_id: i64, state: &ReaderPageState) -> Self {
+        Self { reread_generation: Some(state.reread_generation), ..Self::capture(entry_id, state) }
+    }
+
+    pub(super) fn is_current(&self, state: &ReaderPageState) -> bool {
+        state.current_entry_id == self.entry_id
+            && state.load_generation == self.load_generation
+            && self.reread_generation.is_none_or(|generation| generation == state.reread_generation)
     }
 
     pub(super) fn complete<I: IntoIterator<Item = ReaderPageIntent>>(
@@ -19,11 +31,32 @@ impl ReaderResultScope {
         state: &ReaderPageState,
         intents: I,
     ) -> impl Iterator<Item = ReaderPageIntent> + use<I> {
-        let current = state.current_entry_id == self.entry_id
-            && state.load_generation == self.load_generation;
+        let current = self.is_current(state);
         // Gate the entire result, including status intents that have no entry ID.
         // Rejected payloads are dropped without traversal; accepted bodies move.
         current.then_some(intents).into_iter().flatten()
+    }
+}
+
+/// A read-only refresh must not clear a readable body, localize images again on recovery,
+/// or race the initial load. The adapter executes the chosen branch in its existing task scope.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum RereadPlan {
+    Ignore,
+    RecoverLoad,
+    AfterLoad,
+    ReadFlagsAndNeighbours,
+}
+
+pub(super) fn plan_reread(entry_id: i64, state: &ReaderPageState) -> RereadPlan {
+    if state.current_entry_id != entry_id {
+        RereadPlan::Ignore
+    } else if state.error.is_some() {
+        RereadPlan::RecoverLoad
+    } else if !state.content_loaded {
+        RereadPlan::AfterLoad
+    } else {
+        RereadPlan::ReadFlagsAndNeighbours
     }
 }
 
@@ -216,5 +249,119 @@ mod tests {
         assert_eq!(state.status_tone, "error");
         assert!(state.error.is_none());
         assert!(Arc::ptr_eq(&state.body_text, &body));
+    }
+
+    #[test]
+    fn refresh_admission_follows_load_outcome_without_changing_state() {
+        let mut state = ReaderPageState::new();
+        assert_eq!(plan_reread(1, &state), RereadPlan::Ignore);
+        reduce(&mut state, ReaderPageIntent::BeginLoading { entry_id: 1 });
+        assert_eq!(plan_reread(1, &state), RereadPlan::AfterLoad);
+        reduce(&mut state, ReaderPageIntent::RereadWanted(true));
+        reduce(
+            &mut state,
+            ReaderPageIntent::SetError { entry_id: 1, error: Some("offline".into()) },
+        );
+        let failed = state.clone();
+        assert_eq!(plan_reread(1, &state), RereadPlan::RecoverLoad);
+        assert_eq!(plan_reread(2, &state), RereadPlan::Ignore, "identity precedes the error");
+        assert_eq!(state, failed, "the adapter still owns command execution and publication");
+        reduce(&mut state, ReaderPageIntent::BeginLoading { entry_id: 1 });
+        reduce(&mut state, ReaderPageIntent::SetAssetLocalizationRequested);
+        reduce(&mut state, loaded(1, "Recovered"));
+        assert_eq!(plan_reread(1, &state), RereadPlan::ReadFlagsAndNeighbours);
+        assert!(state.asset_localization_requested, "read-only recovery must not localize again");
+        assert!(!state.reread_wanted, "the recovery load consumes deferred refresh demand");
+    }
+
+    fn issue_refresh(state: &mut ReaderPageState) -> ReaderResultScope {
+        reduce(state, ReaderPageIntent::RereadIssued);
+        ReaderResultScope::capture_reread(state.current_entry_id, state)
+    }
+
+    #[test]
+    fn later_refresh_wins_without_replacing_body_or_localization() {
+        let mut state = ReaderPageState::new();
+        visit(&mut state, 1, "Current");
+        reduce(&mut state, ReaderPageIntent::SetAssetLocalizationRequested);
+        let body = Arc::clone(&state.body_text);
+        let old = issue_refresh(&mut state);
+        let current = issue_refresh(&mut state);
+        let reply = current.complete(
+            &state,
+            [ReaderPageIntent::ApplyReread {
+                entry_id: 1,
+                is_read: true,
+                is_starred: true,
+                navigation_state: rssr_domain::EntryNavigation {
+                    next_unread_entry_id: Some(3),
+                    ..Default::default()
+                },
+            }],
+        );
+        apply(&mut state, reply);
+        assert!(state.is_read && state.is_starred);
+        assert_eq!(state.navigation_state.next_unread_entry_id, Some(3));
+        assert!(Arc::ptr_eq(&state.body_text, &body));
+        assert!(state.asset_localization_requested);
+        let expected = state.clone();
+        let reply = old
+            .complete(&state, [ReaderPageIntent::Failed(crate::ui::failure::plain("old refresh"))]);
+        apply(&mut state, reply);
+        assert_eq!(state, expected, "an obsolete error must not replace current feedback");
+    }
+
+    #[test]
+    fn applied_flags_retire_refresh_but_not_other_visit_results() {
+        // Both flags, even an equal-value acknowledgement, retire an older read.
+        for (read, starred) in [(Some(true), None), (None, Some(true)), (Some(false), None)] {
+            let mut state = ReaderPageState::new();
+            visit(&mut state, 1, "Current");
+            let write = ReaderResultScope::capture(1, &state);
+            let refresh = issue_refresh(&mut state);
+            reduce(
+                &mut state,
+                ReaderPageIntent::PatchEntryFlags {
+                    entry_id: 1,
+                    is_read: read,
+                    is_starred: starred,
+                },
+            );
+            assert!(!refresh.is_current(&state));
+            assert!(
+                write.is_current(&state),
+                "refresh generations do not retire a visit-owned write"
+            );
+            let unread_payload = std::iter::from_fn(|| panic!("retired refresh payload was read"));
+            assert_eq!(refresh.complete(&state, unread_payload).count(), 0);
+            let reply = write.complete(
+                &state,
+                [ReaderPageIntent::SetStatus {
+                    message: "write finished".into(),
+                    tone: "success".into(),
+                }],
+            );
+            apply(&mut state, reply);
+            assert_eq!(state.status, "write finished");
+        }
+    }
+
+    #[test]
+    fn refresh_identity_does_not_survive_reload_or_return_to_same_article() {
+        for next in [1, 2] {
+            let mut state = ReaderPageState::new();
+            visit(&mut state, 1, "Original");
+            let refresh = issue_refresh(&mut state);
+            let refresh_generation = state.reread_generation;
+            visit(&mut state, next, "Other visit");
+            if next != 1 {
+                visit(&mut state, 1, "Returned");
+            }
+            assert_eq!(state.reread_generation, refresh_generation);
+            assert!(
+                !refresh.is_current(&state),
+                "equal refresh generations do not establish ownership"
+            );
+        }
     }
 }

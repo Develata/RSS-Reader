@@ -15,6 +15,8 @@ const options = Object.fromEntries(args.reduce((pairs, key, i) => {
 }, []));
 const action = value => `[data-action="${value}"]`;
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+assert.ok(options['reader-only'] === undefined || options['reader-only'] === 'true');
+const readerOnly = options['reader-only'] === 'true';
 
 (async () => {
   for (const key of ['process-file', 'artifact-dir', 'fixture-dir']) assert.ok(options[key], key);
@@ -34,7 +36,7 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
     const installed = /^package:(\/data\/app\/[A-Za-z0-9_+~=/.-]+\/base\.apk)$/.exec(adb('shell', 'pm', 'path', identity.package).trim());
     assert.ok(installed, 'single installed test APK');
     assert.equal(adb('shell', 'sha256sum', installed[1]).split(/\s+/)[0], identity.artifactSha256);
-    assert.equal(adb('shell', 'run-as', identity.package, 'sha256sum', 'files/native-back-save-lock').split(/\s+/)[0], identity.lockHelperSha256);
+    if (!readerOnly) assert.equal(adb('shell', 'run-as', identity.package, 'sha256sum', 'files/native-back-save-lock').split(/\s+/)[0], identity.lockHelperSha256);
     assert.ok(adb('forward', '--list').split('\n').some(line => line.trim() === `${identity.serial} tcp:${endpoint.port} localabstract:webview_devtools_remote_${identity.pid}`));
   } else {
     assert.equal(sha(await fs.readFile(identity.exe)), identity.artifactSha256);
@@ -164,13 +166,22 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
           await page.evaluate(() => scrollTo(0, 900)); await settle();
           if (i === 0) {
             await screenshot(width + '-reader');
-            await page.locator('[data-page="reader"] img').first().click();
+            const image = page.locator('[data-page="reader"] img').first();
+            await image.scrollIntoViewIfNeeded();
+            const beforeImage = await page.evaluate(() => scrollY);
+            await image.evaluate(node => node.addEventListener('click', () => { window.__readerImageActivationY = scrollY; }, {once:true, capture:true}));
+            await image.click();
             await page.locator('[data-layout="reader-image-viewer"]').waitFor();
             await screenshot(width + '-image');
             // The modal makes the toolbar inert; Android uses system back, Windows Esc.
             if (android) systemBack(); else await page.keyboard.press('Escape');
             await expect(page.locator('[data-layout="reader-image-viewer"]')).toHaveCount(0);
             await reader();
+            await expect(image).toBeFocused();
+            const imagePosition = await page.evaluate(() => ({activated:window.__readerImageActivationY, restored:scrollY}));
+            (report.imagePositions ??= []).push({width, beforeClick:beforeImage, ...imagePosition});
+            assert.equal(typeof imagePosition.activated, 'number');
+            assert.ok(Math.abs(imagePosition.restored - imagePosition.activated) <= 3, 'modal restores the position at actual image activation');
             await page.evaluate(() => scrollTo(0, 900)); await settle();
           }
           await page.evaluate(() => { window.__backProbe.count = 0; });
@@ -181,7 +192,44 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
           await click('[data-nav="back"]'); await entries(); await settle();
         }
       });
-      await check('source-directory-and-edit-dismiss-' + width, async () => {
+      if (readerOnly) await check('reader-shortcuts-flags-and-return-' + width, async () => {
+        await click('[data-slot="entry-card-title"]'); await reader(); await settle();
+        const root = page.locator('[data-page="reader"]');
+        const entry = await root.getAttribute('data-position-key');
+        await page.evaluate(() => { window.__readerRuleBody = document.querySelector('[data-layout="reader-body"]'); });
+        for (const [key, command] of [['m', 'mark-read'], ['f', 'toggle-starred']]) {
+          const button = page.locator('[data-layout="reader-bottom-bar"] ' + action(command));
+          const before = await button.getAttribute('data-state');
+          await page.keyboard.press(key);
+          await expect(button).not.toHaveAttribute('data-state', before);
+          await page.keyboard.press(key);
+          await expect(button).toHaveAttribute('data-state', before);
+          assert.ok(await page.evaluate(() => window.__readerRuleBody === document.querySelector('[data-layout="reader-body"]')), 'flag writes retain the mounted body');
+        }
+        await page.keyboard.press('Control+ArrowRight');
+        // Controlled exclusion facts, not an OS keyboard/IME acceptance claim.
+        await page.evaluate(() => {
+          for (const facts of [{repeat: true}, {isComposing: true}]) document.dispatchEvent(new KeyboardEvent('keydown', {key:'j', bubbles:true, ...facts}));
+          const input = document.createElement('input'); input.id = 'reader-rule-input';
+          document.body.append(input); input.focus();
+        });
+        await page.keyboard.press('ArrowRight'); await settle();
+        await expect(root).toHaveAttribute('data-position-key', entry);
+        await page.evaluate(() => document.getElementById('reader-rule-input').remove());
+        for (const key of ['j', 'ArrowRight']) {
+          await expect(page.locator('[data-nav="next-unread-entry"]')).toBeEnabled();
+          await page.evaluate(() => scrollTo(0, 900)); await settle();
+          await page.keyboard.press(key);
+          await expect(root).not.toHaveAttribute('data-position-key', entry); await reader();
+          await click('[data-nav="back"]');
+          await expect(root).toHaveAttribute('data-position-key', entry); await reader(); await settle();
+          assert.ok(Math.abs(await page.evaluate(() => scrollY) - 900) <= 3, 'key navigation captured position before switching');
+        }
+        await screenshot(width + '-reader-after-shortcuts');
+        await page.evaluate(() => { delete window.__readerRuleBody; });
+        await click('[data-nav="back"]'); await entries(); await settle();
+      });
+      if (!readerOnly) await check('source-directory-and-edit-dismiss-' + width, async () => {
         await click(action('open-source-filter')); await page.locator('#source-filter-dialog').waitFor();
         await screenshot(width + '-source');
         await closeOverlay('#source-filter-dialog button[aria-label="关闭来源筛选"]');
@@ -204,7 +252,7 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
         await home();
       });
     }
-    if (android) {
+    if (android && !readerOnly) {
       await check('saving-editor-consumes-system-back', async () => {
         await click('[data-nav="feeds"]'); await click(action('edit-feed'));
         await expect(page.locator('#feed-edit-url')).toBeEnabled();

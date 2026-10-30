@@ -2,13 +2,22 @@ use std::future::Future;
 
 use dioxus::prelude::*;
 
-use crate::bootstrap::ReaderNavigation;
 use crate::ui::{ReaderCommand, UiCommand, UiIntent, run_ui_command};
+use rssr_domain::EntryNavigation as ReaderNavigation;
 
 use super::{
-    reducer::dispatch_reader_page_intent, result_lifecycle::ReaderResultScope,
+    intent::ReaderPageIntent,
+    reducer::reduce_reader_page_intent,
+    result_lifecycle::{ReaderResultScope, RereadPlan, plan_reread},
     state::ReaderPageState,
 };
+
+pub(super) fn dispatch_reader_page_intent(
+    mut state: Signal<ReaderPageState>,
+    intent: ReaderPageIntent,
+) {
+    state.with_mut(|state| reduce_reader_page_intent(state, intent));
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct ReaderPageSession {
@@ -47,11 +56,11 @@ impl ReaderPageSession {
             self.state,
             super::intent::ReaderPageIntent::BeginLoading { entry_id: self.entry_id },
         );
-        let generation = self.state.peek().load_generation;
+        let scope = self.state.with_peek(|state| ReaderResultScope::capture(self.entry_id, state));
         spawn(async move {
             let intents = load.await;
             let Ok(current) = self.state.try_peek() else { return };
-            if current.current_entry_id != self.entry_id || current.load_generation != generation {
+            if !scope.is_current(&current) {
                 return;
             }
             drop(current);
@@ -77,31 +86,25 @@ impl ReaderPageSession {
     /// (review C4B-B-02). While its load is on its way the refresh waits for it (review
     /// C4B-B-R3-03).
     pub(crate) fn reread(self) {
-        let state = self.state.peek();
-        if state.current_entry_id != self.entry_id {
-            return;
+        let plan = self.state.with_peek(|state| plan_reread(self.entry_id, state));
+        match plan {
+            RereadPlan::Ignore => {}
+            RereadPlan::RecoverLoad => {
+                self.load();
+                dispatch_reader_page_intent(
+                    self.state,
+                    ReaderPageIntent::SetAssetLocalizationRequested,
+                );
+            }
+            RereadPlan::AfterLoad => {
+                dispatch_reader_page_intent(self.state, ReaderPageIntent::RereadWanted(true));
+            }
+            RereadPlan::ReadFlagsAndNeighbours => {
+                self.spawn_reread(run_ui_command(UiCommand::Reader(ReaderCommand::RereadEntry {
+                    entry_id: self.entry_id,
+                })));
+            }
         }
-        if state.error.is_some() {
-            drop(state);
-            self.load();
-            dispatch_reader_page_intent(
-                self.state,
-                super::intent::ReaderPageIntent::SetAssetLocalizationRequested,
-            );
-            return;
-        }
-        if !state.content_loaded {
-            drop(state);
-            dispatch_reader_page_intent(
-                self.state,
-                super::intent::ReaderPageIntent::RereadWanted(true),
-            );
-            return;
-        }
-        drop(state);
-        self.spawn_reread(run_ui_command(UiCommand::Reader(ReaderCommand::RereadEntry {
-            entry_id: self.entry_id,
-        })));
     }
 
     /// Applies a read-only refresh's answer unless the page moved on: another load, a later
@@ -109,17 +112,12 @@ impl ReaderPageSession {
     /// the write).
     fn spawn_reread(self, reread: impl Future<Output = Vec<UiIntent>> + 'static) {
         dispatch_reader_page_intent(self.state, super::intent::ReaderPageIntent::RereadIssued);
-        let (load, flags) = {
-            let state = self.state.peek();
-            (state.load_generation, state.reread_generation)
-        };
+        let scope =
+            self.state.with_peek(|state| ReaderResultScope::capture_reread(self.entry_id, state));
         spawn(async move {
             let intents = reread.await;
             let Ok(current) = self.state.try_peek() else { return };
-            if current.current_entry_id != self.entry_id
-                || current.load_generation != load
-                || current.reread_generation != flags
-            {
+            if !scope.is_current(&current) {
                 return;
             }
             drop(current);
@@ -164,12 +162,10 @@ impl ReaderPageSession {
     /// localization still belong to the visit; neither should outlive navigation.
     fn spawn_flag_write(self, command: UiCommand) {
         let shell = consume_context::<crate::ui::AppShellState>();
-        let generation = self.state.peek().load_generation;
+        let scope = self.state.with_peek(|state| ReaderResultScope::capture(self.entry_id, state));
         shell.spawn_in_shell(async move {
             let intents = run_ui_command(command).await;
-            let same_visit = self.state.try_peek().is_ok_and(|current| {
-                current.current_entry_id == self.entry_id && current.load_generation == generation
-            });
+            let same_visit = self.state.try_peek().is_ok_and(|current| scope.is_current(&current));
             if same_visit {
                 dioxus::core::Runtime::current().in_scope(self.owner, || {
                     for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent)
