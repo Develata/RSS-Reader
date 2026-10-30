@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| 当前阶段、分支与文档收口 | [本轮整合清单](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
+| 当前阶段、分支与文档收口 | [全部分支审计与清理](./2026-10-30-branch-consolidation.md)、[前一轮文档整合](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
 | 原生返回策略 | [返回导航与退出提示提取](./2026-10-29-native-back-policy.md)、[E 盘接续与背景交接](./2026-10-29-pr40-worktree-handoff.md)、[本批范围评估](./2026-10-29-native-preparation-next-batch.md) |
 | PR #40 主线整合 | [main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md)、[最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md)、[逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
 | 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md)、[Windows 原生复测](./2026-10-29-directory-native-verification.md) |
@@ -14,7 +14,7 @@
 | 订阅与设置顶部层级 | [导航与独立主面板统一](./2026-10-29-secondary-page-surfaces.md) |
 | 2026-10-29 | [目录入口、固定标题与 Penpot 同步](./2026-10-29-directory-toolbar-sticky-header.md) |
 | 正文性能与后台图片调度 | [PR 与 CI 验收](./2026-10-29-parse-image-pr-ci.md)、[实现及证据](./2026-10-28-parse-image-performance.md)、[长期预算契约](../design/reader-processing-budgets.md) |
-| 文档维护与归档 | [2026-10-29 整合](./2026-10-29-consolidation.md)、[历史索引](./archive/README.md) |
+| 文档维护与归档 | [2026-10-30 分支回执补收](./2026-10-30-branch-consolidation.md)、[2026-10-29 整合](./2026-10-29-consolidation.md)、[历史索引](./archive/README.md) |
 | 历史待办核实与 PR 收尾 | [本轮核实](./2026-10-28-historical-followup-audit.md)、[当前待办](../maintenance-backlog.md) |
 | 最新发布与验收 | [v0.2.1 正式发布](./2026-10-28-v0.2.1-release.md)、[此前原生、设计与升级检查](./2026-10-28-release-readiness.md) |
 | 已发布版本 | [v0.2.1](./2026-10-28-v0.2.1-release.md)、[v0.2.0](./2026-10-23-v0.2.0-release.md) |

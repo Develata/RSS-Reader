@@ -1,0 +1,390 @@
+{
+  "date": "2026-10-29",
+  "candidate_commit": "bb72bde042128644a7b8e0b29ba9013caed5a118",
+  "source_commit": "58157a1a90796f8a17624bf9958b0be75bb15bf4",
+  "main_commit": "9b17a4d5053f5de2678533b8b514ce1db3c1e96c",
+  "validation": {
+    "workspace": {
+      "passed": 1060,
+      "failed": 0,
+      "debug_symbols": 0,
+      "build_jobs": 2,
+      "suites": 63,
+      "ignored": 4
+    },
+    "fmt": "pass",
+    "clippy": "pass",
+    "web_build": {
+      "command": "dx build --platform web --package rssr-app --locked --debug-symbols false",
+      "status": "pass",
+      "profile": "debug"
+    },
+    "native_build": {
+      "command": "cargo build --locked -p rssr-app -j 2",
+      "status": "pass",
+      "exe_sha256": "08f63753e14bbd4884b9ce84198b1326565f8109691f9fb23e3ca77b5932ab29",
+      "profile": "dev"
+    },
+    "web_interactions": {
+      "debug_devtools_404": 14,
+      "status": "passed",
+      "page_errors": 0,
+      "cases": [
+        {
+          "name": "numericFeedback",
+          "width": 1536,
+          "pass": true
+        },
+        {
+          "name": "saveOverlay",
+          "width": 1536,
+          "pass": true
+        },
+        {
+          "name": "loadOverlay",
+          "width": 1536,
+          "pass": true
+        },
+        {
+          "name": "themeFiles",
+          "width": 1536,
+          "pass": true
+        },
+        {
+          "name": "feedDialogGate",
+          "width": 1536,
+          "pass": true
+        },
+        {
+          "name": "numericFeedback",
+          "width": 390,
+          "pass": true
+        },
+        {
+          "name": "saveOverlay",
+          "width": 390,
+          "pass": true
+        },
+        {
+          "name": "loadOverlay",
+          "width": 390,
+          "pass": true
+        },
+        {
+          "name": "themeFiles",
+          "width": 390,
+          "pass": true
+        },
+        {
+          "name": "feedDialogGate",
+          "width": 390,
+          "pass": true
+        }
+      ],
+      "expected_validation_400": 2
+    },
+    "workspace_browser": {
+      "preference_wait": "Wait for final queued PUT success before reading and reloading",
+      "status": "pass",
+      "page_errors": 0,
+      "scenarios": 18
+    },
+    "native_transport": {
+      "fixture": {
+        "entries": 72,
+        "visibleChecked": 50,
+        "feeds": 6
+      },
+      "checks": [
+        {
+          "name": "locked interpreter decoder exists",
+          "pass": true
+        },
+        {
+          "name": "startup preserves BOM before page edits",
+          "pass": true
+        },
+        {
+          "name": "ordinary text applies and preserves every field",
+          "pass": true
+        },
+        {
+          "name": "no horizontal overflow 1280",
+          "pass": true
+        },
+        {
+          "name": "no horizontal overflow 390",
+          "pass": true
+        },
+        {
+          "name": "BOM/Unicode field and applied-style alignment 0",
+          "pass": true
+        },
+        {
+          "name": "BOM/Unicode field and applied-style alignment 1",
+          "pass": true
+        },
+        {
+          "name": "BOM/Unicode field and applied-style alignment 2",
+          "pass": true
+        },
+        {
+          "name": "actual BOM-prefixed Rust batches were decoded",
+          "pass": true
+        },
+        {
+          "name": "all BOM-prefixed tables are preserved",
+          "pass": true
+        },
+        {
+          "name": "remount and subsequent Save remain usable",
+          "pass": true
+        },
+        {
+          "name": "all 72 flags and 6 subscriptions unchanged",
+          "pass": true
+        },
+        {
+          "name": "no page or console errors",
+          "pass": true
+        }
+      ],
+      "webview_version": "156.0.4314.50",
+      "status": "pass",
+      "page_errors": 0,
+      "console_errors": 0
+    }
+  },
+  "boundaries": [
+    "No Android compile or device acceptance in this integration",
+    "No OS picker, real IME, touch or real WebDAV acceptance",
+    "No release build or remote CI for this local integration branch",
+    "dx desktop with installed CLI 0.7.10 failed on duplicate VERSION resource; official Cargo path passed",
+    "Browser debug devtools 404 recorded separately; CI remains strict by default",
+    "PR 40 ownership coordination pending; no PR head update sent"
+  ],
+  "cleanup": {
+    "main_fast_forward": {
+      "after": "9b17a4d5053f5de2678533b8b514ce1db3c1e96c",
+      "before": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0"
+    },
+    "utc": "2026-10-29T12:44:43.5840503Z",
+    "backup": "C:\\Users\\QQ\\.codex\\backups\\RSS-Reader\\20261029-124212-merged-branches",
+    "local_deleted": {
+      "sha": "6479ffba71d9118d9f31b8c840a8d7f303098665",
+      "name": "fix/native-outbound-request-safety"
+    },
+    "remote_deleted": [
+      {
+        "name": "chore/pages-actions-hardening",
+        "sha": "ffb1f1f76d21c95630f80b663790faa6806d46f8",
+        "pr": 14,
+        "merge": "cffc25052d8eda72edfe9526086170f15d56c8ae",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "hotfix/mobile-entry-scroll-snapback",
+        "sha": "3a6427c141a13520efecf0252ff9de8b24a35f00",
+        "pr": 2,
+        "merge": "4372872c24cadbad4ea7386e20e63e16250af651",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/native-persistence-atomicity",
+        "sha": "52a1db0d33b3aa7fd14084c93dea7f9fd862f8da",
+        "pr": 3,
+        "merge": "1cdc75113b4c4815e6d7abc0258939848b407106",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/sqlite-large-feed-batching",
+        "sha": "06acbab04ecc42589b6fb3447679f11e0548f07a",
+        "pr": 4,
+        "merge": "1253c284c8563dbe16d69201fc8a41d69531c8b2",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/feed-guid-identity",
+        "sha": "7be7d6d5fcc6f77a039ab568a4463dcbaab9d694",
+        "pr": 5,
+        "merge": "7c9c5bde03b6c36ba2d6fedda5c0facdb28d50cb",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/import-validation-migration-lock",
+        "sha": "dba08059ea41b5e2ac384c39d2e01067a9c092c2",
+        "pr": 6,
+        "merge": "14e11a22281d3ed525b1937f99934280df7c9234",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/rust-1.99-async-trait-clippy",
+        "sha": "4030cbde3c42226045bbdcab61157255e94de3ea",
+        "pr": 9,
+        "merge": "7be428ddb1e23b75c8929ca23549e4dd7c5118b8",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/post-audit-repair",
+        "sha": "dcfbcffe564077cf69c98cec2b3f341e587629f3",
+        "pr": 10,
+        "merge": "699edfd602f5f7f7a5892ddc3396a759659a277b",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/large-feed-filter-bind-limit",
+        "sha": "d7adc4c85273685bb313507eca79e3a70945de5e",
+        "pr": 11,
+        "merge": "565afb207a3be1cad842feb23137fa0081d0a6b7",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/refresh-generation-fence",
+        "sha": "09d627fb5f58febd1ece458cc420594dfb1502df",
+        "pr": 12,
+        "merge": "d733d92eba225d42cf2f5c92d02c1d0908c3b81d",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/post-generation-review",
+        "sha": "ea170874fa2103bdc8f60b168379b67204898217",
+        "pr": 13,
+        "merge": "bba9445972f551266203ed5f1524a69e89dfef22",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/storage-gc-query-contract",
+        "sha": "a964ae658c3a3c24d5bf3aad889c2d7a91a95d59",
+        "pr": 15,
+        "merge": "7126434803eb59275e3cda3c8e04fed335cc6e35",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "perf/sqlite-large-feed-scope-json",
+        "sha": "193f6f6fd60624fabef86ce779ba85ccf8c14361",
+        "pr": 16,
+        "merge": "0957a0302d790689fb6fff2b232e0a4dbfaa4d4b",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "perf/batch-content-upserts",
+        "sha": "096a28dbd96a0163a2494bcd95557282c6153801",
+        "pr": 17,
+        "merge": "e8c6ee165761f2e89baa6612b96324310def187a",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/pages-smoke-profile-cleanup",
+        "sha": "620844e4f4db69537ad47c71ef45639a30bbc897",
+        "pr": 18,
+        "merge": "b2376f7b1251319469e44e2b7d86c0270f86fd8b",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      },
+      {
+        "name": "fix/native-outbound-request-safety",
+        "sha": "6479ffba71d9118d9f31b8c840a8d7f303098665",
+        "pr": 26,
+        "merge": "adcd39e92ce1b416c71df3542d64dae706accdb6",
+        "merged": true,
+        "head_matches": true,
+        "merge_in_main": true,
+        "local_occupied": false,
+        "candidate": true
+      }
+    ]
+  },
+  "remaining": {
+    "remote": 15,
+    "local": 18
+  },
+  "logs": [
+    {
+      "path": "workspace-final.log",
+      "sha256": "08abe904c0d5267af13b700d12871848bef61f481a71286a28efc19c269b3966"
+    },
+    {
+      "path": "clippy-final.log",
+      "sha256": "90a78f72ea8ac87b5941afd61d5f570853adda3cc38a9fd306618869cdd570cf"
+    },
+    {
+      "path": "web-build.log",
+      "sha256": "a17f409e9811b39cde55c467220eca8823e195d72e7d3b77be66380d3124b434"
+    },
+    {
+      "path": "native-cargo-build.log",
+      "sha256": "7d2aa6ff738d9b6e986f53cf9d6631c2e1390e934ccdfb18bf324fd48590c35c"
+    },
+    {
+      "path": "browser-final/acceptance.json",
+      "sha256": "d76db56ed49afef70f6bfd3d5aa22a30a6436648486bcc3d3c39437504262115"
+    },
+    {
+      "path": "workspace-browser-final.log",
+      "sha256": "ecb16c95516691b6f479390f168447cb99cca1363bd71f2f838408d0ceb7ac3b"
+    },
+    {
+      "path": "native-transport/acceptance.json",
+      "sha256": "94fd716520ef470b351bb880acd721c45fe0447fcc8d074f63a584f6016f64a4"
+    }
+  ]
+}
