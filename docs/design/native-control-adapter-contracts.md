@@ -1,6 +1,6 @@
 # 原生控件适配契约
 
-核对日期：2026-10-29。本文对应 PR #40 合入 main 后的实现，实际提交与检查见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
+核对日期：2026-10-30。页面规则对应 PR #40 合入 main 后的实现，见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；本分支补充 App 设置读取约束，见[本批交接](../handoffs/2026-10-30-shell-settings-lifecycle.md)。旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
 
 ## 架构与状态所有权
 
@@ -15,6 +15,7 @@
 | --- | --- |
 | Settings 枚举、数值、CSS | 按主线 SettingsPatch::between 记录实际改变的字段，再合并到 pending。A→B→A 后该字段仍可保留在 pending；无变化的通知不构造补丁。无法解析的数字保留上次有效值并显示字段提示，不构造补丁、不自动保存。 |
 | Settings 初次加载/重新读取 | 只接纳最新读取；成功写入使更早读取失效。在途写入期间的读取回执暂存：成功写入丢弃；写入失败且没有更新读取则应用。若全局已应用更新的存储结果，使用当前全局值。 |
+| App 级设置读取 | `ui/shell/settings_read_lifecycle.rs` 决定启动/只读命令、在途合并和错误归属。页面打开时自动读取不排队，显式重试仍可进入；完成时页面已打开则丢弃合并的后续读取。ThemeController 的存储 revision（含等值存储）使旧成功失效，重读错误绑定完成时 revision；App 任务、命令和主题发布留给 Shell。 |
 | Settings 草稿投影 | 唯一规则为 stored → submitted → pending。加载和下载更新 stored，任何尚未保存的逐字段编辑都继续覆盖它；未编辑字段立即反映新存储。保留主线跨刷新/登录的草稿恢复。 |
 | Settings 保存 | 仅发送 pending 字段；仅校验编辑过的 CSS，仅把补丁内页大小 0 规范化为默认值。成功清除 submitted，再覆盖 pending；失败把 submitted 放回 pending 下方。后续编辑即使等于已存储值，仍须明确保存。 |
 | 数值解析提示 | 每个字段有独立投影代次。存储结果真正供应该字段时，等值回填也永久作废旧提示；有 submitted/pending 覆盖的字段保留提示。A→B→A 不复活旧提示。投影不触发输入事件。 |

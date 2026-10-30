@@ -4,6 +4,9 @@ use dioxus::core::{Runtime, current_scope_id};
 use dioxus::prelude::*;
 use dioxus_router::Navigator;
 
+mod settings_read_lifecycle;
+use settings_read_lifecycle::{ReadMode, ReadTrigger, SettingsReadLifecycle};
+
 use crate::{
     router::AppRoute,
     status::set_status,
@@ -36,21 +39,11 @@ pub(crate) struct AppShellState {
     /// The open settings page's edits not stored yet, kept before the page is reloaded or leaves
     /// to sign in (C4b item 4).
     settings_draft: Signal<Option<rssr_application::SettingsPatch>>,
-    /// Why the settings could not be read at start, until they are (C4b item 5).
-    settings_failure: Signal<Option<UiFailure>>,
+    /// The App's settings read lifecycle; settings values remain owned by ThemeController.
+    settings_read: Signal<SettingsReadLifecycle<UiFailure>>,
     /// Why the startup page could not be resolved, until dismissed: the startup page is replaced
     /// at once, its own status with it (C4b item 5; review C4B-A-R3-03).
     startup_failure: Signal<Option<UiFailure>>,
-    settings_loading: Signal<bool>,
-    /// The start got to the backend and started the periodic refresh: later reads of the
-    /// settings (retry, recovery, re-read) only read (review C4B-B-07).
-    auto_refresh_started: Signal<bool>,
-    /// A read of the settings was asked for while one was on its way: one more follows it, so
-    /// the request is not lost (review C4B-B-06).
-    settings_reread_wanted: Signal<bool>,
-    /// A read of the settings failed after settings were applied, with the app's count of applied
-    /// settings then: shown until settings are applied again (review C4B-B-08).
-    settings_reread_failure: Signal<Option<(UiFailure, u64)>>,
     /// Preference writes and feed URL edits share one ordering boundary. A URL edit
     /// must migrate the last selected source, including saves from a page just left.
     /// New page reads wait at this boundary before loading their preference baseline.
@@ -190,71 +183,59 @@ impl AppShellState {
     /// page reads them, a configuration import replaces them); a read issued before such an
     /// application does not overwrite it (C4b items 2 and 5; design review C4D-R2 R2-03, R2-04).
     pub(crate) fn load_settings(self, theme: ThemeController) {
-        self.read_settings(theme, self.settings_read_command());
-    }
-
-    /// Only a read once the start got to the backend and started the periodic refresh; the start
-    /// itself until then, on every path (retry, recovery, re-read; review C4B-B-R2-05).
-    fn settings_read_command(self) -> ShellCommand {
-        if *self.auto_refresh_started.peek() {
-            ShellCommand::LoadSettings
-        } else {
-            ShellCommand::LoadAuthenticatedShell
-        }
+        self.read_settings(theme, ReadTrigger::Explicit);
     }
 
     /// Reads the settings again after a re-read failed (the notice's retry), whether or not the
     /// settings page is open.
     pub(crate) fn retry_settings_read(self, theme: ThemeController) {
-        self.read_settings(theme, self.settings_read_command());
+        self.read_settings(theme, ReadTrigger::Explicit);
     }
 
     /// The shell's read-only refresh: the settings again, applied like the start's (the same
     /// ordering against settings a page applied meanwhile), unless the settings page is open and
     /// reads them itself (C4b item 2).
     pub(crate) fn reread_settings(self, theme: ThemeController) {
-        if *self.settings_page_open.peek() {
-            return;
-        }
-        self.read_settings(theme, self.settings_read_command());
+        self.read_settings(theme, ReadTrigger::Reread);
     }
 
-    fn read_settings(mut self, theme: ThemeController, command: ShellCommand) {
-        if *self.settings_loading.peek() {
-            // Kept for after the read on its way, which may have read before what this request
-            // is about (review C4B-B-06).
-            self.settings_reread_wanted.set(true);
+    fn read_settings(mut self, theme: ThemeController, trigger: ReadTrigger) {
+        let Some(read) = self.settings_read.write().begin(
+            trigger,
+            *self.settings_page_open.peek(),
+            theme.stored_count(),
+        ) else {
             return;
-        }
-        self.settings_loading.set(true);
-        let issued = theme.stored_count();
+        };
+        let command = match read.mode {
+            ReadMode::Start => ShellCommand::LoadAuthenticatedShell,
+            ReadMode::ReadOnly => ShellCommand::LoadSettings,
+        };
         Runtime::current().in_scope(self.owner, || {
             spawn(async move {
                 let intents = run_ui_command(UiCommand::Shell(command)).await;
-                self.settings_loading.set(false);
                 for intent in intents {
                     match intent {
-                        UiIntent::AutoRefreshStarted => self.auto_refresh_started.set(true),
+                        UiIntent::AutoRefreshStarted => {
+                            self.settings_read.write().auto_refresh_started();
+                        }
                         UiIntent::AuthenticatedShellLoaded(snapshot) => {
-                            // The read worked: an earlier re-read's failure is over. Its settings
-                            // apply unless settings were applied since it was issued.
-                            self.settings_reread_failure.set(None);
-                            if theme.stored_count() == issued {
+                            let apply = self
+                                .settings_read
+                                .write()
+                                .accept_loaded(&read, theme.stored_count());
+                            if apply {
                                 theme.store(snapshot.settings);
                             }
                         }
-                        UiIntent::Failed(failure) => match theme.stored_count() {
-                            0 => self.settings_failure.set(Some(failure)),
-                            applied => self.settings_reread_failure.set(Some((failure, applied))),
-                        },
+                        UiIntent::Failed(failure) => {
+                            self.settings_read.write().failed(failure, theme.stored_count());
+                        }
                         _ => {}
                     }
                 }
-                if theme.stored_count() > 0 {
-                    self.settings_failure.set(None);
-                }
-                if *self.settings_reread_wanted.peek() {
-                    self.settings_reread_wanted.set(false);
+                let reread = self.settings_read.write().finish(read, theme.stored_count());
+                if reread {
                     self.reread_settings(theme);
                 }
             });
@@ -264,19 +245,13 @@ impl AppShellState {
     /// Why reading the settings again failed, while no settings were applied since: the app
     /// keeps showing the ones it had (review C4B-B-08; reactive).
     pub(crate) fn settings_reread_failure(self, theme: ThemeController) -> Option<UiFailure> {
-        let failure = self.settings_reread_failure.read().clone();
-        failure
-            .filter(|(_, applied)| theme.stored_revision() == *applied)
-            .map(|(failure, _)| failure)
+        self.settings_read.read().reread_failure(theme.stored_revision()).cloned()
     }
 
     /// Why the settings could not be read, while they have not been: settings applied from the
     /// library by any page end it, not only this read (design review C4D-R2 R2-04).
     pub(crate) fn settings_failure(self, theme: ThemeController) -> Option<UiFailure> {
-        if theme.has_stored() {
-            return None;
-        }
-        self.settings_failure.read().clone()
+        self.settings_read.read().initial_failure(theme.has_stored()).cloned()
     }
 
     /// Why the startup page could not be resolved (the app opened all entries instead).
@@ -293,7 +268,7 @@ impl AppShellState {
     }
 
     pub(crate) fn settings_loading(self) -> bool {
-        *self.settings_loading.read()
+        self.settings_read.read().is_loading()
     }
 
     pub(crate) fn submit_search(self, navigator: Navigator) {
@@ -327,12 +302,8 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         job_notice: use_signal(|| None),
         job_notice_revision: use_signal(|| 0),
         settings_draft: use_signal(|| None),
-        settings_failure: use_signal(|| None),
+        settings_read: use_signal(SettingsReadLifecycle::default),
         startup_failure: use_signal(|| None),
-        settings_loading: use_signal(|| false),
-        auto_refresh_started: use_signal(|| false),
-        settings_reread_wanted: use_signal(|| false),
-        settings_reread_failure: use_signal(|| None),
         workspace_write_order: use_signal(|| Arc::new(tokio::sync::Mutex::new(()))),
         owner: current_scope_id(),
     }
@@ -421,7 +392,9 @@ pub(crate) fn use_app_nav_shell() -> AppNavShell {
 pub(crate) fn use_authenticated_shell_bus(shell: AppShellState, theme: ThemeController) {
     use_hook(move || shell.load_settings(theme));
     use_effect(move || {
-        if theme.has_stored() && shell.settings_failure.peek().is_some() {
+        // Subscribe to stored settings, not lifecycle mutations: a failed recovery must not
+        // schedule itself again when its loading/failure state is published.
+        if shell.settings_read.peek().needs_recovery(theme.has_stored()) {
             shell.load_settings(theme);
         }
     });
@@ -609,7 +582,7 @@ mod tests {
         settle(&mut dom, shell).await;
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
-            assert_eq!(shell.settings_failure.peek().clone(), None);
+            assert!(!shell.settings_read.peek().needs_recovery(theme.has_stored()));
         });
         assert_eq!(backend.calls("load_settings"), 2);
         assert_eq!(backend.calls("ensure_auto_refresh_started"), 1, "started once (C4B-B-07)");
@@ -634,6 +607,53 @@ mod tests {
             assert_eq!(shell.settings_failure(theme), None);
         });
         assert_eq!(backend.calls("load_settings"), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_equal_value_page_store_still_supersedes_an_in_flight_read() {
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("load_settings");
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        run_until(&mut dom, "the startup read waits", || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || {
+            let same = theme.settings.peek().clone();
+            theme.store(same);
+        });
+        hold.release();
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.stored_count(), 1, "the old read did not apply a second store");
+            assert_eq!(shell.settings_failure(theme), None);
+        });
+        assert_eq!(backend.calls("load_settings"), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_failed_recovery_does_not_retrigger_itself_through_lifecycle_notifications() {
+        let backend = Scripted::over_new_library();
+        backend.fail("load_settings", BackendError::new(ErrorCode::Network, "网络中断"));
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert!(shell.settings_failure(theme).is_some());
+            theme.store(UserSettings::default());
+        });
+        run_until(&mut dom, "recovery after a page store", || backend.calls("load_settings") == 2)
+            .await;
+        settle(&mut dom, shell).await;
+        past_the_window(&mut dom, shell).await;
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(shell.settings_failure(theme), None);
+            assert!(shell.settings_reread_failure(theme).is_some());
+        });
+        assert_eq!(backend.calls("load_settings"), 2);
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1);
     }
 
     /// `resolve_startup` with a failed resolution, of each class: it goes to all entries and the
@@ -827,18 +847,61 @@ mod tests {
         let _host = test_host::install(backend.clone());
         let mut dom = VirtualDom::new(harness);
         dom.rebuild_in_place();
-        let (shell, _) = contexts(&dom);
+        let (shell, theme) = contexts(&dom);
         settle(&mut dom, shell).await;
         let hold = backend.hold("load_settings");
         dom.in_scope(ScopeId::APP, || shell.request_reread());
         run_until(&mut dom, "the re-read waits", || hold.waiting() == 1).await;
-        dom.in_scope(ScopeId::APP, || shell.request_reread());
+        dom.in_scope(ScopeId::APP, || {
+            shell.request_reread();
+            for _ in 0..3 {
+                shell.retry_settings_read(theme);
+            }
+        });
         past_the_window_while(&mut dom).await;
         assert_eq!(backend.calls("load_settings"), 2, "one read on its way");
         hold.release();
         run_until(&mut dom, "the follow-up read", || backend.calls("load_settings") == 3).await;
         hold.release();
         settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 3, "one follow-up for all pending requests");
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1);
+        dom.in_scope(ScopeId::APP, || {
+            assert_eq!(theme.stored_count(), 3, "follow-up captured the newly stored revision");
+        });
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn opening_settings_consumes_pending_reads_but_explicit_retry_still_works() {
+        let backend = Scripted::over_new_library();
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(harness);
+        dom.rebuild_in_place();
+        let (shell, theme) = contexts(&dom);
+        settle(&mut dom, shell).await;
+        let hold = backend.hold("load_settings");
+        dom.in_scope(ScopeId::APP, || shell.reread_settings(theme));
+        run_until(&mut dom, "the re-read waits", || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || {
+            shell.retry_settings_read(theme);
+            shell.set_settings_page_open(true);
+        });
+        hold.release();
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 2, "pending request dropped for the open page");
+        dom.in_scope(ScopeId::APP, || shell.set_settings_page_open(false));
+        past_the_window(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 2, "closing alone does not restart a read");
+        dom.in_scope(ScopeId::APP, || {
+            shell.set_settings_page_open(true);
+            shell.retry_settings_read(theme);
+        });
+        run_until(&mut dom, "explicit retry with settings open", || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || shell.reread_settings(theme));
+        hold.release();
+        settle(&mut dom, shell).await;
+        assert_eq!(backend.calls("load_settings"), 3, "the automatic request was not queued");
+        assert_eq!(backend.calls("ensure_auto_refresh_started"), 1);
     }
 
     /// Reading the settings again can fail after settings were applied: the failure is shown
