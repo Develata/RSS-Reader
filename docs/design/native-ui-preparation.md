@@ -12,12 +12,23 @@
 
 ## Reader 规则与装配边界（2026-10-30）
 
-- `state.rs`、`intent.rs`、`reducer.rs`、`result_lifecycle.rs` 和 `image_viewer_state.rs` 不依赖 Dioxus。导航值直接复用 domain 的 `EntryNavigation`，不再经平台 bootstrap 引入；错误仍复用普通 Rust `UiFailure`，没有复制状态或类型。`Signal` dispatch 归 session，图片 hook、组件和 DOM 脚本归当前图片适配器。
+- `state.rs`、`intent.rs`、`reducer.rs`、`result_lifecycle.rs` 和 `image_viewer_state.rs` 不依赖 Dioxus。导航值直接复用 domain 的 `EntryNavigation`，不再经平台 bootstrap 引入；错误仍复用普通 Rust `UiFailure`，没有复制状态或类型。`Signal` dispatch 归 session；图片状态 hook 与组件归 `image_viewer.rs`，当前宿主桥接归 `webview/`。
 - `ReaderResultScope` 读取现有状态中的文章 ID 与访问代次。加载、图片处理回执和标记写入共用访问归属；只读刷新在 `RereadIssued` 后额外捕获刷新代次，后续刷新或已应用标记使旧刷新失效。刷新代次不能作废同一次访问的标记写入，旧载荷不遍历、不复制正文。
 - 刷新准入按原顺序判定：非当前文章忽略，读取失败走恢复加载，加载中记一次待刷新，内容就绪仅读标记与邻居。恢复加载仍先 `BeginLoading`、再标记不重复本地化图片；加载回执发布后才处理待刷新。执行与发布次序仍由 session 装配，保留原 Dioxus 集成测试。
 - 加载和自动图片处理属于页面访问；用户已确认的标记写入属于 App。离页后写入继续，回执交给原有 Shell 提示与重读；不把取消页面等待解释为撤销写入。UI runtime 整体仍依赖当前装配，本批不声称全部 session/runtime 可原样移植。
 - 图片开关状态只接收资源引用与替代文本。当前宿主继续解释 rendered source、图片点击/键盘激活、dialog 焦点、滚动锁定、关闭后的恢复和卸载；快捷键与切文前位置捕获脚本保持不变。
 - `scripts/check_reader_rule_boundary.py` 用同一生产源码和既有测试编译独立测试程序，仅显式链接 `rssr-api`、`rssr-domain`、serde；依赖构建不得出现 Dioxus/web-sys/Wry/Tao。不创建 Cargo package，也不使用替身状态。CI 在 `rssr-api` job 执行此检查；完整 app 测试继续验证装配。具体证据见[本批交接](../handoffs/2026-10-30-reader-rule-boundary.md)。
+
+## Reader 宿主入口（2026-10-30）
+
+`pages/reader_page/webview/` 集中当前 Reader 的图片激活、图片 dialog 和快捷键桥接。页面装配只接收 `ReaderImage`、原始按键字符串、关闭请求，并在 dialog 挂载后通知适配器；不再持有这些监听的 `Eval`、停止消息或脚本路径。三个 JS 脚本仅移动，内容不变。
+
+- `use_image_activations` 仍在 Reader 页作用域运行；`image_viewer.rs` 独占现有图片状态，换文章时关闭。资源引用与替代文本沿用原规则，不复制正文或另建浮层状态。
+- `use_image_dialog` 仍在图片组件挂载后启动，负责原生 HTML dialog 的取消/背景输入、焦点、body 滚动锁与恢复。`use_listener_cleanup` 仅复用原 `use_drop` 停止消息，保留页面/组件任务作用域及等待中卸载的清理，不新加取消语义、代次或重试。
+- `use_shortcut_keys` 仍在宿主同步过滤输入、阻止默认动作，并在切文前通过既有阅读位置入口捕获。Rust 快捷键策略及 session/navigation 派发保持原位置；本批没有合并重复的快捷键定义。
+- 阅读位置继续复用 `ui/reading_position`，不为 Reader 再包装一套位置服务。该适配模块仍依赖 Dioxus 和 DOM，不是跨渲染器接口；独立性证据继续来自同一生产规则的无框架编译。
+
+验收覆盖真实 Windows WebView2、Android 真机和正式 Web 的反复进入、键盘激活图片、关闭后回焦与恢复滚动、带浮层离页清理。离页后 Reader 监听和 observer 归零；受控路由切换、物理键盘/系统 IME 等边界见[宿主提取交接](../handoffs/2026-10-30-reader-host-boundary.md)。下一批快捷键定义去重须独立保持同步默认动作、过滤与切文捕获顺序；正文渲染兼容契约随后推进。
 
 ## 已有可独立测试的 Rust 规则
 

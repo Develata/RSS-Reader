@@ -16,7 +16,9 @@
 
 Reader 已完成普通状态/reducer、图片状态与 Dioxus 装配分离，读取准入和回执归属复用同一规则；同一生产源码的无框架编译与现有宿主回归见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)。保持唯一状态来源，现有 session/runtime 的任务执行部分仍属于当前装配。
 
-下一步先收敛 Reader 所属宿主入口，快捷键定义去重独立提交并覆盖同步默认动作、输入过滤、布局与切文前捕获；随后明确正文内容、图片资源、锚点有效期、HTML/CSS、复制、IME 和无障碍兼容要求。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。详见[长期契约](./design/native-ui-preparation.md)。
+Reader 图片激活、dialog 焦点/滚动、快捷键桥接及卸载入口已集中到所属 `webview/` 适配模块，现有状态、JS 内容与任务作用域保持不变，阅读位置复用共享入口；实际 Windows、Android 真机和正式 Web 的基线/候选已通过，见[本批交接](./handoffs/2026-10-30-reader-host-boundary.md)。这是当前 Dioxus/WebView 的明确替换位置，不能写成全部装配已脱离框架。
+
+下一步以小批次去重 Reader 快捷键定义，覆盖同步默认动作、输入过滤、布局与切文前捕获；不顺带推广至全应用键盘框架。随后明确正文内容、图片资源、锚点有效期、HTML/CSS、复制、IME 和无障碍兼容要求。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。详见[长期契约](./design/native-ui-preparation.md)。
 
 ## 0.3.x 移除旧列表密度参数
 
