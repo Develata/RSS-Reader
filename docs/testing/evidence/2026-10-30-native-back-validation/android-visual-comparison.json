@@ -1,0 +1,70 @@
+{
+  "baseline": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\android-baseline-04\\acceptance",
+  "candidate": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\android-candidate-01\\acceptance",
+  "comparisons": [
+    {
+      "image": "392-directory.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "392-edit.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "392-entries.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "392-image.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "392-reader.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "392-settings.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "392-source.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "exit-hint.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    },
+    {
+      "image": "saving-editor-after-back.png",
+      "width": 1078,
+      "height": 2398,
+      "changedPixels": 0,
+      "totalPixels": 2585044
+    }
+  ],
+  "identical": 9
+}

@@ -1,15 +1,16 @@
 {
   "date": "2026-10-30",
-  "status": "native-acceptance-blocked",
+  "status": "native-back-scope-validated",
   "branch": "codex/native-back-policy",
-  "reviewedHead": "7a0403e0778ca590458a6347a4372bdb414961ea",
+  "reviewedHead": "8477977af9fe762e037dae5e90e55805aa0ae630",
   "implementationCommit": "62113c4fc181e245bc077dcd46eda56a969d7b96",
   "productBaseline": "4101520c33266026747db867c33e2b13baea3d23",
   "productionChangesSinceImplementation": [],
   "review": {
-    "kind": "self-review against main",
-    "actionableFindings": [],
-    "boundary": "Source review and Rust tests; no native host execution or independent agent review"
+    "kind": "self-review and actual native host acceptance",
+    "actionableProductFindings": [],
+    "independentAgentReview": false,
+    "existingObservation": "Baseline and candidate both log Dioxus copy_value_hoisted during feed save; no associated malfunction reproduced in this scope."
   },
   "tests": [
     {
@@ -27,35 +28,211 @@
       "ignored": 0
     }
   ],
-  "artifactRecheck": {
-    "manifest": "target/back-policy-20261029/identity.json",
-    "artifactHashesMatched": 7,
-    "sourceHashesMatched": 3,
-    "androidPackage": "io.github.develata.rssreader.backpolicytest",
-    "androidActivity": "dev.dioxus.main.MainActivity",
-    "androidDebuggable": true
+  "additionalChecks": [
+    "cargo fmt --all --check",
+    "node --check scripts/browser/rssr_back_navigation_acceptance.cjs",
+    "standalone Android Rust/SQLite helper compilation",
+    "git diff --exit-code 62113c4f -- crates assets Cargo.toml Cargo.lock"
+  ],
+  "nativeArtifacts": [
+    {
+      "sha256": "00deeff30d703683c578bfc968fe7843507885bd2934cf43a817a735ce23fa4f",
+      "path": "windows-baseline/rssr-app.exe"
+    },
+    {
+      "sha256": "172bfb1a0ecafa2c94aa832fdd4f102f2d4f9b00e463e5fa15a251ebfa375967",
+      "path": "windows-candidate/rssr-app.exe"
+    },
+    {
+      "sha256": "af4c077e25bd9962fcc9de1316ee026bc5f082662ad14d108817d602822470b4",
+      "path": "baseline.apk"
+    },
+    {
+      "sha256": "256390897d0d6a7ba6219ad90457365175fd1883b5c50c3efe1433d432751366",
+      "path": "candidate.apk"
+    }
+  ],
+  "productSources": [
+    {
+      "androidSnapshotMatches": true,
+      "path": "crates/rssr-app/src/hooks/use_mobile_back_navigation.rs",
+      "sha256": "cdd1af000a048d09ae7ea93fdfe991478f9f697453a5ede9438f443a85dbe578"
+    },
+    {
+      "androidSnapshotMatches": true,
+      "path": "crates/rssr-app/src/hooks/use_mobile_back_navigation/back_capture.rs",
+      "sha256": "5a207c8c7fbaa0a60f1d995d25eaf6eb076cbe373dfb9401c4a7ae45b2d7bdcf"
+    },
+    {
+      "androidSnapshotMatches": true,
+      "path": "crates/rssr-app/src/hooks/use_mobile_back_navigation/policy.rs",
+      "sha256": "232acfa75ac36d785368e5cac52f9cd2bd6c2a94f0890b3a7924d9775811705c"
+    }
+  ],
+  "nativeRuns": [
+    {
+      "run": "windows-baseline-04",
+      "report": "windows-baseline.json",
+      "status": "passed",
+      "checks": 4,
+      "identity": {
+        "platform": "windows",
+        "variant": "baseline",
+        "pid": 34196,
+        "exe": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-baseline-04\\rssr-app.exe",
+        "profile": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-baseline-04\\webview",
+        "cdp": "http://127.0.0.1:9291",
+        "artifactSha256": "00deeff30d703683c578bfc968fe7843507885bd2934cf43a817a735ce23fa4f",
+        "fixtureEntries": 100,
+        "fixtureSha256": "529EED9823D1A4EC207EC3C725E467FEABB0CADE7C6E694A22B7097195383EF3",
+        "source": "4101520c33266026747db867c33e2b13baea3d23"
+      },
+      "scriptSha256": "404af138cc05052bd167eb76d63c3159c0ad3c66b28ea4f0f90ed93f021a955d"
+    },
+    {
+      "run": "windows-candidate-02",
+      "report": "windows-candidate.json",
+      "status": "passed",
+      "checks": 4,
+      "identity": {
+        "platform": "windows",
+        "variant": "candidate",
+        "pid": 52828,
+        "exe": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-candidate-02\\rssr-app.exe",
+        "profile": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-candidate-02\\webview",
+        "cdp": "http://127.0.0.1:9291",
+        "artifactSha256": "172bfb1a0ecafa2c94aa832fdd4f102f2d4f9b00e463e5fa15a251ebfa375967",
+        "fixtureEntries": 100,
+        "fixtureSha256": "529EED9823D1A4EC207EC3C725E467FEABB0CADE7C6E694A22B7097195383EF3",
+        "source": "62113c4fc181e245bc077dcd46eda56a969d7b96"
+      },
+      "scriptSha256": "404af138cc05052bd167eb76d63c3159c0ad3c66b28ea4f0f90ed93f021a955d"
+    },
+    {
+      "run": "android-baseline-04",
+      "report": "android-baseline.json",
+      "status": "passed",
+      "checks": 10,
+      "identity": {
+        "platform": "android",
+        "variant": "baseline",
+        "serial": "caa0c283",
+        "package": "io.github.develata.rssreader.backpolicytest",
+        "pid": 7577,
+        "apk": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-20261029\\baseline.apk",
+        "cdp": "http://127.0.0.1:9292",
+        "artifactSha256": "af4c077e25bd9962fcc9de1316ee026bc5f082662ad14d108817d602822470b4",
+        "fixtureEntries": 100,
+        "fixtureSha256": "529EED9823D1A4EC207EC3C725E467FEABB0CADE7C6E694A22B7097195383EF3",
+        "source": "4101520c33266026747db867c33e2b13baea3d23",
+        "lockHelperSha256": "9f7badb88b920f316e660adef259a6bfe8098460639597ac39f418a5b2cef987"
+      },
+      "scriptSha256": "ddbb3e5f5808ca0f709652ab8b6fc08388ec9b3f7946109fd771e82f3a29206a"
+    },
+    {
+      "run": "android-candidate-01",
+      "report": "android-candidate.json",
+      "status": "passed",
+      "checks": 10,
+      "identity": {
+        "platform": "android",
+        "variant": "candidate",
+        "serial": "caa0c283",
+        "package": "io.github.develata.rssreader.backpolicytest",
+        "pid": 8817,
+        "apk": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-20261029\\candidate.apk",
+        "cdp": "http://127.0.0.1:9292",
+        "artifactSha256": "256390897d0d6a7ba6219ad90457365175fd1883b5c50c3efe1433d432751366",
+        "fixtureEntries": 100,
+        "fixtureSha256": "529EED9823D1A4EC207EC3C725E467FEABB0CADE7C6E694A22B7097195383EF3",
+        "source": "62113c4fc181e245bc077dcd46eda56a969d7b96",
+        "lockHelperSha256": "9f7badb88b920f316e660adef259a6bfe8098460639597ac39f418a5b2cef987"
+      },
+      "scriptSha256": "404af138cc05052bd167eb76d63c3159c0ad3c66b28ea4f0f90ed93f021a955d"
+    }
+  ],
+  "visualComparisons": [
+    {
+      "platform": "windows",
+      "images": 13,
+      "identical": 13,
+      "changedPixels": 0,
+      "report": "windows-visual-comparison.json"
+    },
+    {
+      "platform": "android",
+      "images": 9,
+      "identical": 9,
+      "changedPixels": 0,
+      "report": "android-visual-comparison.json"
+    }
+  ],
+  "nativeEnvironment": {
+    "windows": "Windows 11 10.0.26200",
+    "webview2": "156.0.4314.50",
+    "android": "2201123C / cupid, Android 15 API 35",
+    "androidWebview": "156.0.8078.47",
+    "serial": "caa0c283"
   },
-  "device": {
-    "serial": "caa0c283",
-    "model": "2201123C",
-    "product": "cupid",
-    "state": "device",
-    "testPackageInstalled": false
+  "faultInjection": {
+    "method": "Actual Android WebView capture reply replaced with an error or withheld; injected reply count asserted",
+    "saveGate": "Real SQLite BEGIN IMMEDIATE lock on verified isolated fixture, rollback on release/EOF/12s",
+    "timing": "Capture event to Reader DOM departure includes host/render scheduling; Rust wait limit is 500ms, not an end-to-end latency guarantee",
+    "androidBaselineRunner": "ddbb3e5f5808ca0f709652ab8b6fc08388ec9b3f7946109fd771e82f3a29206a",
+    "finalRunner": "404af138cc05052bd167eb76d63c3159c0ad3c66b28ea4f0f90ed93f021a955d",
+    "betweenRunnerVersions": "Only Windows skips replacement of its read-only IPC binding; Android execution path unchanged"
   },
-  "blockedOperation": {
-    "command": "python scripts/seed_reading_native.py target/back-policy-native-20261030/seed --fixture-dir target/back-policy-native-20261030/fixture --fixture-base http://127.0.0.1:9299 --entries 100 --paragraphs 120",
-    "reason": "approval required by policy, but AskForApproval is set to Never",
-    "executed": false,
-    "targetDirectoryExists": false,
-    "retried": false,
-    "workaroundAttempted": false
+  "earlierAttempt": {
+    "reviewedHead": "7a0403e0778ca590458a6347a4372bdb414961ea",
+    "status": "native-acceptance-blocked",
+    "blockedOperation": {
+      "command": "python scripts/seed_reading_native.py target/back-policy-native-20261030/seed --fixture-dir target/back-policy-native-20261030/fixture --fixture-base http://127.0.0.1:9299 --entries 100 --paragraphs 120",
+      "reason": "approval required by policy, but AskForApproval is set to Never",
+      "executed": false,
+      "targetDirectoryExists": false,
+      "retried": false,
+      "workaroundAttempted": false
+    }
   },
-  "nativeExecution": {
-    "windows": "not run",
-    "android": "not run",
-    "artifactInstallation": "not run",
-    "real500msMeasurement": "not run"
+  "approvalResolution": {
+    "authorized": true,
+    "configCommit": "8b7014b290a9785cf644c21eda605b460ad48d85",
+    "configRepositoryPushed": false,
+    "ruleTests": 26,
+    "diskApprovalPolicy": "on-request",
+    "effectiveSessionApprovalPolicy": "never",
+    "originalFixtureCommandAfterRestart": "succeeded",
+    "nativeStartAfterRestart": "succeeded"
   },
+  "installation": {
+    "package": "io.github.develata.rssreader.backpolicytest",
+    "initialAttempt": "INSTALL_FAILED_USER_RESTRICTED",
+    "retry": "User confirmed retry; succeeded",
+    "candidate": "adb install -r succeeded; installed APK hash matched",
+    "dailyPackageTouched": false
+  },
+  "diagnosticRuns": [
+    {
+      "run": "windows-baseline-01",
+      "finding": "Harness expected a removed directory node; real contract keeps it hidden"
+    },
+    {
+      "run": "android-baseline-01",
+      "finding": "Harness waited for HTTP while feed edit only writes SQLite"
+    },
+    {
+      "run": "android-baseline-02",
+      "finding": "Reported pass, but failure/timeout/cancellation results invalidated because injection was not asserted"
+    },
+    {
+      "run": "android-baseline-03",
+      "finding": "Harness IPC probe assumed only string messages"
+    },
+    {
+      "run": "windows-baseline-03",
+      "finding": "Harness attempted to replace Windows read-only IPC binding"
+    }
+  ],
   "primaryCheckoutPreservation": {
     "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
     "statusEntriesUnchanged": 40,
@@ -63,13 +240,51 @@
     "existingFileHashesMatched": 20,
     "absentPathsStillAbsent": 22
   },
+  "cleanup": {
+    "windowsTestProcesses": "closed",
+    "androidTestPackage": "stopped, candidate APK and synthetic evidence retained",
+    "testPorts": [
+      9291,
+      9292,
+      9299
+    ],
+    "remainingOwnedListeners": 0,
+    "testForwardAndReverse": "removed",
+    "preexistingForwardsPreserved": [
+      9243,
+      9252,
+      9262
+    ],
+    "preexistingReversePreserved": 8111
+  },
+  "uncovered": [
+    "Production signed package upgrade",
+    "Real old Android storage migration",
+    "System IME and accessibility",
+    "Other Android devices",
+    "macOS/Linux GUI",
+    "All UI/refresh/network behaviors beyond this return scope"
+  ],
+  "evidenceRoot": "target/back-policy-native-20261030",
+  "evidenceManifest": "evidence-manifest.json",
   "documentation": {
-    "markdownFiles": 322,
-    "localLinks": 1474,
+    "markdown_files": 322,
+    "local_links": 1478,
     "anchors": 15,
-    "archivedHandoffs": 201,
+    "archived_handoffs": 201,
+    "json_files": [
+      "docs/testing/evidence/2026-10-29-native-main-integration/result.json",
+      "docs/testing/evidence/2026-10-29-settings-cohesion/result.json",
+      "docs/testing/evidence/2026-10-30-branch-consolidation/result.json"
+    ],
     "errors": [],
-    "newResultJsonParsed": true,
+    "newEvidenceJsonFiles": 8,
     "diffCheckPassed": true
+  },
+  "delivery": {
+    "push": "authorized; remote readback recorded in the delivery response",
+    "release": false,
+    "merge": false,
+    "commit": "same commit as this receipt; identify with git log -- docs/testing/evidence/2026-10-30-native-back-validation/result.json"
   }
 }

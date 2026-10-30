@@ -1,0 +1,89 @@
+{
+  "status": "passed",
+  "identity": {
+    "platform": "android",
+    "variant": "baseline",
+    "serial": "caa0c283",
+    "package": "io.github.develata.rssreader.backpolicytest",
+    "pid": 7577,
+    "apk": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-20261029\\baseline.apk",
+    "cdp": "http://127.0.0.1:9292",
+    "artifactSha256": "af4c077e25bd9962fcc9de1316ee026bc5f082662ad14d108817d602822470b4",
+    "fixtureEntries": 100,
+    "fixtureSha256": "529EED9823D1A4EC207EC3C725E467FEABB0CADE7C6E694A22B7097195383EF3",
+    "source": "4101520c33266026747db867c33e2b13baea3d23",
+    "lockHelperSha256": "9f7badb88b920f316e660adef259a6bfe8098460639597ac39f418a5b2cef987"
+  },
+  "scriptSha256": "ddbb3e5f5808ca0f709652ab8b6fc08388ec9b3f7946109fd771e82f3a29206a",
+  "checks": [
+    {
+      "name": "toolbar-position-and-image-priority-392",
+      "pass": true
+    },
+    {
+      "name": "source-directory-and-edit-dismiss-392",
+      "pass": true
+    },
+    {
+      "name": "saving-editor-consumes-system-back",
+      "pass": true
+    },
+    {
+      "name": "capture-normal",
+      "pass": true,
+      "count": 1,
+      "intercepted": 0,
+      "routeDelayMs": 48.5,
+      "observationDelayMs": 455.89999997615814
+    },
+    {
+      "name": "capture-fail",
+      "pass": true,
+      "count": 1,
+      "intercepted": 1,
+      "routeDelayMs": 48.5,
+      "observationDelayMs": 505.4000000357628
+    },
+    {
+      "name": "capture-hold",
+      "pass": true,
+      "count": 1,
+      "intercepted": 1,
+      "routeDelayMs": 549.1999999880791,
+      "observationDelayMs": 987.1999999880791
+    },
+    {
+      "name": "capture-normal",
+      "pass": true,
+      "count": 1,
+      "intercepted": 0,
+      "routeDelayMs": 49.19999998807907,
+      "observationDelayMs": 562.8999999761581
+    },
+    {
+      "name": "system-capture-success-failure-timeout-and-merged-input",
+      "pass": true
+    },
+    {
+      "name": "route-change-cancels-capture-and-allows-next-return",
+      "pass": true
+    },
+    {
+      "name": "home-timeout-background-resume-and-stale-timer",
+      "pass": true
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "webViewVersion": "156.0.8078.47",
+  "saveLock": {
+    "code": 0,
+    "stdout": "LOCKED\r\nRELEASED\r\n",
+    "stderr": ""
+  },
+  "cancelledCapture": {
+    "intercepted": 1,
+    "routeDelayMs": 142.69999998807907
+  },
+  "hintLifetimeMs": 5048.199999988079
+}

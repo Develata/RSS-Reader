@@ -1,0 +1,37 @@
+{
+  "status": "passed",
+  "identity": {
+    "platform": "windows",
+    "variant": "candidate",
+    "pid": 52828,
+    "exe": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-candidate-02\\rssr-app.exe",
+    "profile": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-candidate-02\\webview",
+    "cdp": "http://127.0.0.1:9291",
+    "artifactSha256": "172bfb1a0ecafa2c94aa832fdd4f102f2d4f9b00e463e5fa15a251ebfa375967",
+    "fixtureEntries": 100,
+    "fixtureSha256": "529EED9823D1A4EC207EC3C725E467FEABB0CADE7C6E694A22B7097195383EF3",
+    "source": "62113c4fc181e245bc077dcd46eda56a969d7b96"
+  },
+  "scriptSha256": "404af138cc05052bd167eb76d63c3159c0ad3c66b28ea4f0f90ed93f021a955d",
+  "checks": [
+    {
+      "name": "toolbar-position-and-image-priority-1280",
+      "pass": true
+    },
+    {
+      "name": "source-directory-and-edit-dismiss-1280",
+      "pass": true
+    },
+    {
+      "name": "toolbar-position-and-image-priority-390",
+      "pass": true
+    },
+    {
+      "name": "source-directory-and-edit-dismiss-390",
+      "pass": true
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "webViewVersion": "156.0.4314.50"
+}
