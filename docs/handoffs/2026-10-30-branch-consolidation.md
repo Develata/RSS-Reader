@@ -134,3 +134,33 @@ git show 9a6700fc:crates/rssr-app/src/pages/settings_page/README.md
 ```
 
 恢复某个原远端独有分支时，bundle 的来源引用使用 `refs/remotes/origin/<原名称>`，目标仍取一个新的本地恢复分支；本地恢复不自动授权重新创建远端。工作树登记备份用于追溯其 HEAD/index，不能把它当作丢失工作目录文件的备份。
+
+## 同日后续：剩余有效工作树盘点（未删除）
+
+用户要求“本地分支和工作树还有不少，你先看看”。检查基线为本地 `cd8e6c36`，本次只检查剩余 checkout 并追加本节，没有移动或删除分支、工作树、缓存或证据。盘点记录对应本节所在的 `docs: inspect remaining local worktrees` 本地文档提交；未推送。
+
+### 已核实事实
+
+当前仍为 6 个本地分支、7 个有效工作树。除主 checkout 和当前候选外，以下 5 个旧工作树的 `status --porcelain=v1 --untracked-files=all` 均为空；`merge-base --is-ancestor` 确认其全部提交已在本地 main `4101520c`，没有独有提交。上一轮的“有效工作树”只说明目录和 Git 登记存在，不代表正在开发。
+
+| 工作树 | HEAD / 分支 | 文件逻辑大小 | Git 忽略内容 |
+| --- | --- | --- | --- |
+| `E:/gitclone/RSS-Reader/.claude/worktrees/determined-mestorf-560b15` | `e4c4a826`，detached | 1,303,335,751 字节（1.214 GiB） | `target/debug`、flycheck 等构建缓存 |
+| `E:/gitclone/RSS-Reader/.claude/worktrees/nostalgic-perlman-51793d` | `73f8d6ee`，`claude/wonderful-engelbart-fdac91` | 8,696,519 字节（8.29 MiB） | `.claude/settings.local.json`，231 字节；只查文件元数据，未读取配置内容 |
+| `E:/gitclone/RSS-Reader/.claude/worktrees/reader-mathml` | `73f8d6ee`，`feat/reader-mathml` | 1,308,151,882 字节（1.218 GiB） | `target/debug`、flycheck 等构建缓存 |
+| `E:/gitclone/RSS-Reader/.claude/worktrees/youthful-curie-5447de` | `d9ebe354`，detached | 7,990,186 字节（7.62 MiB） | 未发现忽略文件 |
+| `E:/gitclone/RSS-Reader-integration-20261023` | `936930f7`，`codex/integration-final-20261023` | 1,635,329,316 字节（1.523 GiB） | `target/handoff` 和空的 `target/test-build-id` |
+
+合计 4,263,503,654 字节，约 3.97 GiB。扫描未跨越 reparse point、无读取错误；逻辑大小不等于实际可释放空间，本轮释放为零。前四处没有发现 `.db` / `.sqlite` / `.sqlite3` 文件，旧整合目录中这些文件属于历史浏览器测试 profile。
+
+旧整合工作树的 `target/handoff` 有 4004 个普通文件，共 1,620,334,144 字节（约 1.51 GiB）：`release-v0.2.0` 841.93 MiB、`public-pages` 468.40 MiB、`review-fixes` 163.07 MiB、`merged-checks` 69.93 MiB，以及只读审查和最终 CI 回执。它包含测试 profile、产物、日志、截图和原始 CI 附件，不能把整个目录当编译缓存删除。另外有 5 个 Chromium Singleton 重解析点，计数、大小与递归扫描均未跟随它们；后续保全应单独记录链接目标，不复制到目标外。
+
+主 checkout 仍在 `020f9d40`，40 条既有状态保留，另有被忽略的 `rss-reader.db`、构建目录和嵌套工作树；不能将其作为普通旧 checkout 清掉。它比 main 多出的两个提交都是文档，内容已在前轮吸纳，未提交文件仍属于原任务。当前 `native-back-policy` 检查时干净，比 main 多 5 个提交，包含尚未合并的返回策略及文档；必须保留。
+
+### 占用检查与建议
+
+Git 没有工作树 `locked` 标记；本次读取的可见 Codex 任务没有以这 5 个旧目录作为 cwd。Windows 进程的可执行路径/命令行中也未发现匹配这 5 个目录的非 shell 进程。以上仅为快照，不能证明其他编辑器、终端或外部工具绝对未持有目录；没有据此终止任何进程或会话。
+
+建议下一批先把旧整合目录的证据及 Claude 本地配置复制到工作树外并逐文件校验，再退役这 5 个已合并、无源码改动的工作树，同时删除其 3 个本地分支。这样可收敛为 **2 个工作树、3 个本地分支**：主 checkout 的 `feat/reading-workspace-20261024`、当前 `codex/native-back-policy` 和未检出的 main。现有 Git bundle 不含上述 ignored 文件，不能跳过保全步骤。
+
+本次不扫描或处理旧 C 盘目录，不改主 checkout 的既有内容。验证仅为 Git 身份/状态、忽略项、文件元数据与逻辑大小、有限进程/任务快照及文档检查；没有执行产品测试、宿主验收或清理操作。
