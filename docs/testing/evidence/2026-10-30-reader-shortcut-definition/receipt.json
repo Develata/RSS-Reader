@@ -286,6 +286,31 @@
     "diagnosticValidation": "Syntax passed; full workspace 18/18 passed against isolated real server with no page errors",
     "rootCause": "unconfirmed"
   },
+  "ciReaderSamplingFailure": {
+    "head": "2c50ba4bb10ec129e4f193044b484484cf6ec24d",
+    "run": 41140712464,
+    "attempt": 1,
+    "success": 34,
+    "failure": 2,
+    "observation": "Preference ordering passed; reader_host width 390 shortcut restoration expected 600 but received 700",
+    "artifactDirectory": "target/reader-shortcut-definition-20261030/ci-diagnostic-failure",
+    "controlledReproduction": "Moving the viewport 100 pixels between the old sample and key dispatch made both baseline and candidate correctly restore 700 while the old test expected 600",
+    "correction": "Sample positionY immediately before synchronous dispatchEvent and preserve restoredY; retain the existing less-than-0.5-pixel precision and timeout",
+    "productionChanged": false,
+    "originalCiTrigger": "unconfirmed; pending wheel delivery is an inference",
+    "correctedControlledRuns": {
+      "baseline": "4/4 passed",
+      "candidate": "4/4 passed"
+    },
+    "correctedRegularWebRuns": {
+      "web-baseline-02": "4/4 passed",
+      "web-candidate-02": "4/4 passed"
+    },
+    "correctedNativeCandidateRuns": {
+      "windows-candidate-03": "8/8 passed; no page or console errors",
+      "android-shortcuts-candidate-02": "4/4 passed; no page or console errors"
+    }
+  },
   "documentation": {
     "markdownFiles": 331,
     "localLinks": 1566,

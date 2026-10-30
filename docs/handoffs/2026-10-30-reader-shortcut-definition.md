@@ -8,7 +8,7 @@
 - 文档/证据 commit：本记录所在提交，可用 `git log -- docs/handoffs/2026-10-30-reader-shortcut-definition.md` 查阅
 - PR：[快捷键去重 #52](https://github.com/Develata/RSS-Reader/pull/52)，base 为 `codex/reader-host-boundary`
 - 相关 tag / release：无
-- 状态：`validated`（本地实现与所列验收；`25d1ee89` CI 在既有偏好测试超时，诊断提交的最终 head CI 另核）
+- 状态：`validated`（本地实现与所列验收；两轮 CI 失败及独立测试修正见下文，最终 head CI 另核）
 
 ## 工作摘要
 
@@ -45,7 +45,7 @@
 
 ### 实际宿主与正式 Web
 
-| 平台 / 版本 | 基线 / 候选 | 最终回执目录 |
+| 平台 / 版本 | 基线 / 候选 | 产品提交时的回执目录（后续脚本修正见下文） |
 | --- | --- | --- |
 | Windows WebView2 `156.0.4314.50`，1280/390 | 各 8/8 | `windows-baseline-02` / `windows-candidate-02`；初轮 `-01` 亦均通过，顺序复跑用于核对截图差异 |
 | Android 15 真机 `caa0c283`，WebView `156.0.8078.47`，实际宽度 392 | 各 4/4 | `android-shortcuts-baseline-01` / `android-shortcuts-candidate-01`；图片关闭使用实际系统返回 |
@@ -71,6 +71,14 @@
 - 此签名曾在 PR #50 出现；本批再次按原顺序运行前置 9 场景，再连续 5 轮原偏好测试，均通过，没有请求失败或页面异常。Windows Chrome `155.0.8059.40` 与 CI Linux Chrome `156.0.8078.80` 不同；不能用本地未复现代替根因证明。
 - 独立测试提交只给 `preferenceOrdering` 增加请求 ID、时间、请求/响应/结束/失败事件，并在断言失败时输出到既有 `run.log`；不改变请求、保存逻辑、断言、15 秒超时或重试规则。根因仍未确认，不报告产品缺陷已修复。最终 CI 回执按下文路径和 PR 当前 head 核对。
 - 诊断改动后，`node --check scripts/browser/rssr_workspace_acceptance.cjs` 通过；使用同一正式 Web 产物与新隔离资料库运行完整 workspace **18/18**，无页面异常，日志为 `workspace-observability-01.log`。产品输入保持不变。
+
+### Reader 返回位置的测试采样修正
+
+- `2c50ba4b` 的 [CI run 41140712464](https://github.com/Develata/RSS-Reader/actions/runs/41140712464) 中，偏好测试和前置七套验收通过；Reader 1280 宽的全部检查与 390 宽的宿主生命周期通过，但后者快捷键返回断言期望 600、实际 700。首轮仍为 34 个作业成功、工作区与汇总门禁失败；完整归档在 `ci-diagnostic-failure/`。
+- 原测试在读取按钮状态的多个 await **之前**记录 scrollY，随后才派发按键。受控诊断在这两点之间将实际视口滚动 100 像素：基线和候选均按实际派发位置 700 正确恢复到 700，但旧断言仍比较 600，二者都失败。该事件序列证明测试的取值边界不正确；CI 那次是否由尚未落定的初始滚轮事件触发，未被当时日志证明。
+- 单独修正 `reader_shortcut_scenarios.cjs`：在同步 `dispatchEvent` 前立即记录 `positionY`，以此核对返回位置，并保留实际 `restoredY`。没有改变产品、超时或原 `toBeCloseTo(..., 0)` 的 0.5 像素精度。故障原脚本、基线/候选失败回执和受控诊断均保留。
+- 修正后，同一受控序列的基线/候选各 **4/4**；正常正式 Web 基线/候选各 **4/4**，使用新隔离目录 `web-baseline-02` / `web-candidate-02`。没有重新构建产品，前述产物散列及产品输入仍适用。
+- 修正后的正常原生候选复核：Windows **8/8**（`windows-candidate-03`），Android 真机 **4/4**（`android-shortcuts-candidate-02`），均无页面/控制台错误。测试包资料、日常 APK、adb 映射及主 checkout 再次核验保留。前述 22 对截图比较仍对应原表中的基线/候选，没有将后来截图冒充逐像素比较。
 
 ### 产物与数据保全
 

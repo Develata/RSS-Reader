@@ -21,8 +21,11 @@ exports.readerShortcutInputs = async ({page, openReader, ready, entries, screens
         if (blocked) event.preventDefault();
         scans=0; let atTarget=0;
         target.addEventListener('keydown',e=>{atTarget=scans;if(stop)e.stopPropagation();},{once:true});
+        // A wheel/layout update may land while Playwright awaits locator facts.
+        // Compare restoration with the viewport at this synchronous input boundary.
+        const positionY=scrollY;
         target.dispatchEvent(event);
-        return {key,prevented:event.defaultPrevented,scans,atTarget};
+        return {key,prevented:event.defaultPrevented,scans,atTarget,positionY};
       },
       restore() {
         if (Element.prototype.querySelectorAll!==wrapped) throw Error('Shortcut probe ownership changed');
@@ -70,7 +73,6 @@ exports.readerShortcutInputs = async ({page, openReader, ready, entries, screens
       ['m',null,'mark-read'],['M',null,'mark-read'],['f',null,'toggle-starred'],['F',null,'toggle-starred'],
     ]) {
       await page.evaluate(()=>scrollTo(0,600));
-      const saved=await page.evaluate(()=>scrollY);
       const button=page.locator(command?`[data-layout="reader-bottom-bar"] [data-action="${command}"]`:`[data-nav="${nav}"]`);
       const enabled=await button.isEnabled(), before=await button.getAttribute('data-state');
       const row=await page.evaluate(key=>window.__readerShortcutProbe.dispatch(key),key);
@@ -80,7 +82,9 @@ exports.readerShortcutInputs = async ({page, openReader, ready, entries, screens
         await expect(page.locator('[data-page="reader"]')).not.toHaveAttribute('data-position-key',origin);await ready();
         await page.locator('[data-nav="back"]').click();await ready();
         await expect(page.locator('[data-page="reader"]')).toHaveAttribute('data-position-key',origin);
-        await expect.poll(()=>page.evaluate(()=>scrollY)).toBeCloseTo(saved,0);
+        await expect.poll(()=>page.evaluate(()=>scrollY),{message:'restore the position at key dispatch: '+key})
+          .toBeCloseTo(row.positionY,0);
+        row.restoredY=await page.evaluate(()=>scrollY);
       } else if(command) {
         await expect(button).not.toHaveAttribute('data-state',before);
         await page.evaluate(key=>window.__readerShortcutProbe.dispatch(key),key);
