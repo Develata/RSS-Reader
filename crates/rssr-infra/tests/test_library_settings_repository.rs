@@ -66,7 +66,12 @@ async fn settings_repository_loads_legacy_settings_without_custom_css() {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 async fn settings_updates_merge_in_one_write() {
     let library = Library::memory().await;
-    let stored = UserSettings { custom_css: "a { color: red;".into(), ..UserSettings::default() };
+    // Retired density remains a lossless 0.2.x wire/storage value when another setting changes.
+    let stored = UserSettings {
+        list_density: ListDensity::Compact,
+        custom_css: "a { color: red;".into(),
+        ..UserSettings::default()
+    };
     library.settings.save(&stored).await.expect("save settings");
     library.exec("UPDATE app_settings SET updated_at = 'before' WHERE key = 'user_settings'").await;
     let updated_at = "SELECT updated_at FROM app_settings WHERE key = 'user_settings'";

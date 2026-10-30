@@ -143,13 +143,12 @@ impl SettingsPageSession {
             theme_import_revision,
             numeric_revisions,
         };
-        // A restored draft is the shell's to keep from now on; then it leaves the storage.
+        // The shell now owns any restored edits. Also consume a legacy draft whose only
+        // field was retired; it must not stay in storage just because no edits remain.
         use_effect(move || {
             session.publish_draft();
             session.refresh_preview();
-            if restored {
-                drafts::forget();
-            }
+            drafts::forget();
         });
         session
     }

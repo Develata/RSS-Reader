@@ -278,7 +278,7 @@ facade 是页面边界对象，不是简单 DTO。
 - `data-field`
 - `data-state`
 - `data-variant`
-- `data-density`
+- `data-density`（已弃用，0.2.x 固定为 `comfortable`，0.3.x 移除；不再投影设置状态）
 
 也就是说，页面组件应该更像：
 

@@ -162,7 +162,7 @@ struct WebDavArgs {
 struct SaveSettingsArgs {
     #[arg(long)]
     theme: Option<CliThemeMode>,
-    #[arg(long)]
+    #[arg(long, help = "Deprecated: legacy configuration only; no UI effect; removed in 0.3.x")]
     list_density: Option<CliListDensity>,
     #[arg(long)]
     startup_view: Option<CliStartupView>,

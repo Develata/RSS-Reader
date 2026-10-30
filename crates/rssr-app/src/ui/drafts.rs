@@ -312,7 +312,7 @@ mod tests {
     fn a_departure_that_lands_late_restores_the_latest_edits() {
         assert!(leave_keeping(Some(&dark()), || {}));
         let more =
-            SettingsPatch { list_density: Some(rssr_domain::ListDensity::Compact), ..dark() };
+            SettingsPatch { startup_view: Some(rssr_domain::StartupView::LastFeed), ..dark() };
         follow(Some(&more)).expect("kept");
         assert_eq!(stored(), Some(more.clone()), "follows the edits");
         next_document();
@@ -338,7 +338,7 @@ mod tests {
     fn later_edits_that_cannot_be_kept_stop_the_departure() {
         assert!(leave_keeping(Some(&dark()), || {}));
         let more =
-            SettingsPatch { list_density: Some(rssr_domain::ListDensity::Compact), ..dark() };
+            SettingsPatch { startup_view: Some(rssr_domain::StartupView::LastFeed), ..dark() };
         platform::refuse_writes(true);
         assert_eq!(follow(Some(&more)), Err(NotKept));
         assert!(platform::stopped(), "the navigation stopped");

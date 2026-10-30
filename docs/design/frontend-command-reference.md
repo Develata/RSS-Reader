@@ -179,7 +179,9 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - 上传 WebDAV 配置
 - 下载 WebDAV 配置
 
-设置页采用“本页预览 → 显式保存”的统一模型。主题卡片 `apply-theme-preset`、`apply-custom-css`、导入 CSS 和 `clear-custom-css` 都只修改草稿及本页预览，不写入资料库，也不顺带保存其他字段。浅色／深色、密度与阅读字号的草稿修改可即时预览；CSS 文本输入本身不注入样式，须点击“预览当前 CSS”或显式保存。预览前校验 CSS，失败保留当前预览。
+列表密度选择已移除：界面使用原默认间距，旧 `list_density` 仅为 0.2.x API/配置兼容字段，UI 不编辑、不预览、不提交该字段。旧标签页草稿恢复时丢弃该项，保留其他逐字段编辑；0.3.x 删除参数，见[退役计划](../maintenance-backlog.md#03x-移除旧列表密度参数)。
+
+设置页采用“本页预览 → 显式保存”的统一模型。主题卡片 `apply-theme-preset`、`apply-custom-css`、导入 CSS 和 `clear-custom-css` 都只修改草稿及本页预览，不写入资料库，也不顺带保存其他字段。浅色／深色与阅读字号的草稿修改可即时预览；CSS 文本输入本身不注入样式，须点击“预览当前 CSS”或显式保存。预览前校验 CSS，失败保留当前预览。
 
 内置主题入口合并为默认主题及四个预设的卡片；`aria-pressed` 与 `theme-card[data-state="active|inactive"]` 表示草稿选择，可访问名称包含可见按钮文字及主题名。CSS 编辑和文件操作位于可展开的 `theme-advanced`。旧 `apply-selected-theme`、`remove-theme-preset`、`preset-theme-select`、`theme-preset-selector` 与 `theme-preset-quick-actions` 已退役；恢复默认统一使用 `clear-custom-css`，不再为每个预设提供移除按钮。
 
@@ -380,7 +382,7 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-field`
 - `data-state`
 - `data-variant`
-- `data-density`
+- `data-density`（0.2.x 兼容常量，固定为 `comfortable`；0.3.x 移除）
 
 通用 class 仍然保留为公开界面接口，但范围应收敛在真正通用的壳和组件上：
 
@@ -425,7 +427,6 @@ Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region
 - `data-field="config-text"`
 - `data-field="opml-text"`
 - `data-field="theme-mode"`
-- `data-field="list-density"`
 - `data-field="entries-page-size"`
 - `data-field="startup-view"`
 - `data-field="refresh-interval"`

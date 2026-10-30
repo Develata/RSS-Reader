@@ -1,11 +1,11 @@
 # 原生控件适配契约
 
-核对日期：2026-10-30。页面规则对应 PR #40 合入 main 后的实现，见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；本分支补充 App 设置读取约束，见[本批交接](../handoffs/2026-10-30-shell-settings-lifecycle.md)。旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
+核对日期：2026-10-30。页面规则对应 PR #40 合入 main 后的实现，见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；App 设置读取约束已通过 PR #47 合入 main，见[实现交接](../handoffs/2026-10-30-shell-settings-lifecycle.md)。旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
 
 ## 架构与状态所有权
 
 - facade/session → UiCommand → runtime → Arc<dyn Backend>；application/domain 保持统一用例语义。平台差异留在 infra 和控件适配器。
-- Windows/Android 仍用 WebView；HTML dialog 不等同于 OS 窗口。系统文件选择器是单独的宿主能力。
+- Windows/Android 仍用 WebView；HTML dialog 不等同于 OS 窗口。HTML select 的弹出实现须逐宿主核对：本轮 Android 已观察到系统原生列表弹窗，Windows 为 Chromium 控件，见[主题选择评估](./native-theme-selector-assessment.md)。系统文件选择器是单独的宿主能力。
 - 原生 LocalBackend 使用单个 library.sqlite3；正式 Web 使用同源 HTTP Backend 与服务器 SQLite。不得恢复 rssr-host、SQLx、双库或 BrowserStore。
 - 私有纯 Rust 规则仍由 Dioxus session 装配，不是稳定的跨渲染器 SDK，也不建立第二份业务状态。Settings 的 draft_edits 独占补丁转换，request_lifecycle 独占读写身份与暂存回执；session 不直接修改其内部字段，主题/Shell 投影仍留在 session。
 
@@ -13,7 +13,7 @@
 
 | 输入/结果 | 当前规则 |
 | --- | --- |
-| Settings 枚举、数值、CSS | 按主线 SettingsPatch::between 记录实际改变的字段，再合并到 pending。A→B→A 后该字段仍可保留在 pending；无变化的通知不构造补丁。无法解析的数字保留上次有效值并显示字段提示，不构造补丁、不自动保存。 |
+| Settings 枚举、数值、CSS | 按主线 SettingsPatch::between 记录实际改变的字段，再合并到 pending。列表密度已按用户要求退役，适配器不暴露该输入，draft_edits 丢弃旧草稿的 `list_density`，其他字段继续恢复；呈现忽略旧存储值。A→B→A 后该字段仍可保留在 pending；无变化的通知不构造补丁。无法解析的数字保留上次有效值并显示字段提示，不构造补丁、不自动保存。 |
 | Settings 初次加载/重新读取 | 只接纳最新读取；成功写入使更早读取失效。在途写入期间的读取回执暂存：成功写入丢弃；写入失败且没有更新读取则应用。若全局已应用更新的存储结果，使用当前全局值。 |
 | App 级设置读取 | `ui/shell/settings_read_lifecycle.rs` 决定启动/只读命令、在途合并和错误归属。页面打开时自动读取不排队，显式重试仍可进入；完成时页面已打开则丢弃合并的后续读取。ThemeController 的存储 revision（含等值存储）使旧成功失效，重读错误绑定完成时 revision；App 任务、命令和主题发布留给 Shell。 |
 | Settings 草稿投影 | 唯一规则为 stored → submitted → pending。加载和下载更新 stored，任何尚未保存的逐字段编辑都继续覆盖它；未编辑字段立即反映新存储。保留主线跨刷新/登录的草稿恢复。 |

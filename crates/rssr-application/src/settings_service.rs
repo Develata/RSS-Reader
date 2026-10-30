@@ -17,6 +17,7 @@ use crate::persistence_mutation::SettingsUpdatePort;
 pub struct SettingsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<ThemeMode>,
+    /// Legacy 0.2.x API/CLI compatibility; ignored by the UI and removed in 0.3.x.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub list_density: Option<ListDensity>,
     #[serde(skip_serializing_if = "Option::is_none")]

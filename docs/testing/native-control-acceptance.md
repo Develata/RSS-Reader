@@ -1,6 +1,6 @@
 # 原生控件前置验收
 
-核对日期：2026-10-30。PR #40 已进入 main；返回策略 `62113c4f` 仍在候选分支，本日补齐所列 Windows / Android 实际宿主检查。当前契约见[控件适配契约](../design/native-control-adapter-contracts.md)，各次源码、环境与边界见[返回专项回执](../handoffs/2026-10-30-native-back-validation.md)和[主线合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)。历史结果不能替代后续源码验收。
+核对日期：2026-10-30。PR #40、返回策略 PR #46 和 App 设置读取 PR #47 已进入 main；本日分别补齐所列返回与主题选择的实际宿主检查。当前契约见[控件适配契约](../design/native-control-adapter-contracts.md)，各次源码、环境与边界见[返回专项回执](../handoffs/2026-10-30-native-back-validation.md)和[主题选择评估回执](../handoffs/2026-10-30-native-theme-selector-assessment.md)。历史结果不能替代后续源码验收。
 
 ## 当前入口
 
@@ -14,6 +14,7 @@
 | Settings/主题接入 | node scripts/browser/rssr_native_preparation_acceptance.cjs | 1536/390 两视口，PATCH 字段边界、保存与后续编辑、下载回填、字段提示、导入仅预览与显式保存、UTF-8/导出、迟到文件 |
 | 原生字符串表 | rssr_native_transport_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> | 实际 Windows EXE/WebView2、单库与传输；不操作 OS 选择器 |
 | 原生返回专项 | rssr_back_navigation_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> --fixture-dir <fixture> | Windows 实际 WebView2；Android 独立测试包的系统返回、保存门禁、采集失败/超时/取消、首页提示与恢复前台 |
+| 主题选择宿主专项 | rssr_theme_selector_windows.mjs / rssr_theme_selector_android.mjs | Windows 实际 EXE + UIA + CDP；Android 真机系统列表、adb 选择/返回、预览及显式保存。不是新增 OS 控件或完整辅助技术验收 |
 | Android 编译 | cargo check -p rssr-app --target aarch64-linux-android --locked 及 PR android-smoke | 仅编译/CI smoke，不能替代上行真机检查；选择器、IME 和辅助技术另验 |
 
 Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library.sqlite3，须同时准备本次源码的 rssr-web、browser_fixture_library 和 Web 包。用 RSSR_WEB_BIN、RSSR_FIXTURE_BIN、PUBLIC_DIR 指定产物，ARTIFACT_DIR 指定证据；Playwright 使用 CHROME_BIN 或 Chrome channel。运行器控制 HTTP 响应和 FileReader 的完成时机，不能把这些延迟注入宣称为真实网络故障。
@@ -40,6 +41,17 @@ Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library
 5. 采集故障使用 CDP 在实际 WebView 的捕获回复处注入错误或扣留回复，并断言注入确实命中。取消检查在 500 ms 到期前改变页面；计时来自页面捕获事件与 DOM 切换，包含宿主/渲染调度，不是仅凭 adb 命令耗时推定。运行器恢复探针并输出 JSON、截图；正常路径及故障注入须分别阅读。
 
 本批具体启动/复制/编译命令、包与资料库散列以及失败诊断记录在交接指定的本地证据目录中。合成 Android 库预置存储标记只用于隔离测试，不证明旧数据目录迁移。
+
+## 主题选择专项的隔离与复跑
+
+原始主题场景与结论见[宿主评估](../design/native-theme-selector-assessment.md)；当前运行器另覆盖[列表密度退役](../handoffs/2026-10-30-density-retirement.md)。使用 Node 的 `node:sqlite`、已有 CDP 模块和系统 adb/UIA，不新增 npm 依赖。
+
+- Windows：`node scripts/browser/rssr_theme_selector_windows.mjs --app-bin <exe> --seed-dir <seed> --artifact-dir <target下全新目录> --port 9495`。运行器复制 EXE 和合成库，建立独立 profile，核对 CDP 进程祖先。UIA 助手只显示本次测试窗口且不激活，不向全局键盘发送输入；按键经 CDP 进入 WebView2。调用者核对 EXE 对应的源码身份。后台截图和物理键盘不在其通过范围内。
+- Android：调用者先备份和校验已有测试包资料，再仅安装 `io.github.develata.rssreader.backpolicytest`，预置独立库并启动。`process.json` 提供 `platform=android`、`serial`、`package`、`pid`、`apk`、`artifactSha256`、40 位 `source` 和 `cdp=http://127.0.0.1:<port>`。调用 `node scripts/browser/rssr_theme_selector_android.mjs --process-file <run>/process.json --artifact-dir <target下全新目录>`；运行器核对安装包、PID、data root、forward 映射和前台 Activity，不安装、重置资料库或管理映射。调用者结束自己的进程和映射。
+- 两端夹具都必须是 100 篇文章、6 个仅指向 `127.0.0.1` 的来源。主题初始为 dark、旧 `list_density=compact`、启动视图 all，刷新间隔为合法的长周期 525600，归档月数为合法值 6；当前脚本确认旧 compact 不影响默认行高且界面没有密度控件。更新 SQLite 时只改 `app_settings.key='user_settings'`，保留 `app_state_v2`。不能把旧夹具的归档月数 0 当成合法设置保存前提。
+- 从未提交快照构建时，`source` 记录基线提交，同时提供 `sourcePatchSha256` 和逐文件输入清单。不同源码快照使用独立 Android 构建目录；打包后核对 APK 内 `libmain.so` 与本轮编译输出相同，不能只凭 `dx build` 成功沿用共享 target 的旧 APK。
+- Android 记录真实设备截图与 UI 树；系统返回使用 adb keyevent 4，不冒充手势返回。UIAutomator 的只读快照最多重试一次，失败也留在报告中。SQLite 在稳定 UI 检查点复制主文件及 WAL；安装前的保全备份则先停止测试包再完整归档。
+- 本批未运行夹具 RSS 服务，启动刷新对本机地址失败不属于主题专项断言。未访问线上订阅，也不据此宣称离线刷新功能通过。
 
 ## 已退役的旧分支运行器
 

@@ -1,0 +1,192 @@
+[
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124215860630",
+    "name": "lint-and-test",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124212854126",
+    "name": "web-ui (midnight-ledger)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124212854321",
+    "name": "web-ui (amethyst-glass)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211991715",
+    "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989383",
+    "name": "wasm-browser-contract (wasm_memory_store)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989395",
+    "name": "wasm-browser-contract (test_opml_interop)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989441",
+    "name": "wasm-browser-contract (test_library_unicode_title_search)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124212854396",
+    "name": "web-ui (default)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124212854379",
+    "name": "web-ui (atlas-sidebar)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124212854001",
+    "name": "reading-workspace",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124212854178",
+    "name": "web-ui (newsprint)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989305",
+    "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989396",
+    "name": "wasm-browser-contract (test_library_settings_repository)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989306",
+    "name": "wasm-browser-contract (test_library_refresh_tickets)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989319",
+    "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989512",
+    "name": "wasm-browser-contract (test_library_queries)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808839/job/124212362783",
+    "name": "deploy",
+    "state": "SKIPPED"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989436",
+    "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989313",
+    "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989301",
+    "name": "wasm-browser-contract (test_library_contracts)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989368",
+    "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211989371",
+    "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534657",
+    "name": "native-module (rssr-web)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534656",
+    "name": "native-module (rssr-infra)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534632",
+    "name": "native-module (rssr-domain)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534678",
+    "name": "native-module (rssr-application)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534771",
+    "name": "native-module (rssr-cli)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534354",
+    "name": "wasm-contract-build",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534626",
+    "name": "native-module (rssr-app)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211534762",
+    "name": "native-module (rssr-api)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455889",
+    "name": "release-ui-runner (windows-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455777",
+    "name": "workspace",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455696",
+    "name": "android-smoke",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455736",
+    "name": "web-smoke",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455751",
+    "name": "release-ui-runner (ubuntu-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455237",
+    "name": "test-tools",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808743/job/124211455585",
+    "name": "format",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/Develata/RSS-Reader/actions/runs/41098808839/job/124211455830",
+    "name": "build",
+    "state": "SUCCESS"
+  }
+]

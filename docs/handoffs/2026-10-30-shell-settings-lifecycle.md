@@ -6,7 +6,11 @@
 - 提取基线：`6a75fb835170589a14b31d8deff16ec3a678de97`
 - 实现 commit：`14f334d92711a526c3b7d0126b75f7651ae4e904`（实现、测试、文档及首份证据）；后续回执提交仅补提交与推送状态
 - 相关 tag / release：N/A；不发布
-- 状态：`validated`；已本地提交并推送当前候选分支，尚未开新 PR / 合并 / 发布
+- 状态：`validated`；本记录原交付时为已推送候选；同日随后通过 PR #47 合并，见下方更新。未发布。
+
+## 后续合并回执（2026-10-30）
+
+[PR #47](https://github.com/Develata/RSS-Reader/pull/47) 将 head `f38c3ba8` 合入 main `663ef4ee`，两个 tree 相同。当前提交的 CI 36/36、Pages build 通过，deploy 按 PR 规则跳过，review 无遗留线程。完整回执及随后主题控件专项见[下一批交接](./2026-10-30-native-theme-selector-assessment.md)。下文“尚未 CI / 候选”等是原交付时状态；本轮 Android 主题专项不追认下文未执行的完整 Android 生命周期验收。
 
 ## 工作摘要
 

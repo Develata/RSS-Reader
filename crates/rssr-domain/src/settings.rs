@@ -20,6 +20,8 @@ pub enum ThemeMode {
     System,
 }
 
+/// Legacy 0.2.x configuration value; the UI always uses its default spacing.
+/// Remove this enum and its wire field in the approved 0.3.x breaking change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ListDensity {
@@ -40,6 +42,7 @@ pub enum StartupView {
 #[serde(deny_unknown_fields)]
 pub struct UserSettings {
     pub theme: ThemeMode,
+    /// Legacy wire/storage compatibility only; does not affect presentation. Remove in 0.3.x.
     pub list_density: ListDensity,
     pub startup_view: StartupView,
     pub refresh_interval_minutes: u32,

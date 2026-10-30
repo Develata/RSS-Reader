@@ -615,22 +615,9 @@ html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y:
   pointer-events: none;
 }
 
-.app-shell[data-density="compact"] [data-layout="entry-group-header"][data-group-level="primary"] {
-  padding-bottom: 8px;
-}
 
-.app-shell[data-density="compact"] [data-layout="entries-layout"] {
-  grid-template-columns: minmax(0, 1fr) calc(var(--rail-width) - 20px);
-  gap: 22px;
-}
 
-.app-shell[data-density="compact"] [data-slot="entry-directory-title"] {
-  font-size: 0.9rem;
-}
 
-.app-shell[data-density="compact"] [data-slot="entry-directory-meta"] {
-  font-size: 0.78rem;
-}
 
 [data-slot="entry-filters-source-unread-count"] {
   color: var(--muted);

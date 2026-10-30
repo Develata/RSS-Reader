@@ -12,7 +12,10 @@ pub(super) struct Edits {
 }
 
 impl Edits {
-    pub(super) fn restored(pending: SettingsPatch) -> Self {
+    pub(super) fn restored(mut pending: SettingsPatch) -> Self {
+        // Old tab drafts may contain this retired preference. Keep the other edits, without
+        // reviving a hidden pending field or sending it back on the next explicit save.
+        pending.list_density = None;
         Self { submitted: None, pending }
     }
 
@@ -24,7 +27,8 @@ impl Edits {
         &self.pending
     }
 
-    pub(super) fn record(&mut self, changed: SettingsPatch) {
+    pub(super) fn record(&mut self, mut changed: SettingsPatch) {
+        changed.list_density = None;
         self.pending = std::mem::take(&mut self.pending).followed_by(changed);
     }
 
@@ -83,6 +87,33 @@ impl Edits {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restored_legacy_density_does_not_revive_a_hidden_pending_edit() {
+        let legacy = SettingsPatch {
+            list_density: Some(rssr_domain::ListDensity::Compact),
+            ..Default::default()
+        };
+        assert!(!Edits::restored(legacy.clone()).has_unsaved_changes());
+        let mut edits =
+            Edits::restored(SettingsPatch { theme: Some(rssr_domain::ThemeMode::Dark), ..legacy });
+        let expected =
+            SettingsPatch { theme: Some(rssr_domain::ThemeMode::Dark), ..Default::default() };
+        assert_eq!(edits.submit(), expected);
+        edits.failed();
+        assert_eq!(edits.pending(), &expected);
+    }
+
+    #[test]
+    fn retired_density_cannot_be_recorded_as_a_new_ui_edit() {
+        let mut edits = Edits::default();
+        edits.record(SettingsPatch {
+            list_density: Some(rssr_domain::ListDensity::Compact),
+            ..Default::default()
+        });
+        assert!(!edits.has_unsaved_changes());
+        assert_eq!(edits.submit(), SettingsPatch::default());
+    }
 
     fn page_size(value: u32) -> SettingsPatch {
         SettingsPatch { entries_page_size: Some(value), ..Default::default() }

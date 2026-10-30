@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-30",
+  "status": "validated",
+  "productChanges": false,
+  "source": {
+    "implementation": "14f334d92711a526c3b7d0126b75f7651ae4e904",
+    "testedSnapshot": "f38c3ba8b59387cf4beeb59bae5dab97e43bdfd9",
+    "mainMerge": "663ef4ee5d19458c815a6921f0e418321cf75464",
+    "identicalGitTree": "941dd1b245befd30c5ddb930e946f193402c15c5"
+  },
+  "pr": {
+    "number": 47,
+    "url": "https://github.com/Develata/RSS-Reader/pull/47",
+    "ciRun": 41098808743,
+    "ciPassed": 36,
+    "pagesBuild": "success",
+    "pagesDeploy": "skipped",
+    "reviews": [],
+    "unresolvedThreads": 0
+  },
+  "windows": {
+    "artifactSha256": "dc05668809d3aad7a9e96079c0437ec24a3eabccc1228fbae5aea0c02fce0d3a",
+    "webViewVersion": "Edg/156.0.4314.50",
+    "checks": [
+      {
+        "name": "real-popup-cancel-preserves-draft-and-storage",
+        "pass": true
+      },
+      {
+        "name": "real-keyboard-selection-previews-without-writing",
+        "pass": true
+      },
+      {
+        "name": "reread-preserves-pending-and-does-not-emit-input",
+        "pass": true
+      },
+      {
+        "name": "explicit-save-persists-only-selected-theme",
+        "pass": true
+      }
+    ],
+    "scriptSha256": "ecdabfd723d95ae1106bec71a900e929f2dae73fc09444e21487570339894eb2",
+    "evidence": "target/native-theme-assessment-20261030/windows-reviewed-02",
+    "input": [
+      "CDP pointer into native host",
+      "CDP keyboard into WebView2 popup"
+    ],
+    "injected": [
+      "external SQLite settings change",
+      "DOM focus / visibilitychange / online"
+    ],
+    "nativeControl": {
+      "framework": "Chrome",
+      "controlType": "ComboBox",
+      "nativeHandle": 0
+    },
+    "foregroundOwned": false
+  },
+  "android": {
+    "artifactSha256": "f5b967ebed0e701a655cf9cd019f1f85a053d1a483382b92eccb8d7bb66e8add",
+    "webViewVersion": "Chrome/156.0.8078.47",
+    "os": "Android 15 / API 35",
+    "model": "2201123C",
+    "package": "io.github.develata.rssreader.backpolicytest",
+    "checks": [
+      {
+        "name": "android-native-list-popup-and-system-back-cancel",
+        "pass": true
+      },
+      {
+        "name": "android-native-selection-previews-without-saving",
+        "pass": true
+      },
+      {
+        "name": "android-explicit-save-and-reopen",
+        "pass": true
+      }
+    ],
+    "scriptSha256": "977a50e70acce2b3e5c0a3335152d7f3a17350d9f7755a2c7f2b3d652e944aba",
+    "evidence": "target/native-theme-assessment-20261030/android-reviewed",
+    "nativePopupClasses": [
+      "android.widget.FrameLayout",
+      "android.widget.ListView",
+      "android.widget.CheckedTextView"
+    ],
+    "input": "adb input guarded by resumed Activity",
+    "events": [
+      {
+        "type": "input",
+        "value": "light",
+        "trusted": true
+      },
+      {
+        "type": "change",
+        "value": "light",
+        "trusted": true
+      }
+    ],
+    "preservation": {
+      "dailyPackageUnchanged": true,
+      "forward": "caa0c283 tcp:9243 localabstract:webview_devtools_remote_8615\r\ncaa0c283 tcp:9252 localabstract:webview_devtools_remote_30728\r\ncaa0c283 tcp:9262 localabstract:webview_devtools_remote_2790",
+      "reverse": "UsbFfs tcp:8111 tcp:8111"
+    }
+  },
+  "fixture": {
+    "entries": 100,
+    "feeds": 6,
+    "allowedFeedHostname": "127.0.0.1",
+    "androidSeedSha256": "13a5449fa88b4fd9332670ca7bff4834c9ea740e906e825751ad48a487ebca0a",
+    "theme": "dark",
+    "refreshIntervalMinutes": 525600,
+    "archiveAfterMonths": 6
+  },
+  "backup": {
+    "testApkSha256": "256390897d0d6a7ba6219ad90457365175fd1883b5c50c3efe1433d432751366",
+    "filesTarSha256": "e2643d0b5103ca1acccf141b7d7eb11f77d15215cacd6e89bff2f38ffa836e6b",
+    "verifiedFiles": 33,
+    "preservedDataFilesMatch": true,
+    "profileInstallerMatches": false
+  },
+  "primaryCheckout": {
+    "headUnchanged": true,
+    "statusUnchanged": true,
+    "indexUnchanged": true,
+    "pathsChecked": 42,
+    "mismatches": [],
+    "statusCount": 40
+  },
+  "scripts": {
+    "scripts/browser/rssr_theme_selector_windows.mjs": "ecdabfd723d95ae1106bec71a900e929f2dae73fc09444e21487570339894eb2",
+    "scripts/browser/rssr_theme_selector_windows.ps1": "5bf88ce093e6ffaa0e3e1492e147bf1960ba80720d7b5dfbee52a6fd978ee391",
+    "scripts/browser/rssr_theme_selector_android.mjs": "977a50e70acce2b3e5c0a3335152d7f3a17350d9f7755a2c7f2b3d652e944aba"
+  },
+  "limits": [
+    "Windows input uses CDP, not physical keyboard or IME",
+    "Android keyevent Back, not back gesture",
+    "No TalkBack, screen reader, macOS or Linux GUI acceptance",
+    "No new OS control or renderer",
+    "No performance claim",
+    "No RSS fixture server; startup refresh failure is outside theme checks",
+    "PR checks are for f38c3ba8, not a separate run on the merge commit"
+  ]
+}
