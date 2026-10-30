@@ -15,7 +15,7 @@
 | 应用服务职责 | [边界检查](./application-use-case-boundary-checklist.md)、[v0.2 架构](./v0.2-architecture.md) |
 | 正文解析、图片身份与后台调度 | [处理预算与职责](./reader-processing-budgets.md)（PR #38 已合入 main） |
 | 资料库兼容与交付形态 | [SQLite 迁移兼容](./sqlite-migration-compatibility.md)、[GUI / CLI 分发](./cli-gui-distribution.md) |
-| 原生控件接入约束 | [适配契约](./native-control-adapter-contracts.md)、[前置模块边界](./native-ui-preparation.md)（实际控件接入尚未开始） |
+| 原生控件接入约束 | [适配契约](./native-control-adapter-contracts.md)、[前置模块边界](./native-ui-preparation.md)、[主题选择宿主评估](./native-theme-selector-assessment.md)（未新增原生控件） |
 
 目录交互与文章级入口已在主线实现；平台未验收项仍见各契约。GUI / CLI 的独立分发已实施，Scoop 包仍是该文档列出的后续工作。
 

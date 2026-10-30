@@ -1,15 +1,15 @@
 # 当前维护待办
 
-核对日期：2026-10-30（返回策略已合并，App 设置读取提取已验证；M01–M07 的其他实测仍以各自记录日期为准）。本页记录经源码核对后仍值得跟进的事项。main、本地候选、发布和 CI 状态统一见[维护状态](./current-status.md)，历史核实见[10 月 28 日记录](./handoffs/2026-10-28-historical-followup-audit.md)。
+核对日期：2026-10-30（返回策略和 App 设置读取已合并，主题选择宿主评估完成；M01–M07 的其他实测仍以各自记录日期为准）。本页记录经源码核对后仍值得跟进的事项。main、本地候选、发布和 CI 状态统一见[维护状态](./current-status.md)，历史核实见[10 月 28 日记录](./handoffs/2026-10-28-historical-followup-audit.md)。
 
 10 月 28 日扫描了 147 份历史 handoff，优先核对架构、数据迁移、资源边界与发布。以下保留当轮处置结果，不是对所有历史段落、所有用户路径的完整结案。源码支持、历史实测、本轮实测必须分开；缺少当前复现时不把推断升级成新缺陷。
 
 ## 当前批次的收口
 
 - 返回策略 `62113c4f` 及后续验收已通过 PR #46 合入 main `6a75fb83`；[实际宿主回执](./handoffs/2026-10-30-native-back-validation.md)保留其 Windows / Android 场景和包身份，不再列为待合并或缺设备。
-- 新候选 `codex/shell-settings-lifecycle` 已提取 App 设置读取生命周期，并通过普通 Rust、Dioxus、正式 Web 与实际 Windows 专项。Android 本批仅编译检查，详情及下一控件评估见[本批交接](./handoffs/2026-10-30-shell-settings-lifecycle.md)。前置提取在此收口，不继续扩大 Shell 重构。
+- App 设置读取已通过 PR #47 合入 `663ef4ee`，原批普通 Rust、Dioxus、正式 Web 与实际 Windows 结果见[实现交接](./handoffs/2026-10-30-shell-settings-lifecycle.md)。随后完成 Windows / Android 主题选择专项，见[宿主评估](./design/native-theme-selector-assessment.md)；不扩大为所有 Android 生命周期通过。前置提取在此收口，不继续扩大 Shell 重构。
 - 检查全部 20 个不同分支名后完成旧引用清理、历史资料保全和 5 个旧工作树 / 3 个分支退役，见[分支审计](./handoffs/2026-10-30-branch-consolidation.md)。本批复用现有工作树，当前数量统一见[维护状态](./current-status.md)；主 checkout 的既有改动继续保留。
-- PR #38、#40、#46 已合并，不再作为待实现事项。原生控件接入尚未开始，下一步先核对最小控件的宿主适配，不进行渲染器、数据库或新 crate 迁移。
+- PR #38、#40、#46、#47 已合并，不再作为待实现事项。主题模式选择已有可用宿主控件，本轮不重复实现。下一设计候选为 Windows 独立原生设置面板的小样，先明确窗口、session、CSS 和回退边界；未批准整页替换、渲染器、数据库或新 crate 迁移。
 
 ## 持续维护事项
 

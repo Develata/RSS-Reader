@@ -7,7 +7,7 @@
 | 主题 | 优先阅读 |
 | --- | --- |
 | 当前阶段、分支与文档收口 | [全部分支审计与清理](./2026-10-30-branch-consolidation.md)、[前一轮文档整合](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
-| 当前模块化候选与 PR #46 整合 | [App 设置读取生命周期、验证与下一控件评估](./2026-10-30-shell-settings-lifecycle.md) |
+| 当前原生控件评估与 PR #47 整合 | [主题选择实际宿主评估](./2026-10-30-native-theme-selector-assessment.md)、[App 设置读取生命周期与 PR #46](./2026-10-30-shell-settings-lifecycle.md) |
 | 原生返回策略 | [Windows / Android 实际宿主验收](./2026-10-30-native-back-validation.md)、[返回导航与退出提示提取](./2026-10-29-native-back-policy.md)、[E 盘接续与背景交接](./2026-10-29-pr40-worktree-handoff.md)、[本批范围评估](./2026-10-29-native-preparation-next-batch.md) |
 | PR #40 主线整合 | [main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md)、[最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md)、[逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
 | 目录滚动突跳与顺序模型 | [分页与分组一致性修正](./2026-10-29-directory-reading-order.md)、[Windows 原生复测](./2026-10-29-directory-native-verification.md) |
@@ -26,6 +26,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-30 | [PR #47 整合与主题模式选择宿主评估](./2026-10-30-native-theme-selector-assessment.md) |
 | 2026-10-30 | [PR #46 整合与 App 设置读取生命周期](./2026-10-30-shell-settings-lifecycle.md) |
 | 2026-10-30 | [返回策略复核与 Windows / Android 宿主验收](./2026-10-30-native-back-validation.md) |
 | 2026-10-30 | [全部分支审计、历史资料保全与旧工作树退役](./2026-10-30-branch-consolidation.md) |
