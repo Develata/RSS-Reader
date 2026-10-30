@@ -49,7 +49,7 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
   - `data-field`
   - `data-state`
   - `data-variant`
-  - `data-density`
+  - `data-density`（0.2.x 兼容常量，固定为 `comfortable`；0.3.x 移除）
 - 其次使用明确公开的通用壳类：
   - `.app-shell`
   - `.button`
@@ -270,7 +270,6 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-field="config-text"`
 - `data-field="opml-text"`
 - `data-field="theme-mode"`
-- `data-field="list-density"`
 - `data-field="entries-page-size"`
 - `data-field="startup-view"`
 - `data-field="refresh-interval"`
@@ -408,10 +407,9 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `danger`
 - `danger-outline`
 
-### `data-density`
+### `data-density`（已弃用）
 
-- `compact`
-- `comfortable`
+列表密度选择已移除，统一沿用原默认“舒适”间距。0.2.x 根节点暂保留固定的 `data-density="comfortable"`，旧配置中的 `compact` 不再改变呈现，也不再匹配紧凑样式分支。新主题应使用 `.app-shell` 与语义布局选择器，不新增对密度属性的依赖；0.3.x 随旧设置参数一起删除此兼容属性。详见[退役计划](../maintenance-backlog.md#03x-移除旧列表密度参数)。
 
 ## 稳定通用类
 

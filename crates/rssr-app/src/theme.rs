@@ -1,11 +1,10 @@
 use dioxus::prelude::*;
-use rssr_domain::{ListDensity, ThemeMode, UserSettings};
+use rssr_domain::{ThemeMode, UserSettings};
 
 /// Presentation only. A settings-page preview never becomes the library's settings.
 #[derive(Clone, PartialEq)]
 pub(crate) struct ThemeAppearance {
     pub theme: ThemeMode,
-    pub list_density: ListDensity,
     pub reader_font_scale: f32,
     pub custom_css: String,
 }
@@ -14,7 +13,6 @@ impl From<&UserSettings> for ThemeAppearance {
     fn from(settings: &UserSettings) -> Self {
         Self {
             theme: settings.theme,
-            list_density: settings.list_density,
             reader_font_scale: settings.reader_font_scale,
             custom_css: settings.custom_css.clone(),
         }
@@ -111,16 +109,22 @@ pub fn theme_class(mode: rssr_domain::ThemeMode) -> &'static str {
     }
 }
 
-pub fn density_state(density: ListDensity) -> &'static str {
-    match density {
-        ListDensity::Comfortable => "comfortable",
-        ListDensity::Compact => "compact",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_density_does_not_change_appearance() {
+        let comfortable = UserSettings {
+            theme: ThemeMode::Dark,
+            reader_font_scale: 1.1,
+            custom_css: ".app-shell { color: red; }".into(),
+            ..UserSettings::default()
+        };
+        let compact =
+            UserSettings { list_density: rssr_domain::ListDensity::Compact, ..comfortable.clone() };
+        assert!(ThemeAppearance::from(&compact) == ThemeAppearance::from(&comfortable));
+    }
 
     #[test]
     fn an_older_page_cannot_replace_or_clear_a_newer_preview() {

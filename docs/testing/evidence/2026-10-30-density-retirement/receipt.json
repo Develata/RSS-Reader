@@ -1,0 +1,223 @@
+{
+  "date": "2026-10-30",
+  "status": "validated",
+  "scope": "List density UI retirement; 0.2.x wire/storage preserved; parameter removal approved for 0.3.x; nine obsolete .agents skills removed",
+  "artifacts": {
+    "source": {
+      "source": "200ebfe907c9dc1ccb8e2196478e3b7dd19fd233",
+      "patchSha256": "3b5304e7828601cd170838e743a1f0e61d2a5e0a955e9b6d5fc174afcb4d12cd",
+      "sourceArchiveSha256": "aa25c75ccfc3ec117fe3d0c95829d4162595b307f21578d8324863a8eaae3693",
+      "productFiles": 455,
+      "buildId": "density-retirement-200ebfe907c9-3b5304e78286",
+      "androidIdentityOverlay": [
+        "Dioxus.toml",
+        "android/MainActivity.kt"
+      ]
+    },
+    "productInputsVerified": 455,
+    "agentsArchiveSha256": "9d0fd7957dc6b2d06a0c0d9dec0aafca8df0e1c8133d19ab46c11e4cffa00976",
+    "agentsFilesVerified": 9,
+    "windowsExeSha256": "da145a222a5849c23cdd36975539502a02ccfd2794ed15f1ff49743e851975eb",
+    "webServerSha256": "79b8f38b9ce3d1464f7faaa3de28d0b9f839414b45964d143010c6e8d48ab35e",
+    "webIndexSha256": "81721eeff2f90e22d5456d11cc8833209bba24a80f3cd8d12bcb178d424596dd",
+    "webModule": "rssr-app-dxhf1bac310e414eb9.js",
+    "webModuleSha256": "394c60b946475768b502cdab5837a99ad1e937769dead33c3c5ea8948cdc04be",
+    "webWasm": "rssr-app_bg-dxh1e33e2d09b17780.wasm",
+    "webWasmSha256": "60d50d776a884e8a28349d53d2173b3623cf052a3946133d5b79528417baa82f",
+    "androidApkSha256": "0044b89d149ba9a4e103bd2c96d85cb7b07eb6a698b9a5d85351f8dae55c7db5",
+    "androidLibrarySha256": "7203bb0f95b52d93eea02ddd3f682243f0d1bc0ca98dcacb818f852644bfb002",
+    "androidLibraryMatchesBuild": true
+  },
+  "rust": {
+    "app": {
+      "passed": 387,
+      "ignored": 1
+    },
+    "compatibility": {
+      "passed": 15
+    },
+    "clippy": "pass",
+    "fmt": "pass"
+  },
+  "web": {
+    "status": "pass",
+    "scenarios": [
+      {
+        "name": "retired-density-layout-and-drafts",
+        "checks": 22,
+        "status": "pass"
+      },
+      {
+        "name": "settings-preview-explicit-save",
+        "checks": 9,
+        "status": "pass"
+      },
+      {
+        "name": "build-mismatch-keeps-edits",
+        "checks": 7,
+        "status": "pass"
+      },
+      {
+        "name": "stopped-departure-then-saved",
+        "checks": 5,
+        "status": "pass"
+      },
+      {
+        "name": "slow-departure-lands-late",
+        "checks": 1,
+        "status": "pass"
+      },
+      {
+        "name": "later-edit-not-kept-stays",
+        "checks": 3,
+        "status": "pass"
+      }
+    ],
+    "preparation": [
+      {
+        "name": "per-field-save-and-later-edit-1536",
+        "pass": true
+      },
+      {
+        "name": "equal-value-save-retires-parse-feedback-1536",
+        "pass": true
+      },
+      {
+        "name": "download-merges-per-field-and-retains-edit-feedback-1536",
+        "pass": true
+      },
+      {
+        "name": "theme-utf8-bom-export-and-stale-file-1536",
+        "pass": true
+      },
+      {
+        "name": "per-field-save-and-later-edit-390",
+        "pass": true
+      },
+      {
+        "name": "equal-value-save-retires-parse-feedback-390",
+        "pass": true
+      },
+      {
+        "name": "download-merges-per-field-and-retains-edit-feedback-390",
+        "pass": true
+      },
+      {
+        "name": "theme-utf8-bom-export-and-stale-file-390",
+        "pass": true
+      }
+    ],
+    "visualReview": "1280px entries and 390px settings screenshots inspected; 12 page/width/legacy-value captures and geometry checks"
+  },
+  "windows": {
+    "webViewVersion": "Edg/156.0.4314.50",
+    "themeAndDensity": [
+      {
+        "name": "retired-density-uses-default-spacing-without-a-control",
+        "pass": true
+      },
+      {
+        "name": "real-popup-cancel-preserves-draft-and-storage",
+        "pass": true
+      },
+      {
+        "name": "real-keyboard-selection-previews-without-writing",
+        "pass": true
+      },
+      {
+        "name": "reread-preserves-pending-and-does-not-emit-input",
+        "pass": true
+      },
+      {
+        "name": "explicit-save-persists-only-selected-theme",
+        "pass": true
+      }
+    ],
+    "settingsLifecycle": [
+      {
+        "name": "startup-applies-stored-settings",
+        "pass": true
+      },
+      {
+        "name": "app-reread-applies-external-settings-without-writing",
+        "pass": true
+      },
+      {
+        "name": "settings-page-reread-preserves-pending-fields",
+        "pass": true
+      }
+    ],
+    "input": "CDP keys and pointer in real WebView2 host, Windows UIA; not physical keyboard or IME"
+  },
+  "android": {
+    "model": "2201123C",
+    "os": "Android 15 / API 35",
+    "webViewVersion": "Chrome/156.0.8078.47",
+    "package": "io.github.develata.rssreader.backpolicytest",
+    "checks": [
+      {
+        "name": "retired-density-uses-default-spacing-without-a-control",
+        "pass": true
+      },
+      {
+        "name": "android-native-list-popup-and-system-back-cancel",
+        "pass": true
+      },
+      {
+        "name": "android-native-selection-previews-without-saving",
+        "pass": true
+      },
+      {
+        "name": "android-explicit-save-and-reopen",
+        "pass": true
+      }
+    ],
+    "input": "adb input guarded by resumed Activity",
+    "snapshotRetries": [
+      {
+        "name": "density-retired",
+        "attempt": 0,
+        "error": ""
+      }
+    ],
+    "preservation": {
+      "dailyPackageUnchanged": true,
+      "testDataRestored": true,
+      "restoredHash": "13a5449fa88b4fd9332670ca7bff4834c9ea740e906e825751ad48a487ebca0a",
+      "forward": "caa0c283 tcp:9243 localabstract:webview_devtools_remote_8615\r\ncaa0c283 tcp:9252 localabstract:webview_devtools_remote_30728\r\ncaa0c283 tcp:9262 localabstract:webview_devtools_remote_2790",
+      "reverse": "UsbFfs tcp:8111 tcp:8111"
+    }
+  },
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "statusCount": 41,
+    "priorStatusCount": 40,
+    "indexSha256": "028B18448166CD5CA5B91300EBC8CC52EBEBA0F0F1D47F6B76EC87B66F8DFB59",
+    "verifiedPaths": 42,
+    "priorContentUnchanged": true,
+    "concurrentAdditions": [
+      "?? docs/handoffs/2026-10-30-main-javascript-audit.md"
+    ]
+  },
+  "scripts": {
+    "rssr_server_acceptance.mjs": "dbe7788b16d658e9fd292a34c3299a4894ceafae6df37b4f9472e990a689c446",
+    "rssr_native_preparation_acceptance.cjs": "bbd8989cbbe6d4a7ecc2c52f22b03216cc0d99d3579806891ddb80d60055b767",
+    "rssr_theme_selector_windows.mjs": "8bc31b3f1c6fbb6c9719953da19e8d6fde45e6a51936cdac3f2040d0d7956226",
+    "rssr_shell_settings_acceptance.mjs": "de4d244f4a6e13fb5f277563297bd962b75e695aab5563bf32a12d4fceeeb4f5",
+    "rssr_theme_selector_android.mjs": "28c778aecc44607af2bc9953c82bfb5b7b04b739bca797d5f0107fd9603baae5"
+  },
+  "review": {
+    "blockingFindings": 0,
+    "correctedDuringImplementation": "A density-only legacy draft was filtered but left in sessionStorage; reproduced by Dioxus test, consumed via existing forget with LEAVING guard preserved.",
+    "excludedArtifacts": "Initial shared Android target reused prior source; rejected unchanged APK before install. Final APK built with isolated target and its packaged library hash matches the new build."
+  },
+  "notCovered": [
+    "macOS/Linux GUI",
+    "Android full lifecycle suite",
+    "physical keyboard/IME/accessibility",
+    "release upgrade",
+    "performance",
+    "CI/Docker/release qualification"
+  ],
+  "localEvidence": "target/density-retirement-20261030"
+}

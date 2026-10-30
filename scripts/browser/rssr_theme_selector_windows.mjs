@@ -34,7 +34,7 @@ const stored = () => JSON.parse(database.prepare("SELECT value FROM app_settings
 const replace = value => database.prepare("UPDATE app_settings SET value=?, updated_at=? WHERE key='user_settings'")
   .run(JSON.stringify(value), new Date().toISOString());
 const patch = value => replace({ ...stored(), ...value });
-patch({ theme: 'dark', list_density: 'comfortable', refresh_interval_minutes: 525600, archive_after_months: 6 });
+patch({ theme: 'dark', list_density: 'compact', startup_view: 'all', refresh_interval_minutes: 525600, archive_after_months: 6 });
 const original = stored();
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const report = {
@@ -105,10 +105,16 @@ try {
   };
   await selectorExists(client, '[data-page="entries"][data-position-ready="true"]', 20000);
   await waitFor(client, hasTheme('dark'));
+  report.entrySpacing = await evaluate(client, `(() => { const s = getComputedStyle(document.querySelector('[data-layout="entry-card"][data-variant="reading"]')); return { minHeight: s.minHeight, paddingTop: s.paddingTop }; })()`);
   await pointerClick(client, '[data-nav="settings"]');
   await waitFor(client, fieldValue('theme-mode', 'dark'));
   await evaluate(client, `window.themeEvents=[]; for(const type of ['input','change']) document.querySelector('#settings-theme-mode').addEventListener(type,e=>window.themeEvents.push({type:e.type,value:e.target.value,trusted:e.isTrusted}));`);
   await snapshot('closed-initial');
+  await check('retired-density-uses-default-spacing-without-a-control', async () => {
+    assert.equal(original.list_density, 'compact');
+    assert.deepEqual(report.entrySpacing, { minHeight: '72px', paddingTop: '10px' });
+    assert.ok(await evaluate(client, `document.querySelector('.app-shell').dataset.density === 'comfortable' && !document.querySelector('[data-field="list-density"]') && !document.body.innerText.includes('列表密度')`));
+  });
   await check('real-popup-cancel-preserves-draft-and-storage', async () => {
     await pointerClick(client, '#settings-theme-mode');
     await sleep(300);
@@ -142,10 +148,10 @@ try {
     assert.deepEqual(await evaluate(client, 'window.themeEvents'), report.userEvents);
   });
   await check('reread-preserves-pending-and-does-not-emit-input', async () => {
-    patch({theme:'system',list_density:'compact'});
+    patch({theme:'system',startup_view:'last_feed'});
     const external=stored();
     await triggers();
-    await waitFor(client, fieldValue('list-density','compact'));
+    await waitFor(client, fieldValue('startup-view','last_feed'));
     assert.ok(await evaluate(client, fieldValue('theme-mode','light')));
     assert.deepEqual(await evaluate(client, 'window.themeEvents'), report.userEvents);
     assert.deepEqual(stored(),external);

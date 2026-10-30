@@ -103,7 +103,7 @@ mod tests {
     use crate::theme::ThemeController;
     use crate::ui::AppShellState;
     use rssr_application::SettingsPatch;
-    use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, ThemeMode, UserSettings};
+    use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, StartupView, ThemeMode, UserSettings};
     use tokio::sync::oneshot;
 
     fn harness() -> Element {
@@ -161,14 +161,13 @@ mod tests {
             let revision = theme.stored_count();
             facade.update_draft(|draft| {
                 draft.theme = ThemeMode::Dark;
-                draft.list_density = ListDensity::Compact;
+                draft.startup_view = StartupView::LastFeed;
                 draft.reader_font_scale = 1.1;
                 draft.refresh_interval_minutes = 99;
             });
             facade.apply_builtin_theme("newsprint");
             assert_eq!(theme.appearance().custom_css, preset_css("newsprint"));
             assert_eq!(theme.appearance().theme, ThemeMode::Dark);
-            assert_eq!(theme.appearance().list_density, ListDensity::Compact);
             assert_eq!(theme.appearance().reader_font_scale, 1.1);
             assert_eq!(*theme.settings.peek(), stored);
             assert!(!session.snapshot().pending_save);
@@ -194,7 +193,7 @@ mod tests {
                 submitted_patch(session),
                 SettingsPatch {
                     theme: Some(ThemeMode::Dark),
-                    list_density: Some(ListDensity::Compact),
+                    startup_view: Some(StartupView::LastFeed),
                     reader_font_scale: Some(1.1),
                     refresh_interval_minutes: Some(99),
                     custom_css: Some(String::new()),
@@ -569,7 +568,7 @@ mod tests {
         });
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            session.page.edit(|draft| draft.list_density = ListDensity::Compact)
+            session.page.edit(|draft| draft.startup_view = StartupView::LastFeed)
         });
         sender.send(()).expect("complete save");
         dom.render_immediate_to_vec();
@@ -578,7 +577,7 @@ mod tests {
             assert_eq!((saved.theme, saved.refresh_interval_minutes), (ThemeMode::Dark, 90));
             let draft = session.page.draft();
             assert_eq!(draft.refresh_interval_minutes, 90, "the stored field reaches the draft");
-            assert_eq!(draft.list_density, ListDensity::Compact, "the later edit stays");
+            assert_eq!(draft.startup_view, StartupView::LastFeed, "the later edit stays");
             assert!(session.page.status().contains("尚未保存"));
         });
     }
@@ -643,17 +642,17 @@ mod tests {
         let (mut dom, session, theme) = setup();
         let load = dom.in_scope(ScopeId::APP, || start_load(session));
         dom.in_scope(ScopeId::APP, || {
-            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+            session.page.edit(|draft| draft.startup_view = StartupView::LastFeed);
         });
         load.send(customized()).expect("deliver the load");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             let draft = session.page.draft();
-            assert_eq!(draft, UserSettings { list_density: ListDensity::Compact, ..customized() });
+            assert_eq!(draft, UserSettings { startup_view: StartupView::LastFeed, ..customized() });
             assert_eq!(*theme.settings.peek(), customized());
             assert_eq!(
                 submitted_patch(session),
-                SettingsPatch { list_density: Some(ListDensity::Compact), ..Default::default() }
+                SettingsPatch { startup_view: Some(StartupView::LastFeed), ..Default::default() }
             );
         });
     }
@@ -726,7 +725,7 @@ mod tests {
             let (mut dom, session, theme) = setup();
             let load = dom.in_scope(ScopeId::APP, || start_load(session));
             let save = dom.in_scope(ScopeId::APP, || {
-                session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+                session.page.edit(|draft| draft.startup_view = StartupView::LastFeed);
                 start_save(session)
             });
             dom.render_immediate_to_vec();
@@ -741,13 +740,13 @@ mod tests {
             }
             dom.render_immediate_to_vec();
             dom.in_scope(ScopeId::APP, || {
-                let edited = UserSettings { list_density: ListDensity::Compact, ..customized() };
+                let edited = UserSettings { startup_view: StartupView::LastFeed, ..customized() };
                 assert_eq!(session.page.draft(), edited, "after: {reply_after_the_save}");
                 assert_eq!(*theme.settings.peek(), customized());
                 assert_eq!(
                     submitted_patch(session),
                     SettingsPatch {
-                        list_density: Some(ListDensity::Compact),
+                        startup_view: Some(StartupView::LastFeed),
                         ..Default::default()
                     }
                 );
@@ -884,7 +883,7 @@ mod tests {
         dom.in_scope(ScopeId::APP, || {
             session.page.edit(|draft| draft.theme = ThemeMode::Dark);
             session.page.edit(|draft| draft.theme = ThemeMode::System);
-            session.page.edit(|draft| draft.list_density = ListDensity::Comfortable);
+            session.page.edit(|draft| draft.startup_view = StartupView::All);
         });
         load.send(UserSettings { theme: ThemeMode::Light, ..customized() }).expect("load");
         dom.render_immediate_to_vec();
@@ -940,12 +939,29 @@ mod tests {
         rsx! {}
     }
 
+    #[test]
+    fn a_kept_density_only_draft_is_discarded_without_unsaved_state() {
+        crate::ui::drafts::keep(Some(&SettingsPatch {
+            list_density: Some(rssr_domain::ListDensity::Compact),
+            ..Default::default()
+        }))
+        .expect("kept legacy draft");
+        let (mut dom, session, _) = setup();
+        dom.render_immediate_to_vec();
+        assert_eq!(crate::ui::drafts::peek(), None, "retired draft consumed once");
+        dom.in_scope(ScopeId::APP, || {
+            assert!(session.page.pending_edits().is_empty());
+            assert!(session.page.status().is_empty());
+            assert!(!session.snapshot().pending_save);
+        });
+    }
+
     /// A draft kept before a reload is taken once when the page opens: it is the pending edits
     /// over the settings the page reads, shown, and not saved by itself (C4b item 4).
     #[test]
     fn a_kept_draft_is_restored_once_over_the_read_settings_and_not_saved() {
         let kept = SettingsPatch {
-            list_density: Some(ListDensity::Compact),
+            startup_view: Some(StartupView::LastFeed),
             custom_css: Some("body { color: blue; }".into()),
             ..Default::default()
         };
@@ -955,7 +971,7 @@ mod tests {
         assert_eq!(crate::ui::drafts::peek(), None, "taken once");
         let load = dom.in_scope(ScopeId::APP, || {
             assert_eq!(session.page.pending_edits(), kept);
-            assert_eq!(session.page.draft().list_density, ListDensity::Compact);
+            assert_eq!(session.page.draft().startup_view, StartupView::LastFeed);
             assert_eq!(
                 session.page.status(),
                 "已恢复重新加载前未保存的设置修改，尚未保存。 CSS 草稿已恢复，需重新预览。"
@@ -1010,11 +1026,11 @@ mod tests {
                 receiver.await.expect("let the save answer");
                 crate::ui::run_ui_command(UiCommand::Settings(command)).await
             });
-            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+            session.page.edit(|draft| draft.startup_view = StartupView::LastFeed);
         });
         let both = SettingsPatch {
             theme: Some(ThemeMode::Dark),
-            list_density: Some(ListDensity::Compact),
+            startup_view: Some(StartupView::LastFeed),
             ..Default::default()
         };
         assert_eq!(shell.settings_draft(), Some(both.clone()), "in flight");
@@ -1141,7 +1157,7 @@ mod tests {
     fn a_held_reply_superseded_by_a_later_load_is_dropped() {
         let (mut dom, session, theme) = setup();
         let (save, first) = dom.in_scope(ScopeId::APP, || {
-            session.page.edit(|draft| draft.list_density = ListDensity::Compact);
+            session.page.edit(|draft| draft.startup_view = StartupView::LastFeed);
             (start_save(session), start_load(session))
         });
         first.send(UserSettings::default()).expect("the earlier load, held");
@@ -1155,7 +1171,7 @@ mod tests {
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(*theme.settings.peek(), newer);
             assert_eq!(session.page.draft().theme, ThemeMode::Dark);
-            assert_eq!(session.page.draft().list_density, ListDensity::Compact, "the edit stays");
+            assert_eq!(session.page.draft().startup_view, StartupView::LastFeed, "the edit stays");
         });
     }
 
@@ -1201,7 +1217,7 @@ mod tests {
 
         // The navigation may land at any time: the stored draft follows the page's edits, and
         // goes with the page (review C4C2-01, C4C2-02).
-        let more = SettingsPatch { list_density: Some(ListDensity::Compact), ..kept };
+        let more = SettingsPatch { startup_view: Some(StartupView::LastFeed), ..kept };
         shell.set_settings_draft(Some(more.clone()));
         assert_eq!(crate::ui::drafts::peek(), Some(more), "follows the edits");
         shell.set_settings_page_open(false);
@@ -1237,7 +1253,7 @@ mod tests {
         assert_eq!(dom.in_scope(ScopeId::APP, || *DRAFT_NOT_KEPT.peek()), None, "left, kept");
 
         crate::ui::drafts::platform::refuse_writes(true);
-        let more = SettingsPatch { list_density: Some(ListDensity::Compact), ..kept };
+        let more = SettingsPatch { startup_view: Some(StartupView::LastFeed), ..kept };
         dom.in_scope(ScopeId::APP, || shell.set_settings_draft(Some(more)));
         assert!(crate::ui::drafts::platform::stopped(), "the departure stopped");
         assert_eq!(crate::ui::drafts::peek(), None, "the stale draft went");

@@ -97,7 +97,6 @@
 .app-shell [data-page="entries"] [data-layout="entry-card"][data-read="true"] [data-slot="entry-card-title"] { font-weight: 400; color: var(--muted); }
 .app-shell [data-page="entries"] [data-layout="entry-card"] [data-slot="entry-card-meta"] { margin-top: 4px; font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
 .app-shell [data-page="entries"] [data-layout="entry-card"] [data-layout="entry-card-actions"] { display: flex; flex-wrap: nowrap; gap: 0; margin: 0; }
-.app-shell[data-density="compact"] [data-page="entries"] [data-layout="entry-card"][data-variant="reading"] { min-height: 64px; padding-block: 6px; }
 
 /* Directory geometry is local to the rail; both grouping trees share it.
    Stable theme hooks are data-layout/data-slot, not the private branch classes. */

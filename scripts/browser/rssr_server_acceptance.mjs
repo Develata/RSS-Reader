@@ -575,10 +575,64 @@ define('two-browsers', {}, async (s) => {
 
 // --- R2-07: build mismatch; V1: drafts ----------------------------------------------------------
 
+define('retired-density-layout-and-drafts', {}, async (s) => {
+  const layouts = {};
+  s.onCleanup(() => main.client.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false }));
+  for (const density of ['comfortable', 'compact']) {
+    await seedDemo('/entries', ENTRIES, { edit: ({ core }) => {
+      Object.assign(core.settings, { list_density: density, theme: 'light', custom_css: '', startup_view: 'all' });
+    } });
+    for (const width of [1280, 390]) {
+      await main.client.send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: false });
+      for (const [route, marker] of [['entries', ENTRIES], ['feeds', FEEDS], ['settings', SETTINGS]]) {
+        await navigate(main.client, `${base}/${route}`);
+        await selectorExists(main.client, marker);
+        await main.traffic.settled();
+        const geometry = await evaluate(main.client, `(() => {
+          const style = selector => { const node = document.querySelector(selector); if (!node) return null;
+            const s = getComputedStyle(node); return [s.padding, s.gap, s.minHeight, s.fontSize, s.maxWidth]; };
+          return { density: document.querySelector('.app-shell').dataset.density,
+            selectorAbsent: !document.querySelector('[data-field="list-density"]'),
+            overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth + 1,
+            shell: style('.app-shell'), page: style('[data-page]'),
+            row: style('[data-layout="entry-card"][data-variant="reading"]'),
+            main: style('[data-page] > [data-layout="page-main"]') };
+        })()`);
+        s.check(`${density} ${width} ${route}: fixed spacing without selector or overflow`,
+          geometry.density === 'comfortable' && geometry.selectorAbsent && !geometry.overflow
+            && (route !== 'entries' || geometry.row?.[2] === '72px'), geometry);
+        const key = `${width}-${route}`;
+        if (density === 'comfortable') layouts[key] = geometry;
+        else s.check(`${key}: old density values render identically`, JSON.stringify(geometry) === JSON.stringify(layouts[key]), geometry);
+        await capturePage(main.client, artifactDir, `density-${density}-${key}`);
+      }
+    }
+  }
+  const stored = await state('/api/v1/settings');
+  const mark = main.traffic.mark();
+  for (const edits of [{ list_density: 'comfortable' }, { list_density: 'comfortable', theme: 'dark' }]) {
+    await evaluate(main.client, `sessionStorage.setItem('rssr.settings-draft', ${JSON.stringify(JSON.stringify({ version: 1, edits }))})`);
+    await navigate(main.client, `${base}/settings`);
+    await selectorExists(main.client, SETTINGS);
+    await waitFor(main.client, `document.querySelector('[data-layout="settings-save-region"]')?.dataset.state === '${edits.theme ? 'dirty' : 'clean'}'`);
+    await waitUntil('legacy draft consumed', 5000, async () => (await draft(main)) === null);
+    s.check('only active fields are restored, without an implicit write',
+      (await fieldValue(main, 'theme-mode')) === (edits.theme ?? stored.theme)
+      && JSON.stringify(await state('/api/v1/settings')) === JSON.stringify(stored), edits);
+  }
+  s.check('restoration did not send settings writes', main.traffic.count(mark, 'PATCH', '/api/v1/settings') === 0);
+  await pointerClick(main.client, '[data-action="save-settings"]');
+  await waitBanner(main, BANNER.settings, 'info', '设置已保存');
+  const saved = await state('/api/v1/settings');
+  s.check('saving a mixed legacy draft preserves the stored retired field',
+    JSON.stringify(saved) === JSON.stringify({ ...stored, theme: 'dark' }), saved);
+});
+
 define('settings-preview-explicit-save', {}, async (s) => {
   await seedDemo('/settings', SETTINGS, { edit: ({ core }) => {
     core.settings.theme = 'light';
-    core.settings.list_density = 'comfortable';
+    core.settings.startup_view = 'all';
+    core.settings.list_density = 'compact'; // Legacy payload: presentation must ignore it.
     core.settings.refresh_interval_minutes = 30;
     core.settings.custom_css = '';
   } });
@@ -593,12 +647,13 @@ define('settings-preview-explicit-save', {}, async (s) => {
       && !document.querySelector('[data-field="preset-theme-select"]')`));
 
   await choose(main, 'theme-mode', 'dark');
-  await choose(main, 'list-density', 'compact');
+  await choose(main, 'startup-view', 'last_feed');
   await fillField(main.client, '[data-field="refresh-interval"]', '75');
   await pointerClick(main.client, 'button[data-action="apply-theme-preset"][data-theme-preset="newsprint"]');
   await waitFor(main.client, `document.querySelector('#user-custom-css')?.textContent.includes('Newsprint')
     && document.querySelector('.app-shell')?.classList.contains('theme-dark')
-    && document.querySelector('.app-shell')?.dataset.density === 'compact'`);
+    && document.querySelector('.app-shell')?.dataset.density === 'comfortable'
+    && !document.querySelector('[data-field="list-density"]')`);
   s.check('the chosen card exposes selected state and includes its visible label in its accessible name',
     await evaluate(main.client, `(() => { const button = document.querySelector('button[data-theme-preset="newsprint"]');
       return button?.getAttribute('aria-pressed') === 'true'
@@ -614,7 +669,7 @@ define('settings-preview-explicit-save', {}, async (s) => {
   await pointerClick(main.client, '[data-action="apply-custom-css"]');
   await waitFor(main.client, `getComputedStyle(document.documentElement).getPropertyValue('--acceptance-mark').trim() === '#123456'`);
   await main.traffic.settled();
-  s.check('mode, density, preset, reset and CSS preview sent no settings write',
+  s.check('mode, startup view, preset, reset and CSS preview sent no settings write',
     main.traffic.count(preview, 'PATCH', '/api/v1/settings') === 0, main.traffic.log(preview));
   s.check('the server still holds the saved settings; unsaved state is beside the save button',
     JSON.stringify(await state('/api/v1/settings')) === JSON.stringify(stored)
@@ -628,7 +683,7 @@ define('settings-preview-explicit-save', {}, async (s) => {
   const saved = await state('/api/v1/settings');
   s.check('one explicit save commits all edited fields together',
     main.traffic.count(save, 'PATCH', '/api/v1/settings') === 1
-    && saved.theme === 'dark' && saved.list_density === 'compact'
+    && saved.theme === 'dark' && saved.startup_view === 'last_feed' && saved.list_density === 'compact'
     && saved.refresh_interval_minutes === 75 && saved.custom_css === css,
     { saved, traffic: main.traffic.log(save) });
   s.check('the save result and clean state are shown beside the button',
@@ -667,7 +722,7 @@ define('build-mismatch-keeps-edits', {}, async (s) => {
   await clickSelector(main.client, '[data-action="save-settings"]');
   await waitFor(main.client, `(n => n && ${VISIBLE}(n) && n.textContent.includes('页面版本与服务器不一致'))(document.querySelector('[data-slot="app-notice"][data-notice="reload"]'))`);
   await waitBanner(main, BANNER.settings, 'error', '草稿已保留');
-  await choose(main, 'list-density', 'compact');
+  await choose(main, 'startup-view', 'last_feed');
   s.check('nothing was stored', JSON.stringify(await state('/api/v1/settings')) === JSON.stringify(stored));
   await stale.remove();
   const mark = main.traffic.mark();
@@ -677,8 +732,8 @@ define('build-mismatch-keeps-edits', {}, async (s) => {
   await selectorExists(main.client, SETTINGS);
   await waitBanner(main, BANNER.settings, 'info', RESTORED);
   await waitBanner(main, BANNER.settings, 'info', 'CSS 草稿已恢复，需重新预览');
-  const restored = { theme: await fieldValue(main, 'theme-mode'), density: await fieldValue(main, 'list-density'), css: await fieldValue(main, 'custom-css') };
-  s.check('after the reload the committed and the later edits are back', restored.theme === 'dark' && restored.density === 'compact'
+  const restored = { theme: await fieldValue(main, 'theme-mode'), startup: await fieldValue(main, 'startup-view'), css: await fieldValue(main, 'custom-css') };
+  s.check('after the reload the committed and the later edits are back', restored.theme === 'dark' && restored.startup === 'last_feed'
     && restored.css.includes('#123456'), restored);
   s.check('restored raw CSS remains unapplied until explicitly previewed', await evaluate(main.client,
     `getComputedStyle(document.documentElement).getPropertyValue('--acceptance-mark').trim() === ''`));
@@ -696,7 +751,7 @@ define('build-mismatch-keeps-edits', {}, async (s) => {
   await waitBanner(main, BANNER.settings, 'info', '设置已保存');
   const saved = await state('/api/v1/settings');
   s.check('re-edited and saved: one save holding every edit', main.traffic.count(save, 'PATCH', '/api/v1/settings') === 1
-    && saved.theme === 'light' && saved.list_density === 'compact' && saved.custom_css.includes('#123456'), saved);
+    && saved.theme === 'light' && saved.startup_view === 'last_feed' && saved.custom_css.includes('#123456'), saved);
   await navigate(main.client, `${base}/settings`);
   await selectorExists(main.client, SETTINGS);
   await sleep(500);
@@ -815,11 +870,11 @@ define('stopped-departure-then-saved', {}, async (s) => {
   await choose(main, 'theme-mode', 'dark');
   await leaveToSignIn(s, 'stop');
   s.check('the draft is kept as the app leaves', (await keptEdits(main))?.theme === 'dark', await draft(main));
-  await choose(main, 'list-density', 'compact');
-  await waitUntil('the kept draft following the edit', 5000, async () => (await keptEdits(main))?.list_density === 'compact');
+  await choose(main, 'startup-view', 'last_feed');
+  await waitUntil('the kept draft following the edit', 5000, async () => (await keptEdits(main))?.startup_view === 'last_feed');
   s.check('the kept draft follows the edits made after the departure', true);
   await clickSelector(main.client, '[data-action="save-settings"]');
-  await waitUntil('the save', 10000, async () => (await state('/api/v1/settings')).list_density === 'compact');
+  await waitUntil('the save', 10000, async () => (await state('/api/v1/settings')).startup_view === 'last_feed');
   await waitUntil('the kept draft gone', 5000, async () => (await draft(main)) === null);
   s.check('saved: nothing stale is left stored', true);
   await navigate(main.client, `${base}/settings`);
@@ -827,7 +882,7 @@ define('stopped-departure-then-saved', {}, async (s) => {
   await sleep(800);
   s.check('a later reload restores nothing; the saved settings show',
     !(await evaluate(main.client, `document.body.textContent.includes(${JSON.stringify(RESTORED)})`))
-      && (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'list-density')) === 'compact');
+      && (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'startup-view')) === 'last_feed');
 });
 
 define('slow-departure-lands-late', { long: true }, async (s) => {
@@ -839,7 +894,7 @@ define('slow-departure-lands-late', { long: true }, async (s) => {
   await evaluate(main.client, `(() => { const wait = setInterval(() => {
     if (!sessionStorage.getItem('rssr.settings-draft')) return;
     clearInterval(wait);
-    setTimeout(() => ${chooseScript('list-density', 'compact')}, 1000);
+    setTimeout(() => ${chooseScript('startup-view', 'last_feed')}, 1000);
   }, 50); })()`);
   const left = Date.now();
   const navigation = await leaveToSignIn(s, 'hold');
@@ -853,7 +908,7 @@ define('slow-departure-lands-late', { long: true }, async (s) => {
   await selectorExists(main.client, SETTINGS, 30000);
   await textShown(main.client, RESTORED);
   s.check('the late navigation restores the latest edits after signing in',
-    (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'list-density')) === 'compact');
+    (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'startup-view')) === 'last_feed');
   // The page's cookie is new: the next seed signs in through the form again.
   main.server.signedInThroughForm = false;
 });
@@ -872,7 +927,7 @@ define('later-edit-not-kept-stays', {}, async (s) => {
       if (this === window.sessionStorage) throw new DOMException('acceptance: storage full', 'QuotaExceededError');
       return setItem.call(this, key, value);
     };
-    setTimeout(() => ${chooseScript('list-density', 'compact')}, 500);
+    setTimeout(() => ${chooseScript('startup-view', 'last_feed')}, 500);
   }, 50); })()`);
   const navigation = await leaveToSignIn(s, 'hold');
   await sleep(4000);
@@ -882,7 +937,7 @@ define('later-edit-not-kept-stays', {}, async (s) => {
   s.check('the page stayed: same document, still on the settings page', await sameDocument(main)
     && (await location(main)) === '/settings');
   s.check('with the edits in the form, the stale draft no longer stored',
-    (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'list-density')) === 'compact'
+    (await fieldValue(main, 'theme-mode')) === 'dark' && (await fieldValue(main, 'startup-view')) === 'last_feed'
       && (await draft(main)) === null, await draft(main));
   const notice = '[data-slot="app-notice"][data-notice="sign-in"]';
   s.check('the notice says the draft could not be kept, offering to sign in anyway', await evaluate(main.client,

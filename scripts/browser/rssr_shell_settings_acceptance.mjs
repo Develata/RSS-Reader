@@ -33,7 +33,7 @@ const stored = () => JSON.parse(database.prepare("SELECT value FROM app_settings
 const replace = value => database.prepare("UPDATE app_settings SET value=?, updated_at=? WHERE key='user_settings'")
   .run(JSON.stringify(value), new Date().toISOString());
 const patch = value => replace({ ...stored(), ...value });
-patch({ theme: 'dark', list_density: 'comfortable', refresh_interval_minutes: 525600 });
+patch({ theme: 'dark', list_density: 'compact', startup_view: 'all', refresh_interval_minutes: 525600 });
 const original = stored();
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const report = {
@@ -116,10 +116,10 @@ try {
       select.value = 'dark'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await waitFor(client, fieldValue('theme-mode', 'dark'));
     await waitFor(client, hasTheme('dark'), 10000);
-    patch({ theme: 'system', list_density: 'compact' });
+    patch({ theme: 'system', startup_view: 'last_feed' });
     const external = stored();
     await triggers();
-    await waitFor(client, fieldValue('list-density', 'compact'));
+    await waitFor(client, fieldValue('startup-view', 'last_feed'));
     assert.ok(await evaluate(client, fieldValue('theme-mode', 'dark')));
     assert.deepEqual(stored(), external, 'reread and unsaved input did not write settings');
     await screenshot('settings-pending');

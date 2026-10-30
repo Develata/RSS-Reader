@@ -31,7 +31,7 @@ assert.ok(text('forward','--list').split(/\r?\n/).some(line=>line.trim()===`${se
 const output=path.resolve(args.get('--artifact-dir')),relative=path.relative(path.join(root,'target'),output);
 assert.ok(relative&&relative!=='..'&&!relative.startsWith('..'+path.sep)&&!path.isAbsolute(relative));await fs.mkdir(output);
 const remote='/data/local/tmp/rssr-theme-selector-'+pid;adb('shell','mkdir','-p',remote);
-const report={status:'running',platform:'android',serial,pkg,apkHash,source:identity.source,checks:[],pageErrors:[],nativeInput:'adb input guarded by resumed Activity',scriptSha256:sha(await fs.readFile(new URL(import.meta.url)))};
+const report={status:'running',platform:'android',serial,pkg,apkHash,source:identity.source,sourcePatchSha256:identity.sourcePatchSha256,checks:[],pageErrors:[],nativeInput:'adb input guarded by resumed Activity',scriptSha256:sha(await fs.readFile(new URL(import.meta.url)))};
 let client;
 const foreground=()=>{
  const resumed=text('shell','dumpsys','activity','activities').split(/\r?\n/).filter(l=>/^\s*(?:mResumedActivity:|topResumedActivity=)/.test(l));
@@ -70,11 +70,18 @@ try{
  assert.ok(target);client=connect(target.webSocketDebuggerUrl);client.on('Runtime.exceptionThrown',e=>report.pageErrors.push(e.exceptionDetails));
  await client.send('Runtime.enable');await client.send('Page.enable');report.webViewVersion=(await client.send('Browser.getVersion')).product;
  await selectorExists(client,'[data-page="entries"][data-position-ready="true"]',20000);
+ report.entrySpacing=await evaluate(client,`(()=>{const s=getComputedStyle(document.querySelector('[data-layout="entry-card"][data-variant="reading"]'));return {minHeight:s.minHeight,paddingTop:s.paddingTop}})()`);
  await pointerClick(client,'[data-nav="settings"]');await waitFor(client,`document.querySelector('#settings-theme-mode')?.value==='dark'`);
  await evaluate(client,`window.themeEvents=[];for(const type of ['input','change'])document.querySelector('#settings-theme-mode').addEventListener(type,e=>window.themeEvents.push({type:e.type,value:e.target.value,trusted:e.isTrusted}));`);
  const original=await stored('initial-db');
  assert.equal(original.theme,'dark');assert.equal(original.archive_after_months,6);
  assert.equal(original.refresh_interval_minutes,525600);
+ await check('retired-density-uses-default-spacing-without-a-control',async()=>{
+  assert.equal(original.list_density,'compact');
+  assert.deepEqual(report.entrySpacing,{minHeight:'72px',paddingTop:'10px'});
+  assert.ok(await evaluate(client,`document.querySelector('.app-shell').dataset.density==='comfortable'&&!document.querySelector('[data-field="list-density"]')&&!document.body.innerText.includes('列表密度')`));
+  await snapshot('density-retired');
+ });
  const open=async()=>{await pointerClick(client,'#settings-theme-mode');await sleep(300)};
  await check('android-native-list-popup-and-system-back-cancel',async()=>{
   await open();const xml=await snapshot('native-popup-dark');

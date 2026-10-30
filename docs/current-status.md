@@ -2,6 +2,8 @@
 
 核对日期：2026-10-30。当前处于**前置模块化已收口、原生控件边界已评估的阶段**：返回策略和 App 设置读取分别通过 PR #46、#47 合入 main。主题模式选择已完成 Windows / Android 实际宿主评估；Android 已有系统选择弹窗，尚无证据支持另写一套。界面仍使用 Dioxus / WebView，未接入新的原生控件或渲染器。
 
+当前工作分支另按用户要求移除列表密度选项及紧凑样式，统一原默认间距；旧参数仅暂留 0.2.x 兼容，0.3.x 破坏性删除已批准。仓库 `.agents/` 中 9 份过时 Spec Kit skill 一并清理，见[本批交接](./handoffs/2026-10-30-density-retirement.md)。
+
 本页只汇总当前事实；具体规则见[设计索引](./design/README.md)，未完成工作见[当前待办](./maintenance-backlog.md)，每次验证的版本和环境见[交接入口](./handoffs/README.md)。
 
 ## 三个不同的版本状态
@@ -10,7 +12,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | 最新 main | `663ef4ee`；本地 main 已快进到同一提交 | PR #38–#47 已合并；PR #47 head 的 CI 36/36、Pages build 通过，deploy 按 PR 规则跳过。合并树与 head `f38c3ba8` 相同，见[本批交接](./handoffs/2026-10-30-native-theme-selector-assessment.md) |
-| 当前工作分支 | 复用 `codex/shell-settings-lifecycle` 和原 E 盘工作树；主题选择探针、评估及文档提交 `c3dc5ddb` 已推送，尚未另开 PR / 合入 main | Windows WebView2 4 组、Android 15 真机独立测试包 3 组；绑定相同产品源码，未修改产品逻辑。具体脚本与未覆盖范围见[宿主评估](./design/native-theme-selector-assessment.md) |
+| 当前工作分支 | 复用 `codex/shell-settings-lifecycle` 和原 E 盘工作树；主题选择评估已推送，本批增加列表密度退役与 `.agents/` 清理，尚未另开 PR / 合入 main | 先前主题选择评估属于其原源码；本批有新的候选构建与专项验收，以[退役交接](./handoffs/2026-10-30-density-retirement.md)为准 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -33,7 +35,7 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 截至本批核对：**4 个本地分支、2 个工作树、3 个真实远端分支（main、codex/native-back-policy、codex/shell-settings-lifecycle）**。不把 `origin/HEAD` 当作分支。此前的 4 条失效登记和 5 个旧工作树均已清理；本次复用现有分支与工作树，没有再增删分支。
 
-本地保留 main、已合并的 `codex/native-back-policy`、继续承载本次评估的 `codex/shell-settings-lifecycle` 和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout `E:/gitclone/RSS-Reader` 的 40 条既有状态、暂存区及 42 个文件/缺失路径本批复核无变化。旧源码由已验证的 Git bundle 保全，4004 个历史验收文件、Claude 配置及 5 个 Linux 链接元数据另有独立备份，详见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
+本地保留 main、已合并的 `codex/native-back-policy`、承载本次密度退役的 `codex/shell-settings-lifecycle` 和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout `E:/gitclone/RSS-Reader` 的 40 条既有状态、暂存区及 42 个文件/缺失路径本批复核无变化；并行任务新增的 `2026-10-30-main-javascript-audit.md` 不属本批，也保留原状。旧源码由已验证的 Git bundle 保全，4004 个历史验收文件、Claude 配置及 5 个 Linux 链接元数据另有独立备份，详见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 
 ## 验证结论的边界
 

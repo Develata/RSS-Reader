@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use rssr_domain::{
-    DEFAULT_ENTRIES_PAGE_SIZE, ListDensity, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE,
+    DEFAULT_ENTRIES_PAGE_SIZE, MAX_ARCHIVE_AFTER_MONTHS, MAX_ENTRIES_PAGE_SIZE,
     MAX_REFRESH_INTERVAL_MINUTES, StartupView, ThemeMode,
     validation::{MAX_READER_FONT_SCALE, MIN_READER_FONT_SCALE},
 };
@@ -11,7 +11,6 @@ use super::facade::SettingsPageFacade;
 pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
     let draft = facade.draft();
     let theme_facade = facade.clone();
-    let density_facade = facade.clone();
     let startup_facade = facade.clone();
     let refresh_facade = facade.clone();
     let archive_facade = facade.clone();
@@ -43,23 +42,6 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
                         option { value: "system", "跟随系统" }
                         option { value: "light", "浅色" }
                         option { value: "dark", "深色" }
-                    }
-                }
-                div { "data-slot": "settings-form-grid-item",
-                    label { class: "field-label", r#for: "settings-list-density", "列表密度" }
-                    select {
-                        id: "settings-list-density",
-                        name: "list_density",
-                        class: "select-input",
-                        "data-field": "list-density",
-                        value: "{density_value(draft.list_density)}",
-                        onchange: move |event| {
-                            density_facade.update_draft(|next| {
-                                next.list_density = parse_list_density(&event.value());
-                            });
-                        },
-                        option { value: "comfortable", "舒适" }
-                        option { value: "compact", "紧凑" }
                     }
                 }
                 div { "data-slot": "settings-form-grid-item",
@@ -248,20 +230,6 @@ fn parse_theme_mode(raw: &str) -> ThemeMode {
         "light" => ThemeMode::Light,
         "dark" => ThemeMode::Dark,
         _ => ThemeMode::System,
-    }
-}
-
-fn density_value(value: ListDensity) -> &'static str {
-    match value {
-        ListDensity::Comfortable => "comfortable",
-        ListDensity::Compact => "compact",
-    }
-}
-
-fn parse_list_density(raw: &str) -> ListDensity {
-    match raw {
-        "compact" => ListDensity::Compact,
-        _ => ListDensity::Comfortable,
     }
 }
 

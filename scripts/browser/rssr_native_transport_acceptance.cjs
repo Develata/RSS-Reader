@@ -128,7 +128,7 @@ async function eventually(read, expected, label) {
     });
     const fields = () => page.locator('[data-field]').evaluateAll(es => Object.fromEntries(es.map(e => [e.dataset.field, e.value])));
     const expectedFields = css => ({
-      'theme-mode': original.theme, 'list-density': original.list_density, 'startup-view': original.startup_view,
+      'theme-mode': original.theme, 'startup-view': original.startup_view,
       'refresh-interval': String(original.refresh_interval_minutes), 'archive-after-months': String(original.archive_after_months),
       'entries-page-size': String(original.entries_page_size), 'reader-font-scale': String(original.reader_font_scale),
       'custom-css': normalize(css),

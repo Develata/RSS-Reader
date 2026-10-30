@@ -22,7 +22,7 @@
 - 状态接口：
   - `data-state`
   - `data-variant`
-  - `data-density`
+  - `data-density` 已弃用：0.2.x 固定为 `comfortable`，0.3.x 移除
 - 结构接口：
   - `data-layout`
   - `data-slot`
@@ -38,7 +38,7 @@
 - 状态语义已从旧 modifier class 迁到数据属性：
   - `status-banner.*` -> `data-state`
   - `button.*` -> `data-variant`
-  - `app-shell.density-*` -> `data-density`
+  - `app-shell.density-*` 曾迁到 `data-density`；列表密度功能现已退役，属性只暂留兼容常量
   - 主题卡、来源筛选 chip、阅读底栏按钮 -> `data-state`
 - 页面结构和阅读壳已补齐稳定布局语义：
   - 导航壳、阅读页、顶部目录、侧边目录、筛选区、Web 门禁壳均已迁到 `data-layout` / `data-slot`
@@ -57,7 +57,7 @@
 
 - `app-shell`
   - 作为应用壳根类保留。
-  - 密度等状态语义已经由 `data-density` 承担。
+  - 列表密度不再是运行时状态；不恢复 `density-*` 类或紧凑样式分支。
 - `theme-light` / `theme-dark` / `theme-system`
   - 当前仍可作为主题根状态类保留。
   - 如果后续统一成 `data-theme`，应单独立项，不混在页面槽位收口里推进。

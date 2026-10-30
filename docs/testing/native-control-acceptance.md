@@ -44,11 +44,12 @@ Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library
 
 ## 主题选择专项的隔离与复跑
 
-场景与结论见[宿主评估](../design/native-theme-selector-assessment.md)。使用 Node 的 `node:sqlite`、已有 CDP 模块和系统 adb/UIA，不新增 npm 依赖。
+原始主题场景与结论见[宿主评估](../design/native-theme-selector-assessment.md)；当前运行器另覆盖[列表密度退役](../handoffs/2026-10-30-density-retirement.md)。使用 Node 的 `node:sqlite`、已有 CDP 模块和系统 adb/UIA，不新增 npm 依赖。
 
 - Windows：`node scripts/browser/rssr_theme_selector_windows.mjs --app-bin <exe> --seed-dir <seed> --artifact-dir <target下全新目录> --port 9495`。运行器复制 EXE 和合成库，建立独立 profile，核对 CDP 进程祖先。UIA 助手只显示本次测试窗口且不激活，不向全局键盘发送输入；按键经 CDP 进入 WebView2。调用者核对 EXE 对应的源码身份。后台截图和物理键盘不在其通过范围内。
 - Android：调用者先备份和校验已有测试包资料，再仅安装 `io.github.develata.rssreader.backpolicytest`，预置独立库并启动。`process.json` 提供 `platform=android`、`serial`、`package`、`pid`、`apk`、`artifactSha256`、40 位 `source` 和 `cdp=http://127.0.0.1:<port>`。调用 `node scripts/browser/rssr_theme_selector_android.mjs --process-file <run>/process.json --artifact-dir <target下全新目录>`；运行器核对安装包、PID、data root、forward 映射和前台 Activity，不安装、重置资料库或管理映射。调用者结束自己的进程和映射。
-- 两端夹具都必须是 100 篇文章、6 个仅指向 `127.0.0.1` 的来源。主题初始为 dark，刷新间隔为合法的长周期 525600，归档月数为合法值 6；更新 SQLite 时只改 `app_settings.key='user_settings'`，保留 `app_state_v2`。不能把旧夹具的归档月数 0 当成合法设置保存前提。
+- 两端夹具都必须是 100 篇文章、6 个仅指向 `127.0.0.1` 的来源。主题初始为 dark、旧 `list_density=compact`、启动视图 all，刷新间隔为合法的长周期 525600，归档月数为合法值 6；当前脚本确认旧 compact 不影响默认行高且界面没有密度控件。更新 SQLite 时只改 `app_settings.key='user_settings'`，保留 `app_state_v2`。不能把旧夹具的归档月数 0 当成合法设置保存前提。
+- 从未提交快照构建时，`source` 记录基线提交，同时提供 `sourcePatchSha256` 和逐文件输入清单。不同源码快照使用独立 Android 构建目录；打包后核对 APK 内 `libmain.so` 与本轮编译输出相同，不能只凭 `dx build` 成功沿用共享 target 的旧 APK。
 - Android 记录真实设备截图与 UI 树；系统返回使用 adb keyevent 4，不冒充手势返回。UIAutomator 的只读快照最多重试一次，失败也留在报告中。SQLite 在稳定 UI 检查点复制主文件及 WAL；安装前的保全备份则先停止测试包再完整归档。
 - 本批未运行夹具 RSS 服务，启动刷新对本机地址失败不属于主题专项断言。未访问线上订阅，也不据此宣称离线刷新功能通过。
 

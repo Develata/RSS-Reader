@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| 列表密度退役、0.3.x 参数删除与 `.agents/` 清理 | [实现、兼容与实际宿主验收](./2026-10-30-density-retirement.md) |
 | 当前阶段、分支与文档收口 | [全部分支审计与清理](./2026-10-30-branch-consolidation.md)、[前一轮文档整合](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
 | 当前原生控件评估与 PR #47 整合 | [主题选择实际宿主评估](./2026-10-30-native-theme-selector-assessment.md)、[App 设置读取生命周期与 PR #46](./2026-10-30-shell-settings-lifecycle.md) |
 | 原生返回策略 | [Windows / Android 实际宿主验收](./2026-10-30-native-back-validation.md)、[返回导航与退出提示提取](./2026-10-29-native-back-policy.md)、[E 盘接续与背景交接](./2026-10-29-pr40-worktree-handoff.md)、[本批范围评估](./2026-10-29-native-preparation-next-batch.md) |
@@ -26,6 +27,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-30 | [列表密度退役与旧 Agent skill 清理](./2026-10-30-density-retirement.md) |
 | 2026-10-30 | [PR #47 整合与主题模式选择宿主评估](./2026-10-30-native-theme-selector-assessment.md) |
 | 2026-10-30 | [PR #46 整合与 App 设置读取生命周期](./2026-10-30-shell-settings-lifecycle.md) |
 | 2026-10-30 | [返回策略复核与 Windows / Android 宿主验收](./2026-10-30-native-back-validation.md) |

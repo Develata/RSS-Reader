@@ -3,7 +3,7 @@ use dioxus::prelude::*;
 use crate::{
     components::{app_notices::AppNotices, status_banner::StatusBanner},
     router::RoutableApp,
-    theme::{density_state, theme_class, use_theme_controller},
+    theme::{theme_class, use_theme_controller},
     ui::{use_app_shell_state, use_authenticated_shell_bus, use_reread_triggers},
 };
 
@@ -51,7 +51,8 @@ pub fn App() -> Element {
         }
         div {
             class: "app-shell {theme_class(current_settings.theme)}",
-            "data-density": "{density_state(current_settings.list_density)}",
+            // Compatibility selector through 0.2.x; density is no longer a preference.
+            "data-density": "comfortable",
             style: "--reader-font-scale: {current_settings.reader_font_scale};",
             if crate::demo::ENABLED {
                 aside { "data-slot": "pages-demo-notice", role: "note",
