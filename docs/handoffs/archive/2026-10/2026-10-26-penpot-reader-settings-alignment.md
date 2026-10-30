@@ -86,7 +86,7 @@
 
 ## 给下一位 Agent 的备注
 
-- [设计基准与页面索引](../design/penpot-code-baseline.md)是维护入口；第一批历史见 `2026-10-26-penpot-code-alignment.md`。
+- [设计基准与页面索引](../../../design/penpot-code-baseline.md)是维护入口；第一批历史见 `2026-10-26-penpot-code-alignment.md`。
 - 证据目录：`C:/Users/QQ/.codex/visualizations/2026/10/26/01a1779a-f271-7ec2-ab70-c1ef756f9ffb/`。
 - `penpot-expanded-manifest.json`、九份新 `code-*.json`、`code-desktop-default-14c8.json` 和 `penpot-*-final.png` 保存结构与预览证据。
 - 浏览器连接恢复后继续使用原生 Penpot 工具。编辑页需保持插件活动；不要打印配置 URL 中的令牌。

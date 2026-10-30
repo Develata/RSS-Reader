@@ -1,8 +1,8 @@
 # Application Use Case Boundary Checklist
 
 Use this checklist when changing `rssr-application`, UI runtime ports, CLI commands, or host
-capabilities. It turns the current consolidation plan into a review gate that can be applied before
-code changes are merged.
+capabilities. Checked on 2026-10-29 against the current [v0.2 architecture](./v0.2-architecture.md).
+The [initial consolidation plan](./application-use-case-consolidation-plan.md) is historical context.
 
 ## Skeleton First
 
@@ -19,7 +19,9 @@ code changes are merged.
 
 ## Runtime Entry
 
-- UI runtime ports call `AppUseCases` or host capabilities, not repositories.
+- UI runtime calls `Arc<dyn Backend>` through `rssr-api`, not repositories or `AppUseCases` directly.
+- `LocalBackend` composes application use cases with host capabilities; formal Web uses
+  `HttpBackend` to reach the server's backend. Platform transport and lifecycle stay in adapters.
 - CLI command handlers call `AppUseCases`, not repositories.
 - Host capabilities stay host-owned:
   - lifecycle and scheduling
@@ -60,8 +62,8 @@ code changes are merged.
 A thin service may remain if it owns a stable semantic boundary. Current accepted examples:
 
 - `AppStateService`: owns snapshot slice read/modify/write semantics.
-- `SettingsSyncService`: maps a remote pull/import outcome to the effective settings snapshot
-  needed by the host.
+- `ImportExportService` includes the effective settings in `RemoteConfigPullOutcome` after a
+  remote import; the retired `SettingsSyncService` must not be recreated as a forwarding layer.
 
 A thin service should be removed if it only forwards to another service or repository without
 adding one of:
@@ -110,5 +112,6 @@ For infra or config exchange behavior:
 
 For browser-visible behavior:
 
-- relevant static web or `rssr-web` smoke scripts
-- browser feed/proxy smoke when refresh behavior or diagnostics changes
+- relevant same-origin server smoke via [server regression](../testing/server-web-regression.md)
+- feed smoke when refresh behavior or diagnostics changes; `/feed-proxy` is retired
+- Pages demo checks separately when the in-memory SQL adapter or prefetched snapshot changes

@@ -1,0 +1,660 @@
+{
+  "date": "2026-10-30",
+  "review_head": "bfe29fe64475716ae9c270fcdef0841692c7a61b",
+  "main": "4101520c33266026747db867c33e2b13baea3d23",
+  "scope": "Audit all branches; preserve historical receipts; remove reviewed obsolete refs and stale worktree registrations. No product changes or candidate push.",
+  "counts": {
+    "before": {
+      "local": 17,
+      "remote": 12,
+      "unique_names": 20,
+      "worktrees": 11,
+      "stale_worktrees": 4
+    },
+    "after": {
+      "local": 6,
+      "remote": 1,
+      "worktrees": 7,
+      "stale_worktrees": 0
+    },
+    "deleted": {
+      "local": 11,
+      "remote": 11,
+      "stale_worktrees": 4
+    }
+  },
+  "branch_snapshot": [
+    {
+      "ref": "refs/heads/audit/architecture-scan",
+      "sha": "b038077169418ac9dcc377fb1278b457276ac8bd",
+      "behind": 988,
+      "ahead": 1,
+      "contained": false,
+      "unique_commits": [
+        "b038077169418ac9dcc377fb1278b457276ac8bd docs: add architecture review and refactor roadmap"
+      ]
+    },
+    {
+      "ref": "refs/heads/backup/v0.2-architecture-pre-c2-squash",
+      "sha": "bde2502c3018739b925d9348fff121fd58cb6bfc",
+      "behind": 387,
+      "ahead": 6,
+      "contained": false,
+      "unique_commits": [
+        "bde2502c3018739b925d9348fff121fd58cb6bfc docs: record the first C2 code review, its fixes and verification",
+        "d634c6471aba5abb95670f2793beb99637297bbc fix: address the first C2 code review",
+        "5763886b25f0591a18ce0050a654261400ffc5a2 docs: record the C2 full verification and mutation check",
+        "6a73e405418f36f9743bda50e0d12b68c3b3f04d test(web): pin the renewal statement's own guarantees",
+        "db7fd195ad86a96b8214862ba3143619ccd8ab66 feat(web): wire server sessions, Origin and CSRF checks (completes 88a6af2)",
+        "88a6af20fe3815728ca70c2d2228ee3788a98812 feat(web): server sessions with Origin and CSRF checks"
+      ]
+    },
+    {
+      "ref": "refs/heads/backup/v0.2-architecture-pre-resplit",
+      "sha": "09ca47ec8b4f746d40ef4d1fcb56d6ddec8bf3f2",
+      "behind": 449,
+      "ahead": 5,
+      "contained": false,
+      "unique_commits": [
+        "09ca47ec8b4f746d40ef4d1fcb56d6ddec8bf3f2 fix(store): stop creators whose caller gave up and close the second A5 review",
+        "67a4d4991a3b7482969095f3eecb45afd536c6de fix(store): import only from the shared data directory and report inconsistent v0.1 libraries",
+        "8c0e20d981eddbb01174ee3898d0c8e48292b49e fix(store): give the import one absolute path and open its scratch files by name",
+        "44aac74ead55ef0def26d3f0f76ae23cff8c5421 feat(native): open one library everywhere, import v0.1 libraries on first open and remove sqlx",
+        "301ed545dc4830cd2e68ee0a66911595f518cea5 test(store): cover repeated 304 and failure commits, re-added subscriptions and concurrent tickets"
+      ]
+    },
+    {
+      "ref": "refs/heads/claude/wonderful-engelbart-fdac91",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "behind": 520,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/codex/integration-final-20261023",
+      "sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "behind": 133,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/codex/native-back-policy",
+      "sha": "bfe29fe64475716ae9c270fcdef0841692c7a61b",
+      "behind": 0,
+      "ahead": 4,
+      "contained": false,
+      "unique_commits": [
+        "bfe29fe64475716ae9c270fcdef0841692c7a61b docs: consolidate status and archive historical handoffs",
+        "62113c4fc181e245bc077dcd46eda56a969d7b96 refactor(app): extract native back navigation policy",
+        "faf4c21102de25de5d6cbaf77e97d2706e5a8856 docs: hand off native preparation to E drive worktree",
+        "a641cee1ab4b754a01eb64241ccbe95a0c4b111b docs: plan next native back-navigation extraction"
+      ]
+    },
+    {
+      "ref": "refs/heads/codex/native-main-integration",
+      "sha": "2312dd0ec3a5e2bd83da365f3342a3adae737428",
+      "behind": 24,
+      "ahead": 5,
+      "contained": false,
+      "unique_commits": [
+        "2312dd0ec3a5e2bd83da365f3342a3adae737428 docs: record PR 40 ownership handoff",
+        "9a6700fc99b1bce9fd58fbdb6ea7200120709478 refactor(ui): encapsulate settings edit and request ownership",
+        "03b4dbd9ac7ebe205820ba9ca5657a6404d5a05a test: validate native main integration and clean merged branches",
+        "bb72bde042128644a7b8e0b29ba9013caed5a118 merge: retain latest directory and secondary page surfaces",
+        "7cd533bcf3378645eb370bd21e37b55424fab396 merge: adapt native UI preparation to current Backend architecture"
+      ]
+    },
+    {
+      "ref": "refs/heads/codex/parse-image-performance",
+      "sha": "22c5d44b27d146eed4aeb90ee7796162c205ce2c",
+      "behind": 48,
+      "ahead": 4,
+      "contained": false,
+      "unique_commits": [
+        "22c5d44b27d146eed4aeb90ee7796162c205ce2c docs: audit remaining branches and active work divergence",
+        "1d3d1213b0e789d913f686d53846699c99744a45 docs: record approved branch cleanup",
+        "a92ed16c08eec5815600211cad612c063bf06b8c docs: record merge receipt branch push",
+        "4c1956a899ef54104b61b97d225a2e506e57b754 docs: record verified PR 38 merge"
+      ]
+    },
+    {
+      "ref": "refs/heads/codex/pr40-finalize-20261029",
+      "sha": "6117a353e398a96c7bf1488df221d7e5ff01f924",
+      "behind": 10,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/codex/pr40-main-integration",
+      "sha": "4101520c33266026747db867c33e2b13baea3d23",
+      "behind": 0,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/feat/reader-mathml",
+      "sha": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+      "behind": 520,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/feat/reading-workspace-20261024",
+      "sha": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+      "behind": 463,
+      "ahead": 2,
+      "contained": false,
+      "unique_commits": [
+        "020f9d4031febc709cf1fdca2e7360698ba19f26 docs: sync automation-first testing guidance to primary checkout",
+        "418801f8cfc4a10cea5a77cce94b42e9232c83e4 docs: record native preparation branch push and CI"
+      ]
+    },
+    {
+      "ref": "refs/heads/fix/feed-proxy-content-isolation",
+      "sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+      "behind": 556,
+      "ahead": 4,
+      "contained": false,
+      "unique_commits": [
+        "9dd7517d012fc90c85243c1ede7ba629ee24bddc Merge main into feed-proxy isolation for combined validation",
+        "e17a03e6d4a07c8f2fa3cd2998447e926c32c9ef docs: clarify the proxy 304 fixture evidence boundary",
+        "e2df98bd8dd7d93df5d8ce9c6f5339accd5ed6f9 test(web): close only the proxy fixture input during cleanup",
+        "936bce15e5f01e7d5ec3834f005f061f790d8f4f fix(web): sandbox untrusted feed proxy documents"
+      ]
+    },
+    {
+      "ref": "refs/heads/investigate/directory-scroll-20261007",
+      "sha": "d9e157762b76cb254d4fb0c3d239cac3eeb674bb",
+      "behind": 555,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/main",
+      "sha": "4101520c33266026747db867c33e2b13baea3d23",
+      "behind": 0,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/heads/refactor/application-usecases-step1",
+      "sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421",
+      "behind": 986,
+      "ahead": 1,
+      "contained": false,
+      "unique_commits": [
+        "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421 refactor: centralize application use cases for subscriptions and refresh"
+      ]
+    },
+    {
+      "ref": "refs/heads/v0.2-architecture",
+      "sha": "b749514209d10397287792ada4e35cbbb858f856",
+      "behind": 202,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/audit/architecture-scan",
+      "sha": "b038077169418ac9dcc377fb1278b457276ac8bd",
+      "behind": 988,
+      "ahead": 1,
+      "contained": false,
+      "unique_commits": [
+        "b038077169418ac9dcc377fb1278b457276ac8bd docs: add architecture review and refactor roadmap"
+      ]
+    },
+    {
+      "ref": "refs/remotes/origin/codex/integration-final-20261023",
+      "sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+      "behind": 133,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/codex/native-ui-preparation-20261029",
+      "sha": "adb7c5af3b802bafa117e357f0e605372435fa40",
+      "behind": 5,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/codex/parse-image-performance",
+      "sha": "a92ed16c08eec5815600211cad612c063bf06b8c",
+      "behind": 48,
+      "ahead": 2,
+      "contained": false,
+      "unique_commits": [
+        "a92ed16c08eec5815600211cad612c063bf06b8c docs: record merge receipt branch push",
+        "4c1956a899ef54104b61b97d225a2e506e57b754 docs: record verified PR 38 merge"
+      ]
+    },
+    {
+      "ref": "refs/remotes/origin/feat/reading-workspace-20261024",
+      "sha": "30321e5b0643fbeabb90d4db14cde52220305ddb",
+      "behind": 75,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/fix/feed-proxy-content-isolation",
+      "sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc",
+      "behind": 556,
+      "ahead": 4,
+      "contained": false,
+      "unique_commits": [
+        "9dd7517d012fc90c85243c1ede7ba629ee24bddc Merge main into feed-proxy isolation for combined validation",
+        "e17a03e6d4a07c8f2fa3cd2998447e926c32c9ef docs: clarify the proxy 304 fixture evidence boundary",
+        "e2df98bd8dd7d93df5d8ce9c6f5339accd5ed6f9 test(web): close only the proxy fixture input during cleanup",
+        "936bce15e5f01e7d5ec3834f005f061f790d8f4f fix(web): sandbox untrusted feed proxy documents"
+      ]
+    },
+    {
+      "ref": "refs/remotes/origin/fix/migration-opml-validation",
+      "sha": "3f95bb3e166672bb06edf8d6a178c11ac79cc90e",
+      "behind": 598,
+      "ahead": 4,
+      "contained": false,
+      "unique_commits": [
+        "3f95bb3e166672bb06edf8d6a178c11ac79cc90e fix(import): replay URL and migration hardening on current main",
+        "836835ca411dc572bf00073ce26b2a5559a819ce fix(import): replay migration and OPML hardening on current main",
+        "a4d4e18ef1d911ef7dcdc84574ece685b54197ec fix(import): replay migration and OPML hardening on current main",
+        "643d16f259727146a50ca88536875b67be68d9b0 fix(import): replay migration and OPML hardening on current main"
+      ]
+    },
+    {
+      "ref": "refs/remotes/origin/investigate/directory-scroll-20261007",
+      "sha": "bfd2f3b6ce056d1a6617323fb60b02c6541b0b88",
+      "behind": 130,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/main",
+      "sha": "4101520c33266026747db867c33e2b13baea3d23",
+      "behind": 0,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/refactor/application-usecases-step1",
+      "sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421",
+      "behind": 986,
+      "ahead": 1,
+      "contained": false,
+      "unique_commits": [
+        "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421 refactor: centralize application use cases for subscriptions and refresh"
+      ]
+    },
+    {
+      "ref": "refs/remotes/origin/v0.2-architecture",
+      "sha": "b749514209d10397287792ada4e35cbbb858f856",
+      "behind": 202,
+      "ahead": 0,
+      "contained": true,
+      "unique_commits": []
+    },
+    {
+      "ref": "refs/remotes/origin/zheye-mainline-stabilization",
+      "sha": "c03c79d214b09c06251a579f997f86f8d4e7ffc3",
+      "behind": 986,
+      "ahead": 6,
+      "contained": false,
+      "unique_commits": [
+        "c03c79d214b09c06251a579f997f86f8d4e7ffc3 docs: finalize validation matrix and test verification notes",
+        "d2dc005d7aff04ab9430818130aef5959308141e fix: resolve html rendering, paste input, and web startup regressions",
+        "d8a2ca092e2b72af4ada0d214e14ba554a13cadc refactor: align web subscription flow with shared services",
+        "1e933bd5f665f9b56ccaf8c2d891a57f83d12e3d refactor: route web config exchange through shared import export service",
+        "b47067666a99059948d5fb9f205551c13ba3df32 refactor: route web refresh through shared refresh service",
+        "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421 refactor: centralize application use cases for subscriptions and refresh"
+      ]
+    }
+  ],
+  "cleanup_plan": {
+    "review_head": "bfe29fe64475716ae9c270fcdef0841692c7a61b",
+    "main": "4101520c33266026747db867c33e2b13baea3d23",
+    "deletions": [
+      {
+        "kind": "local",
+        "name": "audit/architecture-scan",
+        "ref": "refs/heads/audit/architecture-scan",
+        "expected_sha": "b038077169418ac9dcc377fb1278b457276ac8bd"
+      },
+      {
+        "kind": "local",
+        "name": "backup/v0.2-architecture-pre-c2-squash",
+        "ref": "refs/heads/backup/v0.2-architecture-pre-c2-squash",
+        "expected_sha": "bde2502c3018739b925d9348fff121fd58cb6bfc"
+      },
+      {
+        "kind": "local",
+        "name": "backup/v0.2-architecture-pre-resplit",
+        "ref": "refs/heads/backup/v0.2-architecture-pre-resplit",
+        "expected_sha": "09ca47ec8b4f746d40ef4d1fcb56d6ddec8bf3f2"
+      },
+      {
+        "kind": "local",
+        "name": "codex/native-main-integration",
+        "ref": "refs/heads/codex/native-main-integration",
+        "expected_sha": "2312dd0ec3a5e2bd83da365f3342a3adae737428"
+      },
+      {
+        "kind": "local",
+        "name": "codex/parse-image-performance",
+        "ref": "refs/heads/codex/parse-image-performance",
+        "expected_sha": "22c5d44b27d146eed4aeb90ee7796162c205ce2c"
+      },
+      {
+        "kind": "local",
+        "name": "codex/pr40-finalize-20261029",
+        "ref": "refs/heads/codex/pr40-finalize-20261029",
+        "expected_sha": "6117a353e398a96c7bf1488df221d7e5ff01f924"
+      },
+      {
+        "kind": "local",
+        "name": "codex/pr40-main-integration",
+        "ref": "refs/heads/codex/pr40-main-integration",
+        "expected_sha": "4101520c33266026747db867c33e2b13baea3d23"
+      },
+      {
+        "kind": "local",
+        "name": "fix/feed-proxy-content-isolation",
+        "ref": "refs/heads/fix/feed-proxy-content-isolation",
+        "expected_sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc"
+      },
+      {
+        "kind": "local",
+        "name": "investigate/directory-scroll-20261007",
+        "ref": "refs/heads/investigate/directory-scroll-20261007",
+        "expected_sha": "d9e157762b76cb254d4fb0c3d239cac3eeb674bb"
+      },
+      {
+        "kind": "local",
+        "name": "refactor/application-usecases-step1",
+        "ref": "refs/heads/refactor/application-usecases-step1",
+        "expected_sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421"
+      },
+      {
+        "kind": "local",
+        "name": "v0.2-architecture",
+        "ref": "refs/heads/v0.2-architecture",
+        "expected_sha": "b749514209d10397287792ada4e35cbbb858f856"
+      },
+      {
+        "kind": "remote",
+        "name": "audit/architecture-scan",
+        "ref": "refs/heads/audit/architecture-scan",
+        "expected_sha": "b038077169418ac9dcc377fb1278b457276ac8bd"
+      },
+      {
+        "kind": "remote",
+        "name": "codex/integration-final-20261023",
+        "ref": "refs/heads/codex/integration-final-20261023",
+        "expected_sha": "936930f7384fa91ebeb3acae1ec1513fc1cff097"
+      },
+      {
+        "kind": "remote",
+        "name": "codex/native-ui-preparation-20261029",
+        "ref": "refs/heads/codex/native-ui-preparation-20261029",
+        "expected_sha": "adb7c5af3b802bafa117e357f0e605372435fa40"
+      },
+      {
+        "kind": "remote",
+        "name": "codex/parse-image-performance",
+        "ref": "refs/heads/codex/parse-image-performance",
+        "expected_sha": "a92ed16c08eec5815600211cad612c063bf06b8c"
+      },
+      {
+        "kind": "remote",
+        "name": "feat/reading-workspace-20261024",
+        "ref": "refs/heads/feat/reading-workspace-20261024",
+        "expected_sha": "30321e5b0643fbeabb90d4db14cde52220305ddb"
+      },
+      {
+        "kind": "remote",
+        "name": "fix/feed-proxy-content-isolation",
+        "ref": "refs/heads/fix/feed-proxy-content-isolation",
+        "expected_sha": "9dd7517d012fc90c85243c1ede7ba629ee24bddc"
+      },
+      {
+        "kind": "remote",
+        "name": "fix/migration-opml-validation",
+        "ref": "refs/heads/fix/migration-opml-validation",
+        "expected_sha": "3f95bb3e166672bb06edf8d6a178c11ac79cc90e"
+      },
+      {
+        "kind": "remote",
+        "name": "investigate/directory-scroll-20261007",
+        "ref": "refs/heads/investigate/directory-scroll-20261007",
+        "expected_sha": "bfd2f3b6ce056d1a6617323fb60b02c6541b0b88"
+      },
+      {
+        "kind": "remote",
+        "name": "refactor/application-usecases-step1",
+        "ref": "refs/heads/refactor/application-usecases-step1",
+        "expected_sha": "89d4c3fe0414b64d5cb27fbcc3a3bdff51cbe421"
+      },
+      {
+        "kind": "remote",
+        "name": "v0.2-architecture",
+        "ref": "refs/heads/v0.2-architecture",
+        "expected_sha": "b749514209d10397287792ada4e35cbbb858f856"
+      },
+      {
+        "kind": "remote",
+        "name": "zheye-mainline-stabilization",
+        "ref": "refs/heads/zheye-mainline-stabilization",
+        "expected_sha": "c03c79d214b09c06251a579f997f86f8d4e7ffc3"
+      }
+    ],
+    "stale_worktree_ids": [
+      "b2-baseline",
+      "worktree",
+      "worktree1",
+      "worktree2"
+    ],
+    "retain_local": [
+      "main",
+      "codex/native-back-policy",
+      "feat/reading-workspace-20261024",
+      "claude/wonderful-engelbart-fdac91",
+      "feat/reader-mathml",
+      "codex/integration-final-20261023"
+    ],
+    "retain_remote": [
+      "main"
+    ]
+  },
+  "imports": [
+    {
+      "source_ref": "codex/native-main-integration",
+      "source_commit": "2312dd0ec3a5e2bd83da365f3342a3adae737428",
+      "source_path": "docs/handoffs/2026-10-29-native-main-integration.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-29-native-main-integration.md",
+      "original_blob": "a9c8dd80e61b31dd760d7d9c4de1113e2e9553ff"
+    },
+    {
+      "source_ref": "codex/native-main-integration",
+      "source_commit": "2312dd0ec3a5e2bd83da365f3342a3adae737428",
+      "source_path": "docs/handoffs/2026-10-29-settings-cohesion.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-29-settings-cohesion.md",
+      "original_blob": "41851be3fc4b56a0a9da35a2cd93ef886676882d"
+    },
+    {
+      "source_ref": "feat/reading-workspace-20261024",
+      "source_commit": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+      "source_path": "docs/handoffs/2026-10-29-native-preparation-push-ci.md",
+      "destination": "docs/handoffs/archive/2026-10/2026-10-29-native-preparation-push-ci.md",
+      "original_blob": "7fdf8e87011d5d6d80bef92b551aea73efac41f3"
+    },
+    {
+      "source_ref": "codex/native-main-integration",
+      "source_commit": "2312dd0ec3a5e2bd83da365f3342a3adae737428",
+      "source_path": "docs/testing/evidence/2026-10-29-native-main-integration/result.json",
+      "destination": "docs/testing/evidence/2026-10-29-native-main-integration/result.json",
+      "original_blob": "7a4bc029750cd6407d0752180c8395605b6d4125"
+    },
+    {
+      "source_ref": "codex/native-main-integration",
+      "source_commit": "2312dd0ec3a5e2bd83da365f3342a3adae737428",
+      "source_path": "docs/testing/evidence/2026-10-29-settings-cohesion/result.json",
+      "destination": "docs/testing/evidence/2026-10-29-settings-cohesion/result.json",
+      "original_blob": "d059d5ba61271ed5b40c7043174e655c352ebd0c"
+    }
+  ],
+  "backup": {
+    "path": "E:\\gitclone\\RSS-Reader-backups\\2026-10-30-branch-consolidation",
+    "bundle_sha256": "717F6DCE467E5B9BCD8C30AD0D81F1C689BA652A2CD862A71A30B8E5434224C4",
+    "bundle_bytes": 12290129
+  },
+  "stale_indexes": [
+    {
+      "id": "b2-baseline",
+      "gitdir": "E:/gitclone/RSS-Reader/target/audit-20261009/b2-baseline/.git",
+      "head": "6c8c95ca1483cfd4127ef875aa1144011ee2086b",
+      "staged_changes": []
+    },
+    {
+      "id": "worktree",
+      "gitdir": "E:/gitclone/RSS-Reader/target/directory-scroll-20261007/worktree/.git",
+      "head": "ref: refs/heads/investigate/directory-scroll-20261007",
+      "staged_changes": []
+    },
+    {
+      "id": "worktree1",
+      "gitdir": "E:/gitclone/RSS-Reader/target/feed-proxy-isolation-20261007/worktree/.git",
+      "head": "ref: refs/heads/fix/feed-proxy-content-isolation",
+      "staged_changes": []
+    },
+    {
+      "id": "worktree2",
+      "gitdir": "E:/gitclone/RSS-Reader/target/audit-20261009/worktree/.git",
+      "head": "ref: refs/heads/v0.2-architecture",
+      "staged_changes": []
+    }
+  ],
+  "stale_metadata_files_verified": 29,
+  "preservation": {
+    "primary_head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "primary_status_count": 40,
+    "primary_paths_verified": 40,
+    "primary_file_hashes_verified": 18,
+    "primary_status_and_recorded_hashes_unchanged": true,
+    "other_worktrees": [
+      {
+        "path": "E:/gitclone/RSS-Reader",
+        "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+        "status_count": 40,
+        "unchanged": true
+      },
+      {
+        "path": "E:/gitclone/RSS-Reader/.claude/worktrees/determined-mestorf-560b15",
+        "head": "e4c4a8260d5890a4da99713deb69185cad4cd2bf",
+        "status_count": 0,
+        "unchanged": true
+      },
+      {
+        "path": "E:/gitclone/RSS-Reader/.claude/worktrees/nostalgic-perlman-51793d",
+        "head": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+        "status_count": 0,
+        "unchanged": true
+      },
+      {
+        "path": "E:/gitclone/RSS-Reader/.claude/worktrees/reader-mathml",
+        "head": "73f8d6ee94f2926ac49d8e2f4f6b2e3a30f43c3b",
+        "status_count": 0,
+        "unchanged": true
+      },
+      {
+        "path": "E:/gitclone/RSS-Reader/.claude/worktrees/youthful-curie-5447de",
+        "head": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+        "status_count": 0,
+        "unchanged": true
+      },
+      {
+        "path": "E:/gitclone/RSS-Reader-integration-20261023",
+        "head": "936930f7384fa91ebeb3acae1ec1513fc1cff097",
+        "status_count": 0,
+        "unchanged": true
+      }
+    ],
+    "note": "Directory entries were compared by Git status, not recursively hashed; ignored files were not deleted or enumerated."
+  },
+  "tests": [
+    {
+      "command": "cargo test -p rssr-domain -p rssr-application --locked",
+      "passed": 100,
+      "failed": 0,
+      "ignored": 0,
+      "log": "target/branch-consolidation-20261030/domain-application-tests.log",
+      "sha256": "4F331EB0DDD43F72E795500FB7BDDDE313A312C08362E029BC43C21A49A3EBE9"
+    },
+    {
+      "command": "cargo test -p rssr-infra --locked --test test_library_refresh_contract_harness --test test_library_subscription_contract_harness --test test_library_config_exchange_contract_harness --test test_opml_interop --test test_library_import",
+      "passed": 48,
+      "failed": 0,
+      "ignored": 0,
+      "log": "target/branch-consolidation-20261030/infra-contract-tests.log",
+      "sha256": "E7AD9EDF4A3DD6388289DB26558C86929AC7D0A41FCFABBA9CAD219B5A6C8480"
+    },
+    {
+      "command": "cargo test -p rssr-infra --locked --lib store::migrate",
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0,
+      "log": "target/branch-consolidation-20261030/migrate-tests.log",
+      "sha256": "A4B16C0447F2950D42DE67351B9742DA5E62C48066492B09BEC366BAD408D613"
+    },
+    {
+      "command": "cargo test -p rssr-app --locked",
+      "passed": 373,
+      "failed": 0,
+      "ignored": 1,
+      "log": "target/branch-consolidation-20261030/app-tests.log",
+      "sha256": "6AD0457BE577EBB1A7477E83FFEDF5DF41E49D480712A997BD5F746B73DD34EA"
+    }
+  ],
+  "verification": {
+    "remote_expected_sha_atomic_delete": true,
+    "local_expected_sha_atomic_delete": true,
+    "retained_refs_unchanged": true,
+    "local_and_remote_tags_unchanged": true,
+    "historical_json_blobs_equal": true,
+    "documentation_check": {
+      "markdown_files": 321,
+      "local_links": 1463,
+      "anchors": 15,
+      "archived_handoffs": 201,
+      "json_files": [
+        "docs/testing/evidence/2026-10-29-native-main-integration/result.json",
+        "docs/testing/evidence/2026-10-29-settings-cohesion/result.json",
+        "docs/testing/evidence/2026-10-30-branch-consolidation/result.json"
+      ],
+      "errors": []
+    }
+  },
+  "limitations": [
+    "No new GUI, native-host, Android device, wasm build or CI acceptance in this batch.",
+    "Native back-policy Windows/Android host acceptance remains outstanding.",
+    "Current OPML upsert and Settings mainline semantics retained; no claim all historical code was cherry-picked.",
+    "Bundle contains Git commits/refs, not uncommitted files."
+  ],
+  "execution_notes": [
+    "First local stdin transaction rejected CRLF at start without ref changes; repeated SHA checks and LF UTF-8 input succeeded.",
+    "Primary status comparison uses matching porcelain mode; expanded untracked mode verified separately."
+  ],
+  "logs_directory": "target/branch-consolidation-20261030",
+  "commit_subject": "docs: retire audited historical branches"
+}

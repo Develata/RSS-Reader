@@ -33,7 +33,7 @@
 - 只读检查本机历史 fixture：5000 篇固定 ID/标题、6 个订阅，`archive_after_months = 0`；检查前后数据库 SHA-256 相同。
 - CSS 导入经 `apply_custom_css_from_raw` 保存整份草稿；`SettingsService::save` 调用 domain 校验，归档阈值 0 被拒绝。因此原清单直接执行 W-FILE-01，不能得到它要求的成功持久化结果。
 - 补入与既有 Settings 运行器一致的顺序：先确认 EXE 同目录的复制数据库和独立 profile，启动前确认 fixture 身份及本次独占的回环来源，再核对实际 Entries 页面；仅对旧样本中的 0 在隔离 UI 设置为 120 并保存、只读确认，最后记录文件场景的基线。准备差异单列，不能放宽生产校验或改源样本。
-- 明确 Windows 数据目录取自 EXE 位置；只改工作目录或 profile 不会隔离数据库。依据：[sqlite_native.rs](../../crates/rssr-infra/src/db/sqlite_native.rs)、[Settings 验收准备](../../scripts/browser/rssr_settings_save_acceptance.cjs)、[theme_apply.rs](../../crates/rssr-app/src/pages/settings_page/themes/theme_apply.rs)、[validation.rs](../../crates/rssr-domain/src/validation.rs)。
+- 明确 Windows 数据目录取自 EXE 位置；只改工作目录或 profile 不会隔离数据库。依据：[历史 sqlite_native.rs](https://github.com/Develata/RSS-Reader/blob/1d27eae408775f3f56b23cc5f059c5e67ce57f23/crates/rssr-infra/src/db/sqlite_native.rs)、[历史 Settings 验收准备](https://github.com/Develata/RSS-Reader/blob/1d27eae408775f3f56b23cc5f059c5e67ce57f23/scripts/browser/rssr_settings_save_acceptance.cjs)、[theme_apply.rs](../../crates/rssr-app/src/pages/settings_page/themes/theme_apply.rs)、[validation.rs](../../crates/rssr-domain/src/validation.rs)。前两项已在主线退役，链接固定到本记录的审查基线，仅供追溯。
 
 ## 验证与验收
 

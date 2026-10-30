@@ -42,7 +42,7 @@
 
 同一只读子 agent 再次给出 **PASS，无新增 P0–P3**：修复候选 `780a9f8`、main merge `bd59d2f` 与 MathML merge `699dcf6` 的 tree 均为 `bb187bda01cca1c12b60d2258b86b7f6c917a3ee`，父关系正确。去向清单的 98/58 路径无遗漏、重复、状态错误或不存在的目标；旧 host/sqlx/BrowserStore/proxy 和废弃脚本没有恢复。补充的阶段 D 文档修正与当前源码一致。
 
-复核后才将 `699dcf6` 快进推到远端 main。公网部署和合并后工作流结果见 [最终交接](../handoffs/2026-10-23-integration-merge-pages.md)；本报告不代替它们，也不授权 tag 或版本发布。
+复核后才将 `699dcf6` 快进推到远端 main。公网部署和合并后工作流结果见 [最终交接](../handoffs/archive/2026-10/2026-10-23-integration-merge-pages.md)；本报告不代替它们，也不授权 tag 或版本发布。
 
 ## 公网验收驱动增量复审
 

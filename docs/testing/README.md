@@ -22,7 +22,8 @@
 - [手工回归测试清单](./manual-regression.md)
 - [原生旧库升级验收](./native-upgrade-verification.md)
 - [原生宿主阅读基线](./native-reading-baseline.md)：Windows / Android 的隔离数据、来源身份和测量边界。
-- [正文解析与图片队列证据](./evidence/2026-10-28-parse-image/README.md)：固定夹具耗时、输出一致性及有界队列回归；发布后的独立工作分支。
+- [正文解析与图片队列证据](./evidence/2026-10-28-parse-image/README.md)：固定夹具耗时、输出一致性及有界队列回归；实现已通过 PR #38 合入 main，原始测量仍绑定所记源码。
+- [返回策略本批证据](../handoffs/2026-10-29-native-back-policy.md)：Rust / Web 验证与原生编译已完成，实际 Windows / Android 宿主验收待补，不借用旧包通过结论。
 - [发布 UI runner](./release-ui-runner.md)：统一入口、构建复用与阶段结果。
 
 ### Web / 浏览器 smoke

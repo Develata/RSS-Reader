@@ -1,6 +1,6 @@
 # 文章列表目录：手动浏览与自动跟随
 
-确认日期：2026-10-03；主线核对日期：2026-10-28。手动浏览、自动跟随、文章层级与窗口化已进入 main `a9608056`。原始实施见[历史交接](../handoffs/archive/2026-10/2026-10-03-directory-follow-rust.md)，后续集成和验收见[主线集成记录](../handoffs/2026-10-27-pr-integration.md)与[目录边界回归](../handoffs/2026-10-27-directory-window-boundaries.md)。
+确认日期：2026-10-03；主线核对日期：2026-10-28。手动浏览、自动跟随、文章层级与窗口化已进入 main `a9608056`。原始实施见[历史交接](../handoffs/archive/2026-10/2026-10-03-directory-follow-rust.md)，后续集成和验收见[主线集成记录](../handoffs/archive/2026-10/2026-10-27-pr-integration.md)与[目录边界回归](../handoffs/archive/2026-10/2026-10-27-directory-window-boundaries.md)。
 
 ## 范围与目的
 

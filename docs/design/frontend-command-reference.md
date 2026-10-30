@@ -118,6 +118,8 @@ Reader 根节点的 `data-state` 由 Rust 中的当前文章身份、内容完�
 - Android 系统返回沿用现有的 dismiss 优先路径：先关闭来源筛选、目录浮层或来源编辑，之后才返回上一页；来源编辑保存中消耗返回操作并等待结果。Web 的 Esc／取消行为保持不变。实机覆盖范围见本轮交接，编译与状态测试不替代系统返回验收。
 
 Android 外壳通过 `OnBackPressedDispatcher` 将系统返回经 JNI 放入有界输入队列，Rust 页面在自身 UI 任务中执行上述 dismiss / history / fallback 规则。页面卸载仅注销自己的监听代次，不能清掉新页面的监听；积压的重复输入合并。返回前捕获的忙碌标记使用跨线程共享的原子状态，因为 WebView 点击回调与 Dioxus 异步任务可能在不同线程执行；完成、超时或取消都释放标记，不能让下一次返回永久失效。WebView 不消费片段历史，Java 线程不读写 Dioxus 状态。根页无可返回目标时只把任务移入后台，不通过销毁 Activity 模拟返回。
+
+返回选择与首页提示由 `hooks/use_mobile_back_navigation/policy.rs` 私有策略管理，hook 只收集事实、发布显示投影和执行副作用。首页忽略历史，首次系统返回显示提示，5 秒内再次返回才退后台；超时后重新开始。提示代次拒绝旧计时器，恢复前台清除提示。工具栏保持同步导航，页面浮层及保存门禁仍由原页面拥有；这次模块提取不增加公开命令或宿主协议。
 - `stats-grid` 中 `data-stat=feeds|entries|unread|archived` 是全局统计；归档计数为手动与自动归档的并集，不重复计数。
 
 `library.sqlite3` 的增量迁移 `0002_manual_archive.sql` 增加 `entries.is_archived`；`custom_title` 使用 v0.2 基线既有字段。已发布基线与根目录 v0.1 历史迁移保持原样。原生、正式 Web 与 Pages 共用 SQL 事务；批量写入仅处理已验证的显式 ID，单次提交失败整批回滚。来源编辑保持 feed ID，地址变化时清除旧缓存验证器并提升 generation，迟到的旧刷新不能覆盖新地址；工作区已选 URL 同步迁移。配置格式未增字段：JSON `title` 和 OPML 显示名导入时作为自定义名，刷新不会覆盖；导入不覆盖已有的远端原名，新导入来源在抓取前不伪造远端原名。重新导入后仍可用“使用原名”恢复已有远端名称。

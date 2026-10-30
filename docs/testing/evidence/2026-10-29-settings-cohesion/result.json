@@ -1,0 +1,183 @@
+{
+  "date": "2026-10-29",
+  "base_commit": "03b4dbd9ac7ebe205820ba9ca5657a6404d5a05a",
+  "pr40_observed_head": "72e0516bb809ce213b8b9decbdcc6e9a2fc4673c",
+  "branch": "codex/native-main-integration",
+  "ownership": "Local follow-up; PR 40 and other worktrees not modified",
+  "tests": {
+    "settings_passed": 64,
+    "workspace_passed": 1065,
+    "workspace_failed": 0,
+    "workspace_ignored": 4,
+    "workspace_suites": 63,
+    "new_rule_tests": 5,
+    "fmt": "pass",
+    "clippy": "pass",
+    "build_jobs": 2,
+    "dev_test_debug_symbols": 0
+  },
+  "builds": {
+    "native_cargo": "pass",
+    "native_exe_sha256": "1f3f6ab25c63ee2ddbc2bafa09868049058483ae3941593e02445456146fc43b",
+    "web_debug": "pass",
+    "web_cli_warning": "dx 0.7.10 vs locked Dioxus 0.7.9; successful exit and actual browser acceptance"
+  },
+  "browser": {
+    "page_errors": 0,
+    "cases": [
+      {
+        "name": "numericFeedback",
+        "width": 1536,
+        "pass": true
+      },
+      {
+        "name": "saveOverlay",
+        "width": 1536,
+        "pass": true
+      },
+      {
+        "name": "loadOverlay",
+        "width": 1536,
+        "pass": true
+      },
+      {
+        "name": "themeFiles",
+        "width": 1536,
+        "pass": true
+      },
+      {
+        "name": "feedDialogGate",
+        "width": 1536,
+        "pass": true
+      },
+      {
+        "name": "numericFeedback",
+        "width": 390,
+        "pass": true
+      },
+      {
+        "name": "saveOverlay",
+        "width": 390,
+        "pass": true
+      },
+      {
+        "name": "loadOverlay",
+        "width": 390,
+        "pass": true
+      },
+      {
+        "name": "themeFiles",
+        "width": 390,
+        "pass": true
+      },
+      {
+        "name": "feedDialogGate",
+        "width": 390,
+        "pass": true
+      }
+    ],
+    "explicitly_allowed_debug_devtools_404": 14,
+    "status": "passed",
+    "expected_http_400": 2
+  },
+  "native": {
+    "webview_version": "156.0.4314.50",
+    "console_errors": 0,
+    "checks": [
+      {
+        "name": "locked interpreter decoder exists",
+        "pass": true
+      },
+      {
+        "name": "startup preserves BOM before page edits",
+        "pass": true
+      },
+      {
+        "name": "ordinary text applies and preserves every field",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 1280",
+        "pass": true
+      },
+      {
+        "name": "no horizontal overflow 390",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 0",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 1",
+        "pass": true
+      },
+      {
+        "name": "BOM/Unicode field and applied-style alignment 2",
+        "pass": true
+      },
+      {
+        "name": "actual BOM-prefixed Rust batches were decoded",
+        "pass": true
+      },
+      {
+        "name": "all BOM-prefixed tables are preserved",
+        "pass": true
+      },
+      {
+        "name": "remount and subsequent Save remain usable",
+        "pass": true
+      },
+      {
+        "name": "all 72 flags and 6 subscriptions unchanged",
+        "pass": true
+      },
+      {
+        "name": "no page or console errors",
+        "pass": true
+      }
+    ],
+    "page_errors": 0,
+    "status": "pass",
+    "fixture": {
+      "entries": 72,
+      "visibleChecked": 50,
+      "feeds": 6
+    }
+  },
+  "limitations": [
+    "No Android device or compile acceptance in this follow-up",
+    "No release build, OS picker, real IME, touch or live WebDAV test",
+    "Local branch results are not PR 40 CI evidence"
+  ],
+  "logs": [
+    {
+      "path": "settings-tests.log",
+      "sha256": "0260afbe16f48b9974a6e819258c8ee9af27f81f0149ab2e4948ad182b4e56b1"
+    },
+    {
+      "path": "workspace-tests.log",
+      "sha256": "81c014dcfd008fbcbed4fc38d6db9f18d86fe6c6a1cfac359629f6c773262a59"
+    },
+    {
+      "path": "clippy.log",
+      "sha256": "e12af11b08ccfec42ec3b2a3d4532d22c47cc2f1f9d85115dcf05c033b1bcdb8"
+    },
+    {
+      "path": "native-build.log",
+      "sha256": "b62497d09f73fe7be7710d797f83aaf84aadbe5963a1095e371be7918c35f78c"
+    },
+    {
+      "path": "web-build.log",
+      "sha256": "a17e03a4c24f00e3b6710d8625a68c8ec16f7433a7111c0e9541f4ce7bd5216f"
+    },
+    {
+      "path": "browser/acceptance.json",
+      "sha256": "b34ee75d82002f987488d59e4221c1ce52b5ce2d3feb00e813a200962d0fc653"
+    },
+    {
+      "path": "native-transport/acceptance.json",
+      "sha256": "9084fbea8cb8f049b7b307c23c69a63d64ed9035ee098a7058e2e54457e44656"
+    }
+  ]
+}

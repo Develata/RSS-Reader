@@ -1,35 +1,41 @@
 # 维护状态
 
-整体核对日期：2026-10-28；目录原生复测与 PR #40 合并专项补充：2026-10-29。正式版本基线：`v0.2.1` → `dbfbf8965f4bdfa6463f33c50d5fbf6c2fcd15ee`；Rust / CSS 产品代码与此前专项验收的 `a9608056` 相同，正式附件另做身份与升级核验。本文件汇总当前事实，不替代具体设计契约或逐次验收证据；经源码核实的后续事项维护在[当前待办](./maintenance-backlog.md)。
+核对日期：2026-10-30。当前处于**原生界面接入前的模块化收口阶段**：页面交互与异步规则逐步独立为可测试的 Rust 模块，界面仍使用 Dioxus / WebView，尚未接入原生控件。文档整合、分支与旧工作树清理已完成；返回策略也已完成所列 Windows / Android 实际宿主验收，接下来是候选审查与整合，不继续扩大本批重构范围。
 
-## 主线与已发布版本
+本页只汇总当前事实；具体规则见[设计索引](./design/README.md)，未完成工作见[当前待办](./maintenance-backlog.md)，每次验证的版本和环境见[交接入口](./handoffs/README.md)。
 
-| 项目 | 当前事实 | 证据 |
+## 三个不同的版本状态
+
+| 范围 | 当前事实 | 证据与边界 |
 | --- | --- | --- |
-| 正式发布 | v0.2.1，2026-10-28 发布；14 个公开附件与实际 CI 文件及 GitHub SHA256 全部相符 | [Release](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1)、[正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md) |
-| 最近合并 | PR #35 文档与原生证据、#34 setup-python v7、#36 历史待办核实；各自合并前 37 项成功 / 1 项跳过 | [PR 收尾记录](./handoffs/2026-10-28-historical-followup-audit.md)、[PR #36](https://github.com/Develata/RSS-Reader/pull/36) |
-| 原生前置模块化（2026-10-29） | PR #40 已普通合并到 main `ad5e8f31`；最终 PR head `adb7c5af` 检查 37 项成功 / 1 项预期跳过，合并树与审查树一致；保留主线架构及逐字段设置保存，未发布新版本 | [最终审查与合并回执](./handoffs/2026-10-29-pr40-final-review-merge.md)、[PR #40](https://github.com/Develata/RSS-Reader/pull/40) |
-| 合并后主线检查（2026-10-29） | main `aa60c661` 的 CI 36/36 成功，Docker 4 项成功 / 1 项默认跳过；Linux 包 6 项、容器 9 项实际验收通过，未发布镜像。更早 CI 因 main 更新取消，未误记为测试通过 | [主线 CI/Docker 回执与边界](./handoffs/2026-10-29-pr40-main-ci-docker.md) |
-| 目录突跳专项补充（2026-10-29） | PR #43 已合并；在 `0692c924` 上完成 Windows 原生 9/9 验收、6/6 补充检查及系统滚轮交叉检查，原视频边界动作最大目录帧间位移 0px；未发布新版本 | [原生验收及范围](./handoffs/2026-10-29-directory-native-verification.md)、[顺序模型修正](./handoffs/2026-10-29-directory-reading-order.md) |
-| 发布基线自动化 | dbfbf896 的 CI、Pages、Docker 成功；Release 最终 13 项成功 / 1 项复用跳过，四平台 Web 包各 6 项、容器 9 项检查通过 | [CI](https://github.com/Develata/RSS-Reader/actions/runs/40681852013)、[Pages](https://github.com/Develata/RSS-Reader/actions/runs/40681852004)、[Docker](https://github.com/Develata/RSS-Reader/actions/runs/40681852052)、[Release](https://github.com/Develata/RSS-Reader/actions/runs/40683428344) |
-| 正式原生产物 | Windows 正式 GUI 启动、5000 篇单库升级及关闭通过；Android 正式 APK 在隔离模拟器覆盖安装、初始化与预置旧 schema 单库对照通过，APK/AAB 证书与 v0.2.0 相同 | [正式产物验收及边界](./handoffs/2026-10-28-v0.2.1-release.md)、[原生证据](./testing/evidence/2026-10-28-v0.2.1-release/native.json) |
-| 原生交互专项 | 此前 Windows 27 项、Android 真机 28 项，以及快捷键、重启偏好与 Windows v0.2.0 升级通过；Android 当时使用 debug 外壳，未把其结果当作正式 APK 全流程复测 | [此前验收及边界](./handoffs/2026-10-28-release-readiness.md)、[覆盖矩阵](./testing/release-ui-coverage-matrix.md) |
-| Penpot | rev 370：55 张画板及命名版本回读正常；桌面 / 手机目录代表抽查通过，未改设计 | [设计基准](./design/penpot-code-baseline.md)、[抽查证据](./testing/evidence/2026-10-28-release-readiness/penpot.json) |
-| 后续维护 | 正式产物身份待办 M03 已关闭；剩余 6 类维护事项按实测与风险推进 | [当前待办](./maintenance-backlog.md) |
+| 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
+| 最新 main | `4101520c`；本地 main 已快进到同一提交 | PR #38–#45 均已合并；[PR #38 回执](./handoffs/2026-10-29-parse-image-pr-ci.md)、[PR #40 最终审查](./handoffs/2026-10-29-pr40-final-review-merge.md)、[设计与目录整合](./handoffs/2026-10-29-completed-design-cleanup.md) |
+| 候选分支 | `codex/native-back-policy`，返回策略实现 `62113c4f`，基于上述 main；随后补文档与验收工具，产品代码未变 | 分支已获授权推送，尚未进入 main。Rust / Web 检查、原生构建和本次 Windows / Android 返回专项完成；两版本的 Windows 各 4 组、Android 各 6 组及 4 个采集子结果通过，13 + 9 组截图一致，见[实际宿主回执](./handoffs/2026-10-30-native-back-validation.md) |
 
-阅读工作区、目录和返回行为改进已进入 v0.2.1。发布成功与正式附件核验不等于所有设备、旧库和输入方式完成验收；平台覆盖限制见正式发布记录。
+main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
-## 当前维护重点
+## 已完成的主线整合
 
-1. HTML 的 Marker/属性慢点与后台图片轮转、候选载荷约束已在 `codex/parse-image-performance` 实现；2026-10-29 创建 [PR #38](https://github.com/Develata/RSS-Reader/pull/38)，`a8791026` 的远端检查 37 成功 / 1 预期跳过，见[CI 回执](./handoffs/2026-10-29-parse-image-pr-ci.md)。这是尚未合并、未发布的工作分支；实现与边界见[本轮记录](./handoffs/2026-10-28-parse-image-performance.md)、[处理预算](./design/reader-processing-budgets.md)，剩余单 token 预算、304 续排和规模观察继续列在[当前待办](./maintenance-backlog.md)。
-2. 真实 Android 旧库搬迁与正式签名包真机升级仍需专项验收；模拟器中的覆盖安装和预置 Windows 旧 schema 夹具不替代这两项。
-3. 系统 IME、辅助技术、macOS/Linux GUI 完整交互与其他设备覆盖按明确场景补验；其余历史段落继续逐批核实，归档不代表全部结案。
+- PR #38 已合入正文解析热点修复与后台图片队列约束，合并提交 `6e99706c`；不再是待合并的性能工作。单 token 取消、304 续排及规模观察等边界仍在[当前待办](./maintenance-backlog.md)。
+- PR #40 已合入 Entries 初始化、查询、写入与偏好，Reader 访问归属，Feeds 编辑与读取，以及 Settings 编辑、保存、异步回填等规则。保留七 crate、`Backend` / `LocalBackend`、rusqlite 单库、正式 Web 同源服务和 Settings 逐字段保存及 `stored → submitted → pending` 回填。
+- PR #39、#41–#45 已完成目录入口、固定标题、二级页面层级、主题预览、目录顺序及相关验收/文档整合。目录的 Windows 原生专项证据绑定 `0692c924`，见[原生复测](./handoffs/2026-10-29-directory-native-verification.md)。
+- 阅读位置、目录控制器与窗口、下拉刷新、快捷键、图片查看器已有 Rust 规则；继续复用这些模块，不建立全局浮层状态副本或通用页面框架。模块边界见[原生界面前置说明](./design/native-ui-preparation.md)。
 
-## 不应从历史结论推导的保证
+## 现在还要做什么
 
-- App 内的写入排序不提供跨浏览器或跨设备的操作序列保证。
-- Android 构建成功不等于真机全流程通过；已有设备验收只适用于其记录的包与场景。
-- Penpot 状态快照不模拟真实网络、持久化、滚动和所有状态组合。
-- 历史审查、旧分支通过结果、文档提交不能替代当前产品源码的验收。
+1. **审查返回策略候选并安排整合。** [10 月 30 日回执](./handoffs/2026-10-30-native-back-validation.md)已有 17 项 Rust 测试和真实 WebView2 / Android 15 真机证据，覆盖保存门禁、首页提示/恢复、采集失败/超时和取消。审批阻塞已解除；受控故障注入与普通操作分开记录。本批没有新增产品修复，新 PR 和合并仍须后续授权。
+2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留当前候选与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布。
+3. **后续工作按具体收益选择。** 原生控件接入尚未开始；没有批准 Shell 重构、渲染器替换、新 crate 或数据库迁移。旧库升级、更多设备与输入方式等持续维护事项保留在待办，不要求先完成所有历史风险才结束本批。
 
-最近的执行依据见[交接入口](./handoffs/README.md)；重新验证后更新本页的日期、基线及证据链接。
+## 分支与工作树快照
+
+截至清理及推送完成：**3 个本地分支、2 个工作树、2 个真实远端分支（main、codex/native-back-policy）**。不把 `origin/HEAD` 当作分支。此前的 4 条失效登记和本次 5 个旧工作树均已清理。
+
+保留 main、`codex/native-back-policy` 和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout `E:/gitclone/RSS-Reader` 的 40 条既有状态、暂存区和已记录文件散列保持原样；当前返回策略工作树继续保留。旧源码由已验证的 Git bundle 保全，4004 个历史验收文件、Claude 配置及 5 个 Linux 链接元数据另有独立备份，详见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
+
+## 验证结论的边界
+
+- 历史记录仅证明其中指定的源码、包、设备及场景；发布、构建、普通浏览器和真实原生宿主验收分开记录。
+- Android 正式签名包真机升级、真实旧数据搬迁，以及 macOS/Linux GUI、系统 IME、辅助技术和更广设备交互仍未全面覆盖。
+- Penpot 是设计基准，不模拟网络、持久化、滚动和全部状态组合；已有抽查见[设计基准](./design/penpot-code-baseline.md)。
+- App 内的写入排序不提供跨浏览器或跨设备的全局操作序列保证。

@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-29",
+  "authorization": "User approved the exact proposed 13 local and 9 remote branch deletions.",
+  "work_branch": "codex/parse-image-performance",
+  "head_before_documentation": "a92ed16c08eec5815600211cad612c063bf06b8c",
+  "started_utc": "2026-10-29T10:10:59.3362728Z",
+  "completed_utc": "2026-10-29T10:11:21.1470141Z",
+  "verified_utc": "2026-10-29T10:18:59.0422677Z",
+  "local_deleted": [
+    {
+      "branch": "audit/2026-10-09",
+      "sha": "e9f52b496036041f918364d005993921c0082015"
+    },
+    {
+      "branch": "claude/determined-mestorf-560b15",
+      "sha": "e4c4a8260d5890a4da99713deb69185cad4cd2bf"
+    },
+    {
+      "branch": "claude/nostalgic-perlman-51793d",
+      "sha": "e4c4a8260d5890a4da99713deb69185cad4cd2bf"
+    },
+    {
+      "branch": "claude/youthful-curie-5447de",
+      "sha": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0"
+    },
+    {
+      "branch": "codex/docs-release-readiness-20261028",
+      "sha": "5e44fed68f319b7aa43dc5e53315b0e64f8cd6cd"
+    },
+    {
+      "branch": "codex/handoff-current-audit-20261028",
+      "sha": "991e669ab050221a96583f3b0308900b4b453359"
+    },
+    {
+      "branch": "codex/integrate-directory-scroll-20261027",
+      "sha": "bfd2f3b6ce056d1a6617323fb60b02c6541b0b88"
+    },
+    {
+      "branch": "codex/integrate-reading-workspace-20261027",
+      "sha": "30321e5b0643fbeabb90d4db14cde52220305ddb"
+    },
+    {
+      "branch": "codex/release-v0.2.1-20261028",
+      "sha": "ca3093ac2532db3d57b1aab7c2ab1dee7f266ded"
+    },
+    {
+      "branch": "codex/review-workspace-20261027",
+      "sha": "d4f4e822ced43b0f252b28fa9cc2e3e3e9ac2a58"
+    },
+    {
+      "branch": "refactor/release-ui-runner-rust",
+      "sha": "7cc59b296f23c59da797fe79cda33234bccfb1c9"
+    },
+    {
+      "branch": "test/directory-regression-baseline",
+      "sha": "3dfcda519890087f9d12a90150e9aad636084aff"
+    },
+    {
+      "branch": "test/v0.1.22-release-acceptance",
+      "sha": "b8b8bc1ac937d5551b00ede5d78ea10044e0cc03"
+    }
+  ],
+  "remote_deleted": [
+    {
+      "branch": "codex/docs-release-readiness-20261028",
+      "sha": "5e44fed68f319b7aa43dc5e53315b0e64f8cd6cd"
+    },
+    {
+      "branch": "codex/handoff-current-audit-20261028",
+      "sha": "991e669ab050221a96583f3b0308900b4b453359"
+    },
+    {
+      "branch": "codex/release-v0.2.1-20261028",
+      "sha": "ca3093ac2532db3d57b1aab7c2ab1dee7f266ded"
+    },
+    {
+      "branch": "codex/review-workspace-20261027",
+      "sha": "acfb167190ea4064234b2c45e16c230d0634445d"
+    },
+    {
+      "branch": "fix/macos-bundle-release-version",
+      "sha": "e79dc2cd7fcbe02bb1566961d60ddbf9fd21aecf"
+    },
+    {
+      "branch": "refactor/release-ui-runner-rust",
+      "sha": "c32fbdc74e3d3102b7e03bc2614416ef37111b5f"
+    },
+    {
+      "branch": "refactor/web-auth-owned-process",
+      "sha": "20bb2ffa85f959a178645331ca383f2f78405524"
+    },
+    {
+      "branch": "test/directory-regression-baseline",
+      "sha": "3dfcda519890087f9d12a90150e9aad636084aff"
+    },
+    {
+      "branch": "test/v0.1.22-release-acceptance",
+      "sha": "b8b8bc1ac937d5551b00ede5d78ea10044e0cc03"
+    }
+  ],
+  "skipped": [],
+  "checks": {
+    "every_target_merged_into_origin_main": true,
+    "every_target_unoccupied_by_registered_worktrees": true,
+    "remote_deletion_atomic_with_expected_sha_leases": true,
+    "local_deletion_used_safe_branch_d": true,
+    "all_22_target_refs_absent": true,
+    "remaining_local": 15,
+    "remaining_remote": 27,
+    "origin_main_before": "6e99706ce90026c70c9538eb35faf572f02781fd",
+    "origin_main_after": "6e99706ce90026c70c9538eb35faf572f02781fd",
+    "local_main_before": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+    "local_main_after": "d9ebe35460b5a0975a2c8fff0db7b1233160c0c0",
+    "retained_remote_refs_unchanged": true,
+    "tags_unchanged": true,
+    "original_worktree_registrations_retained": true,
+    "unchanged_existing_worktrees_before_documentation": 6,
+    "unexplained_changes": []
+  },
+  "concurrent_activity": {
+    "existing_branch": {
+      "branch": "feat/reading-workspace-20261024",
+      "before": "075569b390f41a1eb1981025dc5a794ac8570fc1",
+      "after": "906035eff7c83348350b8eceecf67cfa80d4830e",
+      "reflog_utc": "2026-10-29T10:10:44Z"
+    },
+    "primary_worktree_status_entries_before": 48,
+    "primary_worktree_status_entries_after": 40,
+    "removed_status_paths_match_concurrent_commit_files": 8,
+    "new_branch": {
+      "branch": "codex/directory-toolbar-sticky-header",
+      "sha": "6e99706ce90026c70c9538eb35faf572f02781fd",
+      "reflog_utc": "2026-10-29T10:12:09Z",
+      "worktree": "E:/gitclone/RSS-Reader-directory-ui-20261029"
+    }
+  },
+  "verification_correction": "One stale registered worktree lacks its .git file; preliminary git status fell back to the parent repository. Final verification excludes that invalid snapshot and preserves its registration.",
+  "backup": {
+    "path_relative_to_worktree": "target/branch-cleanup-20261029/before-cleanup.bundle",
+    "bytes": 12266899,
+    "sha256": "F458250398DB4A5763A712487D8E18AC6BA6EAC607D03E6CB8A3BC2843C1787A",
+    "bundle_verify_passed": true,
+    "target_refs_verified": 22,
+    "includes_uncommitted_files": false
+  },
+  "limits": [
+    "No product code changed; no application build or test run for this cleanup.",
+    "Worktree verification compares HEAD and porcelain status, not hashes of dirty file contents.",
+    "Backup is local and ignored by Git; preserve it before cleaning target."
+  ]
+}

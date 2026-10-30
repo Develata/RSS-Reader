@@ -1,0 +1,367 @@
+[
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-directory.png",
+    "bytes": 538729,
+    "sha256": "186580622fd6f9dab9ff99ed1755fd095a27a149b8d8ea5a7df4070144eb0b4e"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-edit.png",
+    "bytes": 331330,
+    "sha256": "2fc4481259bdad878d8f5fdaa69eb770a5fde9778243bb9da9a928abde38a6a3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-entries.png",
+    "bytes": 414692,
+    "sha256": "1e7d064e7c6f2055da5fd82039c7bdc75e2e0386b291eb2f76caf75d86f493a3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-image.png",
+    "bytes": 70847,
+    "sha256": "300248f511376bcd2ebba241740fe02b775d0c1f0fafd6ab3b528134dc18fe22"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-reader.png",
+    "bytes": 326999,
+    "sha256": "645aa96dd8c5e7c7eb4769d2719f41733fe513d314c0d498df3933d4ae9f6ae6"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-settings.png",
+    "bytes": 197856,
+    "sha256": "e7e328295937075aee990ca06dee72a777b046d173efba2b81aaa75f101e10ed"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/392-source.png",
+    "bytes": 318838,
+    "sha256": "e69e446c1af013e2cace03fa456a87cc728f4d5c5271a1f20dd0d88debc4fd5b"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/acceptance.json",
+    "bytes": 2423,
+    "sha256": "ab6245c34b8720b287681c12cb280cc68c9af49b191d5c692d287997c4377594"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/exit-hint.png",
+    "bytes": 305712,
+    "sha256": "b5a8ce3cc0462432f85db9b11df01d9a3f9015fab7a20b9536ed245cdc945a0c"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/acceptance/saving-editor-after-back.png",
+    "bytes": 320550,
+    "sha256": "14a7122dccbafef0786d73b4df7cf99c9a71539d8ab4cd5c1bb3632df4021781"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/app.log",
+    "bytes": 65702,
+    "sha256": "1bcc1258514bf3d9db95efd1f1bc52537bfc7121ce69cca320608c72d9bead37"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/launch.txt",
+    "bytes": 255,
+    "sha256": "64c4af21f664c8ebcdf9273f81e6f848d03bc2e905f30c957567eaa49fa53028"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-baseline-04/process.json",
+    "bytes": 657,
+    "sha256": "551acf0d96fa8abc14633402a59eb90dc916ae4f38739d5e4a566dc6f377e0f8"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-directory.png",
+    "bytes": 538729,
+    "sha256": "186580622fd6f9dab9ff99ed1755fd095a27a149b8d8ea5a7df4070144eb0b4e"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-edit.png",
+    "bytes": 331330,
+    "sha256": "2fc4481259bdad878d8f5fdaa69eb770a5fde9778243bb9da9a928abde38a6a3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-entries.png",
+    "bytes": 414692,
+    "sha256": "1e7d064e7c6f2055da5fd82039c7bdc75e2e0386b291eb2f76caf75d86f493a3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-image.png",
+    "bytes": 70847,
+    "sha256": "300248f511376bcd2ebba241740fe02b775d0c1f0fafd6ab3b528134dc18fe22"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-reader.png",
+    "bytes": 326999,
+    "sha256": "645aa96dd8c5e7c7eb4769d2719f41733fe513d314c0d498df3933d4ae9f6ae6"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-settings.png",
+    "bytes": 197856,
+    "sha256": "e7e328295937075aee990ca06dee72a777b046d173efba2b81aaa75f101e10ed"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/392-source.png",
+    "bytes": 318838,
+    "sha256": "e69e446c1af013e2cace03fa456a87cc728f4d5c5271a1f20dd0d88debc4fd5b"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/acceptance.json",
+    "bytes": 2422,
+    "sha256": "6c77e116e0fd875b77caa1d94d503106c20fee1f87a8c686806fd4b585a86ac0"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/exit-hint.png",
+    "bytes": 305712,
+    "sha256": "b5a8ce3cc0462432f85db9b11df01d9a3f9015fab7a20b9536ed245cdc945a0c"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/acceptance/saving-editor-after-back.png",
+    "bytes": 320550,
+    "sha256": "14a7122dccbafef0786d73b4df7cf99c9a71539d8ab4cd5c1bb3632df4021781"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/app.log",
+    "bytes": 65052,
+    "sha256": "2afc75520c3e3617c8c9797834573e55dae8edbd6cd7936ece31e6b2602fb465"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/launch.txt",
+    "bytes": 255,
+    "sha256": "f4ef4d862d230d579ed66ee18c8e5d00af6223ac526879cc0103e4e7b228062e"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-candidate-01/process.json",
+    "bytes": 659,
+    "sha256": "0809bd2a187ee4fbd49d067ba2d99f3e6ae6215e7df2e9a9c2f1bb7c30fb5961"
+  },
+  {
+    "path": "target/back-policy-native-20261030/android-visual-comparison.json",
+    "bytes": 1710,
+    "sha256": "61d3142421aa2ea99f9bfd061a21aeb7b04afb9d63073b267073a01c1e2dd270"
+  },
+  {
+    "path": "target/back-policy-native-20261030/compare-native.py",
+    "bytes": 1340,
+    "sha256": "f7ca8860b24363aff731043b1aff0284020776137fa919c34c2c5cc9f9038353"
+  },
+  {
+    "path": "target/back-policy-native-20261030/native_back_save_lock.rs",
+    "bytes": 2840,
+    "sha256": "59d8de03b7458bbf86a9c6889a2e5c3fd861d7fa3bb45f2eed81ebfe8079d0f6"
+  },
+  {
+    "path": "target/back-policy-native-20261030/native-back-save-lock",
+    "bytes": 8702000,
+    "sha256": "9f7badb88b920f316e660adef259a6bfe8098460639597ac39f418a5b2cef987"
+  },
+  {
+    "path": "target/back-policy-native-20261030/primary-preservation.json",
+    "bytes": 193,
+    "sha256": "7418f7520f529857613d9a09f80d15f3b7a2f934d36a05ce87724f5d2d59aec1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/rssr_back_navigation_acceptance.cjs",
+    "bytes": 21088,
+    "sha256": "404af138cc05052bd167eb76d63c3159c0ad3c66b28ea4f0f90ed93f021a955d"
+  },
+  {
+    "path": "target/back-policy-native-20261030/run-android.ps1",
+    "bytes": 5240,
+    "sha256": "18c82f1c44e705f9aab69189df4b2e53a04e7b738182e68f2d83be7a30ba19a5"
+  },
+  {
+    "path": "target/back-policy-native-20261030/run-windows.ps1",
+    "bytes": 3703,
+    "sha256": "d9e299652931dca6712edc2a01696eb3d62458bda07b1199ed622e470a9991d1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/seed/library.sqlite3",
+    "bytes": 974848,
+    "sha256": "529eed9823d1a4ec207ec3c725e467feabb0cade7c6e694a22b7097195383ef3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/seed/outbound.json",
+    "bytes": 735,
+    "sha256": "e109501aad41ad166377d03387f9fec0301aec5b10e8cb28a1206f71edd0bda1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/1280-edit.png",
+    "bytes": 165634,
+    "sha256": "d8f70f83d18b125fb9ea98ec589a6e5d4972ae5596dee7c31cf17933480fdf4c"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/1280-entries.png",
+    "bytes": 277020,
+    "sha256": "db55ac8d9e92002861c236df04897b40648561c1d8c68582e1cda52b615823dc"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/1280-image.png",
+    "bytes": 22784,
+    "sha256": "3e1f96b31a908c4aab3866df739aa5c6b720b85df91dcd2b85a2c72b0e09bac1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/1280-reader.png",
+    "bytes": 118519,
+    "sha256": "00aafc02470a94f8586ad9f25ec7cfb21b7fbe616995a6f75bd9d92341841feb"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/1280-settings.png",
+    "bytes": 79958,
+    "sha256": "717fc9e0c09da91bcc6d39915e8c57587e258b6083d8b48ac1f1c1a9a5074313"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/1280-source.png",
+    "bytes": 268972,
+    "sha256": "ade23b71a8b73c852f38ab4130b3cd3506c895b6eddbe9fe67145bcef37291c1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-directory.png",
+    "bytes": 133632,
+    "sha256": "76bac868a476ecfc92705b9a676caac819764f32b77e98efe672d15d4277de42"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-edit.png",
+    "bytes": 86153,
+    "sha256": "433c804a9151426335e6405f42ff6ab130c7ce5a0a011d01c3511de63c221dd3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-entries.png",
+    "bytes": 98620,
+    "sha256": "2fa23343229092f541b44b75f3a5164a89fb88736f07a63b43c8b95a4b2ee606"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-image.png",
+    "bytes": 27190,
+    "sha256": "3e7b944a0f040c4832102af3b080618cb4c250fb603d9bec8935c5d9798fa982"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-reader.png",
+    "bytes": 142877,
+    "sha256": "5d3777928aaf3cb1ab0d0359eb2f01019537a2f7b4e99168c3ca68d9c79b6aa7"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-settings.png",
+    "bytes": 51539,
+    "sha256": "0ce9f77642dcf68898c706feef7f858a9bdf80d6ea23e7d9c53685ad102214de"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/390-source.png",
+    "bytes": 73401,
+    "sha256": "f22357bbd01c29391d23836fe36f38bae75d8f7f84aff72bffa757320198e33e"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/acceptance/acceptance.json",
+    "bytes": 1235,
+    "sha256": "bd33ca12ed847be22f6637e14ab069da0dd09de0bd8600b1b5ac5199740fc202"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/app.stderr.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/app.stdout.log",
+    "bytes": 882,
+    "sha256": "ce0a73d20c0a1d07956103b6112abb78ee4c7272a3d0368bb927e7a2f6c033fd"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/process.json",
+    "bytes": 648,
+    "sha256": "bfa501d913b94d6b4f216afc605bf67b8642e2a8b15057a75a6f4ae451c086d1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-baseline-04/rssr-app.exe",
+    "bytes": 43648512,
+    "sha256": "00deeff30d703683c578bfc968fe7843507885bd2934cf43a817a735ce23fa4f"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/1280-edit.png",
+    "bytes": 165634,
+    "sha256": "d8f70f83d18b125fb9ea98ec589a6e5d4972ae5596dee7c31cf17933480fdf4c"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/1280-entries.png",
+    "bytes": 277020,
+    "sha256": "db55ac8d9e92002861c236df04897b40648561c1d8c68582e1cda52b615823dc"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/1280-image.png",
+    "bytes": 22784,
+    "sha256": "3e1f96b31a908c4aab3866df739aa5c6b720b85df91dcd2b85a2c72b0e09bac1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/1280-reader.png",
+    "bytes": 118519,
+    "sha256": "00aafc02470a94f8586ad9f25ec7cfb21b7fbe616995a6f75bd9d92341841feb"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/1280-settings.png",
+    "bytes": 79958,
+    "sha256": "717fc9e0c09da91bcc6d39915e8c57587e258b6083d8b48ac1f1c1a9a5074313"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/1280-source.png",
+    "bytes": 268972,
+    "sha256": "ade23b71a8b73c852f38ab4130b3cd3506c895b6eddbe9fe67145bcef37291c1"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-directory.png",
+    "bytes": 133632,
+    "sha256": "76bac868a476ecfc92705b9a676caac819764f32b77e98efe672d15d4277de42"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-edit.png",
+    "bytes": 86153,
+    "sha256": "433c804a9151426335e6405f42ff6ab130c7ce5a0a011d01c3511de63c221dd3"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-entries.png",
+    "bytes": 98620,
+    "sha256": "2fa23343229092f541b44b75f3a5164a89fb88736f07a63b43c8b95a4b2ee606"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-image.png",
+    "bytes": 27190,
+    "sha256": "3e7b944a0f040c4832102af3b080618cb4c250fb603d9bec8935c5d9798fa982"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-reader.png",
+    "bytes": 142877,
+    "sha256": "5d3777928aaf3cb1ab0d0359eb2f01019537a2f7b4e99168c3ca68d9c79b6aa7"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-settings.png",
+    "bytes": 51539,
+    "sha256": "0ce9f77642dcf68898c706feef7f858a9bdf80d6ea23e7d9c53685ad102214de"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/390-source.png",
+    "bytes": 73401,
+    "sha256": "f22357bbd01c29391d23836fe36f38bae75d8f7f84aff72bffa757320198e33e"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/acceptance/acceptance.json",
+    "bytes": 1238,
+    "sha256": "76b2f32b01765204580e0498503db400abb7f61e1a370cc582e4ca41786669f5"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/app.stderr.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/app.stdout.log",
+    "bytes": 882,
+    "sha256": "9eaff4fcae8ae9d092496479762c45717be460c977cd99f781c129cc673153e9"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/process.json",
+    "bytes": 651,
+    "sha256": "a89d3462c405ac4bb86bea724070ff00555ad1ead571b29782509028af840261"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-candidate-02/rssr-app.exe",
+    "bytes": 43649024,
+    "sha256": "172bfb1a0ecafa2c94aa832fdd4f102f2d4f9b00e463e5fa15a251ebfa375967"
+  },
+  {
+    "path": "target/back-policy-native-20261030/windows-final-visual-comparison.json",
+    "bytes": 2281,
+    "sha256": "86410ddf0562951908666136d44cfc44cb4a78fdaf8e343eed76132e90962006"
+  }
+]

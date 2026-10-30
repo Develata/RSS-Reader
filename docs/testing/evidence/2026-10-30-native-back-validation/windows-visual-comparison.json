@@ -1,0 +1,98 @@
+{
+  "baseline": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-baseline-04\\acceptance",
+  "candidate": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\back-policy-native-20261030\\windows-candidate-02\\acceptance",
+  "comparisons": [
+    {
+      "image": "1280-edit.png",
+      "width": 1280,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 1080320
+    },
+    {
+      "image": "1280-entries.png",
+      "width": 1280,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 1080320
+    },
+    {
+      "image": "1280-image.png",
+      "width": 1280,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 1080320
+    },
+    {
+      "image": "1280-reader.png",
+      "width": 1280,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 1080320
+    },
+    {
+      "image": "1280-settings.png",
+      "width": 1280,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 1080320
+    },
+    {
+      "image": "1280-source.png",
+      "width": 1280,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 1080320
+    },
+    {
+      "image": "390-directory.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    },
+    {
+      "image": "390-edit.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    },
+    {
+      "image": "390-entries.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    },
+    {
+      "image": "390-image.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    },
+    {
+      "image": "390-reader.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    },
+    {
+      "image": "390-settings.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    },
+    {
+      "image": "390-source.png",
+      "width": 390,
+      "height": 844,
+      "changedPixels": 0,
+      "totalPixels": 329160
+    }
+  ],
+  "identical": 13
+}

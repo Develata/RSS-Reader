@@ -94,5 +94,5 @@
 ## 给下一位 Agent 的备注
 
 - 先读 `request_lifecycle.rs` 的普通 Rust 测试，再读 `session.rs` 的执行适配及集成测试；`mod.rs` 的查询/偏好 effect 未迁移。
-- 当前设计契约见 [原生界面前置模块](../design/native-ui-preparation.md) 与 [shell/facade 边界](../design/ui-shell-bus-page-facade.md)。不要把页面交互状态下沉为 application/domain 的业务语义。
+- 当前设计契约见 [原生界面前置模块](../../../design/native-ui-preparation.md) 与 [shell/facade 边界](../../../design/ui-shell-bus-page-facade.md)。不要把页面交互状态下沉为 application/domain 的业务语义。
 - 本批证据属于上述源码与产物身份，后续改动应按影响重新验证，不能沿用本记录宣称新候选已经验收。

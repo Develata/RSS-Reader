@@ -1,5 +1,7 @@
 # Application Use Case Consolidation Plan
 
+> Historical implementation plan, classified on 2026-10-29. The sections below preserve the original composition and checks, including superseded runtime and storage descriptions. For current boundaries use the [v0.2 architecture](./v0.2-architecture.md) and [boundary checklist](./application-use-case-boundary-checklist.md): UI runtime calls `Backend`, native/server adapters use `LocalBackend`, and the library is one SQLite database. Repository ports can still separate index/body responsibilities; they do not imply two physical databases. `SettingsSyncService` is no longer a separate service.
+
 > Status checked against source on 2026-09-30. The initial consolidation is implemented; dated checks below remain historical evidence. Follow-up work is driven by a concrete boundary problem, not by an unfinished migration checklist.
 
 > v0.2 update (2026-10-23): the service inventory below describes the original consolidation. `SettingsSyncService` has since been folded into `ImportExportService`: `RemoteConfigPullOutcome` includes the applied settings with the import result, so the UI does not need a second settings reload. The current browser adapter contract is recorded under Truth Sources below; see also [v0.2 architecture](./v0.2-architecture.md).
