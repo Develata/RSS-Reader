@@ -96,6 +96,16 @@
 
 下一步先按 #50 → #51 → #52 的依赖顺序收口，再梳理正文内容、图片资源、阅读锚点与 HTML/CSS、复制、IME、无障碍的兼容契约。不顺带实现候选渲染器、全局 Host trait、数据库迁移或新的原生设置整页。
 
+## PR #52 复审（2026-10-30）
+
+- 审查起点 `aa214de6848d8a6d087640ea58a1ba7b38b58df9`，base `6a5b91b4`，main `4cef074c`。已读取 PR 的 review、inline thread 与 conversation，三者均为空；这是本次代码自审，不称作外部批准。
+- **P2，已修：可编辑目标回归被预先取消掩盖。** 原 10 个 input/textarea/select/可编辑祖先 J/M 用例在派发前已经 `preventDefault`，冒泡监听先被该门禁排除，无法证明编辑目标过滤有效。保留 70 个边界和所有原精度，只让这些用例使用未取消事件、预期 `defaultPrevented=false`；`contenteditable=false` 仍作为单独的捕获对照。
+- 在隔离正式 Web 中，仅对当次 Eval 做受控故障注入，移除 M/F 的编辑目标过滤；不修改磁盘上的产品或构建产物。原脚本 **4/4 错误通过**（9 次 Eval 确认注入），修正后的脚本在 `input/m` 的 `prevented=true` 与期望 false 处失败（5 次 Eval 确认注入）。这是回归检测能力证明，不是复现产品现有缺陷。
+- 继续审查 Rust 绑定/大小写规则、配置投影、两阶段过滤、桥接作用域和回归断言，未发现新的产品阻塞问题。产品提交仍为 `ddb7045e`；本轮只修改测试、验收说明和交接，未重建产品。修复 commit 为本记录所在提交；最终 head CI 以 PR Checks 及 `target/reader-shortcut-review-20261030/ci-receipt-final.json` 核对，保留上一批 CI 回执。
+- 复审证据在 `target/reader-shortcut-review-20261030/`：`mutate-editable.cjs`、`mutant-before/`、`mutant-after/` 和运行日志。`node --check`、`git diff --check` 通过；同一生产规则独立编译 **24/24**；正常正式 Web 基线/候选各 **4/4**。Windows 原生产物新隔离运行 **8/8**，回执位于上一批证据根的 `review-windows-candidate-01/acceptance/`。
+- Android 原候选包也在新隔离资料库运行 **4/4**，回执为上一批证据根的 `android-review-candidate-01/acceptance/`。所有新正式回执均无页面/控制台错误；原 6 个资料文件、日常包、adb 映射及主 checkout 的 41 个路径、index、状态再次核对不变。未重新安装包、修改产品视觉或重新声称像素等价。
+- 既有偏好响应结束事件超时的根因仍未确认，不把这次测试修正当作解决该问题。物理键盘、系统 IME、辅助技术及替代渲染器仍未覆盖。
+
 ## 给下一位 Agent 的备注
 
 从 `reader_shortcut_policy.rs` 的绑定与动作开始，再读 `webview::shortcut_script` / `shortcut_input.js` 和两处监听。不要因过滤代码共用就移动捕获阶段、增加 defaultPrevented 门禁或等待异步动作决定默认行为。基线/候选脚本及原始回执均保留在本批 target，复跑使用新目录和隔离资料库。

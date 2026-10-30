@@ -272,7 +272,7 @@
     "navigationAliasesWithRealTarget": 6,
     "outsideReader": 1
   },
-  "ci": "See final-head PR Checks and target/reader-shortcut-definition-20261030/ci-receipt-final.json; Pages excluded because base is not main",
+  "ci": "See final-head PR Checks and target/reader-shortcut-review-20261030/ci-receipt-final.json; previous CI receipts retained",
   "ciInitialFailure": {
     "head": "25d1ee898a3d0ff5873c63cc0b10e54020728910",
     "run": 41139300981,
@@ -316,5 +316,62 @@
     "localLinks": 1566,
     "introducedErrors": 0,
     "changedDocumentErrors": 0
+  },
+  "review": {
+    "reviewedHead": "aa214de6848d8a6d087640ea58a1ba7b38b58df9",
+    "externalReviews": 0,
+    "externalReviewThreads": 0,
+    "conversationComments": 0,
+    "finding": {
+      "priority": "P2",
+      "scope": "test coverage",
+      "problem": "Editable input cases were already defaultPrevented, masking a broken bubble-phase editable filter",
+      "fix": "Use unhandled keys for five editable target types; keep the noneditable capture control separately canceled"
+    },
+    "productionChanged": false,
+    "negativeControl": {
+      "injection": "Remove M/F editable filtering from actual Web Eval functions in an isolated test context",
+      "before": "4/4 falsely passed; 9 Eval functions mutated",
+      "after": "Rejected at input/m defaultPrevented assertion; 5 Eval functions mutated",
+      "script": "target/reader-shortcut-review-20261030/mutate-editable.cjs",
+      "scriptSha256": "cf3adbe4790598bf348aace314ec6b3fe83432c35f8fa295df8c3fe975be9929",
+      "beforeReceiptSha256": "86dd25131b4a0a0718dc2470e463a4991a86a21048709bd94cc32274d49d7cde",
+      "afterReceiptSha256": "03b92fe5c9ddc87ba4911a4ca5d84593651e074e07eb012952ea86455512640f"
+    },
+    "frameworkFreeRules": "24/24 passed",
+    "syntaxAndDiffCheck": "passed",
+    "runs": {
+      "webBaseline": {
+        "path": "target/reader-shortcut-review-20261030/web-baseline/acceptance.json",
+        "sha256": "f16c83c4bbdb31f9eda5b620390081d136b0332ee5ec158ec58b00b465425a91",
+        "checks": 4,
+        "editableInputsPerViewport": 10,
+        "status": "passed"
+      },
+      "webCandidate": {
+        "path": "target/reader-shortcut-review-20261030/web-candidate/acceptance.json",
+        "sha256": "d96657c8604a8baf6e72642ac94845d7d5925de02e060bfce54924573fb9bce3",
+        "checks": 4,
+        "editableInputsPerViewport": 10,
+        "status": "passed"
+      },
+      "windowsCandidate": {
+        "path": "target/reader-shortcut-definition-20261030/review-windows-candidate-01/acceptance/acceptance.json",
+        "sha256": "be3dfb8bce588d3c7cce67d54ca5c2e86f874b8613e8f989823d73c7a0e301d6",
+        "checks": 8,
+        "editableInputsPerViewport": 10,
+        "status": "passed"
+      },
+      "androidCandidate": {
+        "path": "target/reader-shortcut-definition-20261030/android-review-candidate-01/acceptance/acceptance.json",
+        "sha256": "bd515010a83ef64b12b7736edbdffc2f0edfa53a92217483e55e0191f2b15632",
+        "checks": 4,
+        "editableInputsPerViewport": 10,
+        "status": "passed"
+      }
+    },
+    "preservationReceipt": "target/reader-shortcut-review-20261030/final-preservation.json",
+    "finalCIReceipt": "target/reader-shortcut-review-20261030/ci-receipt-final.json",
+    "limits": "No physical keyboard, OS IME, assistive technology, alternative renderer or fresh pixel comparison; prior preference completion timeout root cause remains unconfirmed"
   }
 }

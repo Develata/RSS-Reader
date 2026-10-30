@@ -51,8 +51,11 @@ exports.readerShortcutInputs = async ({page, openReader, ready, entries, screens
         if(tag.includes('editable'))container.contentEditable=tag==='editable-false'?'false':'true';
         document.body.append(container);
         const target=tag==='nested-editable'?container.appendChild(document.createElement('span')):container;
-        for(const key of ['j','m']) rows.push({case:tag,...probe.dispatch(key,{},target,true),
-          expectedScans:tag==='editable-false'&&key==='j'?1:0,expectedPrevented:true});
+        // Editable targets must reject an otherwise unhandled key. Pre-cancel
+        // only the noneditable control case, which checks capture without leaving.
+        const blocked=tag==='editable-false';
+        for(const key of ['j','m']) rows.push({case:tag,...probe.dispatch(key,{},target,blocked),
+          expectedScans:blocked&&key==='j'?1:0,expectedPrevented:blocked});
         container.remove();
       }
       const dialog=document.body.appendChild(document.createElement('dialog'));dialog.showModal();
