@@ -1,6 +1,6 @@
 # 原生控件适配契约
 
-核对日期：2026-10-30。页面规则对应 PR #40 合入 main 后的实现，见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；本分支补充 App 设置读取约束，见[本批交接](../handoffs/2026-10-30-shell-settings-lifecycle.md)。旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
+核对日期：2026-10-30。页面规则对应 PR #40 合入 main 后的实现，见[最终合并回执](../handoffs/2026-10-29-pr40-final-review-merge.md)；App 设置读取约束已通过 PR #47 合入 main，见[实现交接](../handoffs/2026-10-30-shell-settings-lifecycle.md)。旧分支的整份 Settings 草稿相等规则已退役。本文不新增公开 API 或原生渲染器；适配须遵守[功能边界](./functional-design-philosophy.md)、[前端命令](./frontend-command-reference.md)与[验收入口](../testing/native-control-acceptance.md)。
 
 ## 架构与状态所有权
 

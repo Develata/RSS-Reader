@@ -6,9 +6,9 @@
 - 工作树：`E:/gitclone/RSS-Reader-worktrees/native-back-policy`
 - 产品源码：实现 `14f334d92711a526c3b7d0126b75f7651ae4e904`；被验收的快照 `f38c3ba8b59387cf4beeb59bae5dab97e43bdfd9`
 - 当前 main / 产品 HEAD：`663ef4ee5d19458c815a6921f0e418321cf75464`
-- 本批脚本与文档 commit：pending
+- 本批脚本与文档 commit：`c3dc5ddbdda4e279439fd9194e66b75cee2ae596`；后续回执提交仅补本条状态
 - 相关 tag / release：N/A；不打 tag、不发布
-- 状态：`validated`；PR #47 已合并，主题控件评估完成
+- 状态：`validated`；PR #47 已合并，主题控件评估完成并已推送当前分支；本次评估后续提交尚未另开 PR / 合入 main
 
 ## 工作摘要
 
@@ -81,6 +81,7 @@ Windows 宿主可提供窗口和菜单 API，不代表 OS 控件能直接参与 
 - 日常 `io.github.develata.rssreader` 未安装、启动、停止或修改数据；前后包路径/哈希一致，SHA256 `32111b52c2396e53cd7afba5578f2b0b9aa2b9ee96e6024a061b0b4d4ee6fa8e`。
 - 主 checkout HEAD、40 条状态、index 哈希及 42 个文件/缺失路径与旧保全快照一致。见本地 `primary-preservation.json`。历史备份、Claude 配置、旧 C 盘目录未改。
 - 仍为 4 个本地分支、2 个工作树、3 个远端分支；本轮没有增删分支，也没有向 PR #40/#46 追加实现。
+- `git push origin HEAD:codex/shell-settings-lifecycle` 已推送评估提交 `c3dc5ddb`，随后 `git ls-remote --heads` 核对远端为同一完整 SHA。后续回执仍只更新该分支，不改 main，不发布。最终节点在会话交付中报告。
 
 ## Review、风险与后续事项
 
