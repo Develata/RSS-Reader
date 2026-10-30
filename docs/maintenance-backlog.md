@@ -14,6 +14,8 @@
 
 ## 原生界面前置的当前顺序
 
+`preferenceOrdering` 在 PR #50 和 #52 的 CI 曾收到最终保存成功响应，却未在 15 秒内观察到 `requestfinished`；本地按前置场景加五轮偏好测试均未复现。#52 已单独增加失败时的请求生命周期诊断，未改产品、断言或超时。根因待确认，重跑成功不能结案，见[失败记录](./handoffs/2026-10-30-reader-shortcut-definition.md#ci-失败与独立诊断)。
+
 Reader 已完成普通状态/reducer、图片状态与 Dioxus 装配分离，读取准入和回执归属复用同一规则；同一生产源码的无框架编译与现有宿主回归见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)。保持唯一状态来源，现有 session/runtime 的任务执行部分仍属于当前装配。
 
 Reader 图片激活、dialog 焦点/滚动、快捷键桥接及卸载入口已集中到所属 `webview/` 适配模块，现有状态、JS 内容与任务作用域保持不变，阅读位置复用共享入口；实际 Windows、Android 真机和正式 Web 的基线/候选已通过，见[本批交接](./handoffs/2026-10-30-reader-host-boundary.md)。这是当前 Dioxus/WebView 的明确替换位置，不能写成全部装配已脱离框架。

@@ -417,15 +417,35 @@ async function preferenceOrdering(page) {
     let afterClicks;
     let finalSave;
     const finishedSaves = new Set();
+    const requestIds = new Map();
+    const events = [];
+    const started = Date.now();
+    const requestId = request => {
+      if (!requestIds.has(request)) requestIds.set(request, requestIds.size + 1);
+      return requestIds.get(request);
+    };
+    const record = (event, request, detail = {}) => {
+      if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/v1/workspace') return;
+      events.push({ event, id: requestId(request), elapsedMs: Date.now() - started,
+        workspace: request.postDataJSON(), ...detail });
+    };
+    const observeRequest = request => record('request', request);
     const observeSave = response => {
       const request = response.request();
       if (request.method() !== 'PUT' || new URL(request.url()).pathname !== '/api/v1/workspace') return;
+      record('response', request, { status: response.status() });
       const workspace = request.postDataJSON();
       if (workspace.read_filter === 'all' && workspace.grouping_mode === 'time') finalSave = response;
     };
-    const observeFinished = request => finishedSaves.add(request);
+    const observeFinished = request => {
+      finishedSaves.add(request);
+      record('finished', request);
+    };
+    const observeFailed = request => record('failed', request, { failure: request.failure() });
+    page.on('request', observeRequest);
     page.on('response', observeSave);
     page.on('requestfinished', observeFinished);
+    page.on('requestfailed', observeFailed);
     try {
       await holdWrites(page, async captured => {
         await page.getByRole('button', { name: labels[0], exact: true }).click();
@@ -454,9 +474,17 @@ async function preferenceOrdering(page) {
         message: 'the final workspace response must finish', timeout: 15000,
       }).toBe(true);
       console.log('preferenceOrdering: final save finished');
+    } catch (error) {
+      // Preserve the request lifecycle when CI receives headers but never reports
+      // completion. Observe only: do not retry, consume a response, or weaken the wait.
+      console.error('preferenceOrdering request events:', JSON.stringify({ labels,
+        finalSaveRequestId: finalSave ? requestId(finalSave.request()) : null, events }));
+      throw error;
     } finally {
+      page.off('request', observeRequest);
       page.off('response', observeSave);
       page.off('requestfinished', observeFinished);
+      page.off('requestfailed', observeFailed);
     }
     // Read the persisted server preference before unloading page tasks.
     await page.waitForFunction(async () => {

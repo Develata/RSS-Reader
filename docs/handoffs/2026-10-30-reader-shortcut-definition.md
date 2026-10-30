@@ -8,7 +8,7 @@
 - 文档/证据 commit：本记录所在提交，可用 `git log -- docs/handoffs/2026-10-30-reader-shortcut-definition.md` 查阅
 - PR：[快捷键去重 #52](https://github.com/Develata/RSS-Reader/pull/52)，base 为 `codex/reader-host-boundary`
 - 相关 tag / release：无
-- 状态：`validated`（本地实现与所列验收；文档提交时最终 head CI 待完成）
+- 状态：`validated`（本地实现与所列验收；`25d1ee89` CI 在既有偏好测试超时，诊断提交的最终 head CI 另核）
 
 ## 工作摘要
 
@@ -41,7 +41,7 @@
 | dx 0.7.9 `build --platform web --package rssr-app --locked --release --debug-symbols false` | 正式 Web 构建通过 |
 | dx 0.7.9 `build --platform android --package rssr-app --target aarch64-linux-android --locked` | 独立源码和 target 构建通过；既有 `LOCAL_DATA_DIR_NAME` 未用警告保留 |
 | `node --check` 三份 CJS 与 `shortcut_input.js`；`git diff --check` | 通过 |
-| 本地 Markdown 链接/锚点、证据 JSON 检查 | 331 份 Markdown、1565 个相对链接；本批无新增失效链接/锚点，变更文档与 JSON 检查通过，见 `documentation-check.json` |
+| 本地 Markdown 链接/锚点、证据 JSON 检查 | 331 份 Markdown、1566 个相对链接；本批无新增失效链接/锚点，变更文档与 JSON 检查通过，见 `documentation-check.json` |
 
 ### 实际宿主与正式 Web
 
@@ -64,6 +64,13 @@
 首轮 22 对截图有 4 对 Windows 像素不同：69、1465、60785、7 像素。已查看原图，未发现可见内容或几何变化；相同包、脚本和夹具顺序复跑后，较大差异未重现。最终 21/22 对逐字节相同，余下 `390-image.png` 仅 7 个像素，范围 `[7,26,383,66)`；两份精确图片的 SHA256 在两轮中分别出现在基线与候选，证明该差异并非候选独有状态。
 
 保留初轮与最终报告、全部原图、`receipt-initial.json`、`visual-differences-initial.json` 和 `visual-review.json`。没有调整产品或截图掩码来消除差异，没有宣称全部图片相同；绘制差异的根因未确认，不据此报告新产品缺陷。
+
+### CI 失败与独立诊断
+
+- `25d1ee89` 的 [CI run 41139300981](https://github.com/Develata/RSS-Reader/actions/runs/41139300981) 首轮 34 个作业成功，`reading-workspace` 与其汇总门禁失败。失败在既有 `preferenceOrdering` 第一组：最终 PUT 响应成功，但 15 秒内未观察到对应 `requestfinished`；尚未执行新增 Reader 场景。原始作业日志、失败 HTML/PNG 与完整作业清单保存在本批 target 的 `ci-initial-failure*`，下载第一次 EOF 的残留亦保留。
+- 此签名曾在 PR #50 出现；本批再次按原顺序运行前置 9 场景，再连续 5 轮原偏好测试，均通过，没有请求失败或页面异常。Windows Chrome `155.0.8059.40` 与 CI Linux Chrome `156.0.8078.80` 不同；不能用本地未复现代替根因证明。
+- 独立测试提交只给 `preferenceOrdering` 增加请求 ID、时间、请求/响应/结束/失败事件，并在断言失败时输出到既有 `run.log`；不改变请求、保存逻辑、断言、15 秒超时或重试规则。根因仍未确认，不报告产品缺陷已修复。最终 CI 回执按下文路径和 PR 当前 head 核对。
+- 诊断改动后，`node --check scripts/browser/rssr_workspace_acceptance.cjs` 通过；使用同一正式 Web 产物与新隔离资料库运行完整 workspace **18/18**，无页面异常，日志为 `workspace-observability-01.log`。产品输入保持不变。
 
 ### 产物与数据保全
 

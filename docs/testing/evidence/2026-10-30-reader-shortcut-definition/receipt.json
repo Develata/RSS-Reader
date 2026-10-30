@@ -273,9 +273,22 @@
     "outsideReader": 1
   },
   "ci": "See final-head PR Checks and target/reader-shortcut-definition-20261030/ci-receipt-final.json; Pages excluded because base is not main",
+  "ciInitialFailure": {
+    "head": "25d1ee898a3d0ff5873c63cc0b10e54020728910",
+    "run": 41139300981,
+    "attempt": 1,
+    "success": 34,
+    "failure": 2,
+    "failedSuite": "preferenceOrdering before reader_host was reached",
+    "observation": "Final workspace PUT response was successful; requestfinished was not observed within 15000 ms",
+    "localDiagnostic": "Original nine preceding scenarios and five preferenceOrdering trials passed; no workspace request failures or page errors",
+    "diagnosticChange": "Failure-only request lifecycle log; no request, assertion, timeout, retry or product change",
+    "diagnosticValidation": "Syntax passed; full workspace 18/18 passed against isolated real server with no page errors",
+    "rootCause": "unconfirmed"
+  },
   "documentation": {
     "markdownFiles": 331,
-    "localLinks": 1565,
+    "localLinks": 1566,
     "introducedErrors": 0,
     "changedDocumentErrors": 0
   }
