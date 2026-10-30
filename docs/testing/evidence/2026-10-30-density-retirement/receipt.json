@@ -1,5 +1,6 @@
 {
   "date": "2026-10-30",
+  "implementationCommit": "0d2f78237412e3ce553d2d5e7e88cae76276a4ff",
   "status": "validated",
   "scope": "List density UI retirement; 0.2.x wire/storage preserved; parameter removal approved for 0.3.x; nine obsolete .agents skills removed",
   "artifacts": {

@@ -5,7 +5,7 @@
 - 分支：复用 `codex/shell-settings-lifecycle`
 - 工作树：`E:/gitclone/RSS-Reader-worktrees/native-back-policy`
 - 基线 HEAD：`200ebfe907c9dc1ccb8e2196478e3b7dd19fd233`；main / origin/main 为 `663ef4ee5d19458c815a6921f0e418321cf75464`
-- 相关 commit：pending
+- 实现 commit：`0d2f78237412e3ce553d2d5e7e88cae76276a4ff`，已推送 `origin/codex/shell-settings-lifecycle`；本条提交信息与维护状态随后以文档回执提交补齐
 - 相关 tag / release：N/A；不升版本、不发布
 - 状态：`validated`；实现、review、普通 Rust / 正式 Web / Windows 与 Android 实际宿主专项完成
 
@@ -68,6 +68,6 @@ Android 首次复用共享 target 时，CLI 报构建成功但 APK 散列仍是�
 
 ## 结果与后续
 
-实现和相称测试完成后仅提交本任务文件，按已有授权推送当前分支；本批没有并入 main 或向已合并的 PR #40 / #47 追加实现。下一步的产品收口为 0.3.x 删除旧设置参数，范围以维护待办为准。
+实现和相称测试已完成，41 个任务文件随 `0d2f7823` 提交并按已有授权推送当前分支；其后的回执仅更新文档，不改变被验收的产品输入。本批没有并入 main 或向已合并的 PR #40 / #47 追加实现。下一步的产品收口为 0.3.x 删除旧设置参数，范围以维护待办为准。
 
 下一位 Agent 从本交接、[当前状态](../current-status.md)和[原生适配契约](../design/native-control-adapter-contracts.md)继续；不要根据仓库名或旧 handoff 切换、清理主 checkout，也不要把临时保留字段重新加回 UI。

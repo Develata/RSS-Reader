@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | 最新 main | `663ef4ee`；本地 main 已快进到同一提交 | PR #38–#47 已合并；PR #47 head 的 CI 36/36、Pages build 通过，deploy 按 PR 规则跳过。合并树与 head `f38c3ba8` 相同，见[本批交接](./handoffs/2026-10-30-native-theme-selector-assessment.md) |
-| 当前工作分支 | 复用 `codex/shell-settings-lifecycle` 和原 E 盘工作树；主题选择评估已推送，本批增加列表密度退役与 `.agents/` 清理，尚未另开 PR / 合入 main | 先前主题选择评估属于其原源码；本批有新的候选构建与专项验收，以[退役交接](./handoffs/2026-10-30-density-retirement.md)为准 |
+| 当前工作分支 | 复用 `codex/shell-settings-lifecycle` 和原 E 盘工作树；主题选择评估及本批列表密度退役 / `.agents/` 清理 `0d2f7823` 已推送，尚未另开 PR / 合入 main | 本批 Rust 387 + 15 项、Web 14 组、Windows 8 组、Android 真机 4 组通过；1 项 Rust 测试忽略。产物身份、脚本与覆盖边界以[退役交接](./handoffs/2026-10-30-density-retirement.md)为准 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
