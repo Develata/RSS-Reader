@@ -2,9 +2,9 @@
 
 - 日期：2026-10-31
 - 作者 / Agent：Codex
-- 分支：`codex/readme-media-20261031`
+- 分支：`main`；来源分支 `codex/readme-media-20261031`
 - 源码 HEAD：`f3d26a90e08ac9a0dc2f30677633d96c46195ce1`（截图时 main）
-- 相关 commit：`40c3e0de`（README、媒体约定、旧图删除与初始交接）；本记录随后以单独的本地文档提交补充 GC 回执
+- 相关 commit：`40c3e0de`（媒体更新）、`0c4f9e00`（GC 回执）、`0e75ec2c`（PR #59 合并）；本节所在后续文档提交的 SHA 和 CI 回执见下述 `final-state.json`
 - 相关 tag / release：无；本次截图不代表 v0.2.1 发布包
 - 状态：`validated`
 
@@ -40,7 +40,7 @@
 
 两个活动 README 图片引用均迁移到附件。2026-09 的三份归档交接只以行内代码提及旧路径，没有活动图片或文件链接；保留这些当时的记录，不把历史截图结论改写为当前结论。旧图可从[截图前的历史提交](https://github.com/Develata/RSS-Reader/blob/f3d26a90e08ac9a0dc2f30677633d96c46195ce1/assets/readme/rss-reader-overview.png)追溯。
 
-删除当前树中的 PNG 不删除历史对象。普通 `git gc` 可以整理、压缩存储，不能清除仍被历史提交引用的旧图；本次不重写历史、不改 tag、不推送。
+删除当前树中的 PNG 不删除历史对象。普通 `git gc` 可以整理、压缩存储，不能清除仍被历史提交引用的旧图。首次本地交付没有推送；后续按新授权合入 main，过程见下节。两阶段均未重写历史或修改 tag。
 
 ## 验证与验收
 
@@ -77,9 +77,30 @@ GC 前后均有 `garbage found: .../.git/worktrees/native-back-policy/refs` 警�
 
 所有分支与 tag 的引用值、当前 HEAD、index、工作树状态在 GC 前后完全一致；旧图历史 blob 仍存在且大小为 651701 字节。主 checkout 的 HEAD、分支、index 和 41 个改动/缺失路径在 GC 后仍与原基线一致。详见证据目录中的 `gc-before.json`、`gc-after.json`、`gc-comparison.json`、`fsck.log`、`fsck-exit.txt` 与 `primary-preservation.json`。
 
+## PR #59 合并与主线核验
+
+用户随后授权推送、创建 PR、review / CI 通过后合并，并核对 main、更新交接。
+
+- [PR #59](https://github.com/Develata/RSS-Reader/pull/59) 包含上述两个提交、6 个文档/媒体文件，base 为 `f3d26a90`，head 为 `0c4f9e00`。没有产品代码、依赖或工作流改动。
+- 本轮自审无可操作问题：重新核对两个 README 的图片引用、附件匿名下载及原图散列、15 份备份文件、旧图历史可达性和改动范围；1734 个本地链接及 `git diff --check` 通过。未新增原生宿主验收。
+- 合并前 GitHub review submissions / threads 均为空，main 无额外 rules。这里记录 agent 自审和无待处理意见，不表述为外部独立审批。
+- [PR CI 41209516463](https://github.com/Develata/RSS-Reader/actions/runs/41209516463) 首轮 36/36 成功；[PR Pages 41209516473](https://github.com/Develata/RSS-Reader/actions/runs/41209516473) 构建成功，deploy 按 PR 规则跳过。
+- 用 `expected_head_sha` 锁定 `0c4f9e00`，以 merge commit 合并为 `0e75ec2c1f1655448296d02fa10ed1bd58838d0b`。PR 测试合并引用 `6cc5e0fa`、head 与实际合并提交的 tree 均为 `fb1d1a3ac602200e2c5578b8f83554d32eeda8bf`，父提交恰为上述 base / head。
+- 仅将 E 盘接续工作树切到既有 main 并快进；主 checkout 仍为 `feat/reading-workspace-20261024` / `020f9d40`，HEAD、index 和 41 个改动/缺失路径与本轮开始时完全一致。保留原分支、工作树及证据。
+
+以下工作流均绑定合并提交 `0e75ec2c`；完整分页回执在 `target/readme-media-merge-20261031/`。连接器工作流查询有事件和首页限制，使用 `gh api --paginate --slurp` 收齐 jobs，不把前 30 项视为全量。
+
+| 检查 | 合并后结果 |
+| --- | --- |
+| [main CI 41210375644](https://github.com/Develata/RSS-Reader/actions/runs/41210375644) | 首轮 36/36 成功，完整 jobs 分页核对 |
+| [Docker 41210375635](https://github.com/Develata/RSS-Reader/actions/runs/41210375635) | 成功，4 项 job 成功；其他原生平台服务包矩阵按默认规则跳过 |
+| [Pages 41210375612](https://github.com/Develata/RSS-Reader/actions/runs/41210375612) | 构建、部署均成功 |
+
+本节后续文档提交的最终 main CI 回执保存为同一证据目录的 `final-ci.json`、`final-summary.json` 与 `final-state.json`；不为写入自身提交 SHA 循环修改文档。本轮没有再次运行 GC、重拍或重复上传附件。
+
 ## 当前状态、风险与后续事项
 
-- 当前授权为本地提交；不 push、不创建 PR、不发布。文档分支仍需后续发布到远端，Issue 与附件已按本任务授权创建。
+- PR #59 已按后续授权合并，合并提交的 main CI、Docker 和 Pages 均通过；无新 tag 或 release，Docker 推送步骤跳过。媒体索引 Issue #58 继续保留。
 - `E:/gitclone/RSS-Reader` 主 checkout 原有 41 个改动/缺失路径已按 HEAD、分支、index 和文件散列基线核对，保持不变；没有切换、清理或提交该 checkout。
 - 本次只验证截图所需的正式 Web 页面和文档；没有修改产品代码，不将这次截图当作完整产品回归或原生宿主验收。
 - 外部附件依赖 GitHub 可达性；保留媒体 Issue 和独立本地备份，今后界面有实质变化时复用该 Issue 更新。
