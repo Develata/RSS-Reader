@@ -42,7 +42,7 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 2026-10-31 按用户确认删除 13 个已合并的本地旧分支后：**2 个本地分支、2 个工作树、14 个真实远端分支**。本地仅保留 `main` 与主 checkout 的 `feat/reading-workspace-20261024`；远端仍为 main 和 13 个 codex 分支，不把 `origin/HEAD` 算作分支。删除前每个 tip 都完整包含于 main `95863274`，没有独有提交或工作树占用。
 
-本次仅使用 `git branch -d` 清理上述本地引用；主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径保持不变，两个工作树、远端引用和历史验收资料均保留。结果及恢复方法见[本地清理回执](./handoffs/2026-10-31-local-branch-cleanup.md)；原始快照位于 `target/local-branch-cleanup-20261031/`。较早的工作树退役与历史备份仍见[10 月 30 日清理记录](./handoffs/2026-10-30-branch-consolidation.md)。本次记录仅本地提交，未推送。
+本次仅使用 `git branch -d` 清理上述本地引用；主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径保持不变，两个工作树、远端引用和历史验收资料均保留。结果及恢复方法见[本地清理回执](./handoffs/2026-10-31-local-branch-cleanup.md)；原始快照位于 `target/local-branch-cleanup-20261031/`。较早的工作树退役与历史备份仍见[10 月 30 日清理记录](./handoffs/2026-10-30-branch-consolidation.md)。清理记录提交为 `09bb4bbf`；用户随后授权将该记录及推送补记同步到 `origin/main`，见交接中的[推送补记](./handoffs/2026-10-31-local-branch-cleanup.md#清理记录推送补记)。
 
 ## 验证结论的边界
 

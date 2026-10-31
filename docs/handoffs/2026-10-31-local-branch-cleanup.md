@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`main`，E 盘既有接续工作树
 - 清理基线：`958632740f53c51290337e2062ea85ae2910306a`
-- 相关 commit：本记录所在的 `docs: record merged local branch cleanup` 本地提交（提交号见 Git 历史）
+- 相关 commit：清理记录 `09bb4bbf`；推送补记见本记录最新提交
 - 相关 tag / release：无
 - 状态：`validated`
 
@@ -40,15 +40,22 @@
 - `git worktree list --porcelain` 确认这 13 个分支均无占用；`git branch -d` 全部成功。
 - 删除阶段前后 main HEAD、工作树文件状态、两个工作树登记、本地 tag、远端跟踪引用及 `git ls-remote --heads origin` 完全相同；14 个真实远端分支保留。
 - 主 checkout 的 HEAD、分支、index、状态与 41 个文件/缺失路径逐项核对不变，见 `primary-preservation.json`。
-- 文档本地链接、JSON 解析和 `git diff --check` 通过。此为 Git 元数据及文档维护，没有重新运行产品测试或触发 CI。
+- 文档本地链接、JSON 解析和 `git diff --check` 通过。此为 Git 元数据及文档维护；清理阶段没有重新运行产品测试或触发 CI，后续推送见下节。
 - 手工 UI / 原生宿主验收：未执行，本次没有产品变化。
 
 ## 当前状态与后续
 
 - 本地仅保留 `main` 与 `feat/reading-workspace-20261024`。后者仍由主 checkout 使用，有 2 个不在 main 提交历史中的文档提交记录和 41 项既有改动，未清理或整合。
 - 两个工作树都保留：`E:/gitclone/RSS-Reader` 与 `E:/gitclone/RSS-Reader-worktrees/native-back-policy`。后者检出 main，目录名称不表示还在使用同名分支；`target/` 的历史验收资料保留。
-- 清理记录仅本地提交，没有推送、删除远端引用、打 tag 或发布。
+- 清理交付阶段仅本地提交；后续推送见下节。没有删除远端引用、打 tag 或发布。
 - 如需恢复某个本地分支，可从仍保留的同名远端引用创建跟踪分支，例如 `git branch --track codex/settings-rule-boundary origin/codex/settings-rule-boundary`；完整历史也仍被 main 引用。
+
+## 清理记录推送补记
+
+- 用户随后明确授权将本次清理记录推送到 `origin/main`；本补记随原记录 `09bb4bbf` 一并推送。
+- 推送前重新获取远端 main，确认仍为 `95863274`，待推送的原提交只涉及 4 个文档/回执文件；本补记只更新维护状态与本交接。
+- 推送使用普通 `git push origin main:main`；远端提交身份与主 checkout 保全核对记录在 `target/local-branch-cleanup-push-20261031/`。原清理回执的 `push: false` 描述清理完成时的状态，保留原始证据。
+- 本次不重跑产品测试；文档检查与推送回执不能替代新提交的远端 CI 结果。
 
 ## 给下一位 Agent 的备注
 
