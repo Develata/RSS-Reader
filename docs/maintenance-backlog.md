@@ -1,6 +1,6 @@
 # 当前维护待办
 
-核对日期：2026-10-30（返回策略和 App 设置读取已合并，主题选择宿主评估完成；M01–M07 的其他实测仍以各自记录日期为准）。本页记录经源码核对后仍值得跟进的事项。main、本地候选、发布和 CI 状态统一见[维护状态](./current-status.md)，历史核实见[10 月 28 日记录](./handoffs/2026-10-28-historical-followup-audit.md)。
+核对日期：2026-10-31（正文选择与偏好测试门禁修正已合并；M01–M07 的其他实测仍以各自记录日期为准）。本页记录经源码核对后仍值得跟进的事项。main、本地候选、发布和 CI 状态统一见[维护状态](./current-status.md)，历史核实见[10 月 28 日记录](./handoffs/2026-10-28-historical-followup-audit.md)。
 
 10 月 28 日扫描了 147 份历史 handoff，优先核对架构、数据迁移、资源边界与发布。以下保留当轮处置结果，不是对所有历史段落、所有用户路径的完整结案。源码支持、历史实测、本轮实测必须分开；缺少当前复现时不把推断升级成新缺陷。
 
@@ -32,7 +32,7 @@ PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 he
 
 PR #54 的实现提交 `97d75438` 再次遇到既有 `preferenceOrdering` 超时：两笔 workspace PUT 均收到 HTTP 200，随后浏览器报告 `net::ERR_ABORTED`，最终请求没有 `requestfinished`。失败发生在 Reader 场景前，偏好实现与测试均未被本批修改。Windows Chrome 149 原场景、Chrome 155 加 150 ms 受控延迟的场景均未复现；CI 使用 Linux Chrome 156，不能据此排除平台差异或认定产品已修好。原始失败、重跑结果与证据见[PR #54 交接](./handoffs/2026-10-31-reader-body-boundary.md#pr-54-核验2026-10-31)。
 
-独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 先增加被动观测，随后在 `afb57356` 的 CI 捕获完整反例：原 reader 已读完 `true` 和 EOF，取消时也已完成，但 DevTools 不再报告 `requestfinished`。现已单列修正测试门禁，精确匹配最终 PUT 的 payload 与完整布尔响应；保留真实持久化、重载断言和 15 秒上限，产品保存行为不变。普通工具测试 14 项、Windows 浏览器适配反例 10 项和正式 Web 18 场景通过，最终远端检查与边界见[修复交接](./handoffs/2026-10-31-workspace-response-fix.md)。这不代表所有偏好保存问题均已排除。
+独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 先增加被动观测，随后在 `afb57356` 的 CI 捕获完整反例：原 reader 已读完 `true` 和 EOF，取消时也已完成，但 DevTools 不再报告 `requestfinished`。现已单列修正测试门禁并合入 main `79d8711d`，精确匹配最终 PUT 的 payload 与完整布尔响应；保留真实持久化、重载断言和 15 秒上限，产品保存行为不变。普通工具测试 14 项、Windows 浏览器适配反例 10 项和正式 Web 18 场景通过，最终 PR head 与本地覆盖见[修复交接](./handoffs/2026-10-31-workspace-response-fix.md)，合并后的新检查和下载产物单列于[主线回执](./handoffs/2026-10-31-workspace-response-merge.md)。该签名的测试假阴性已修正，不代表所有偏好保存问题均已排除。
 
 ## 0.3.x 移除旧列表密度参数
 

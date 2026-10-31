@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| PR #54 合并与偏好测试修正 | [main CI 与工作区保全](./2026-10-31-reader-body-merge.md)、[完成门禁的复现与修复](./2026-10-31-workspace-response-fix.md)、[前期诊断](./2026-10-31-workspace-response-completion.md) |
+| PR #55 合并与偏好测试修正 | [main 验收与工作区保全](./2026-10-31-workspace-response-merge.md)、[完成门禁的复现与修复](./2026-10-31-workspace-response-fix.md)、[前期诊断](./2026-10-31-workspace-response-completion.md) |
 | Reader 正文选择模块与 PR #54 | [私有模块归属、行为保持与 PR 核验](./2026-10-31-reader-body-boundary.md) |
 | PR #53 合并与 main 核验 | [合并身份、主线 CI 与工作区保全](./2026-10-31-reader-race-merge.md) |
 | Reader 并发问题测试与修复 | [旧图片消息、标记写入乱序的复现及三端回归](./2026-10-30-reader-race-fixes.md) |
@@ -37,7 +37,8 @@
 
 | 日期 | 记录 |
 | --- | --- |
-| 2026-10-31 | [PR #54 合并与主线核验](./2026-10-31-reader-body-merge.md)、[偏好完成门禁修复](./2026-10-31-workspace-response-fix.md)、[前期响应诊断](./2026-10-31-workspace-response-completion.md) |
+| 2026-10-31 | [PR #55 合并与主线验收](./2026-10-31-workspace-response-merge.md)、[偏好完成门禁修复](./2026-10-31-workspace-response-fix.md)、[前期响应诊断](./2026-10-31-workspace-response-completion.md) |
+| 2026-10-31 | [PR #54 合并与主线核验](./2026-10-31-reader-body-merge.md) |
 | 2026-10-31 | [Reader 正文选择归属与行为保持验证](./2026-10-31-reader-body-boundary.md) |
 | 2026-10-31 | [PR #53 合并、main CI 与交接更新](./2026-10-31-reader-race-merge.md) |
 | 2026-10-30 | [Reader 并发问题复现、修复与三端验收](./2026-10-30-reader-race-fixes.md) |

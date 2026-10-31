@@ -1,0 +1,373 @@
+{
+  "date": "2026-10-31",
+  "pr": "https://github.com/Develata/RSS-Reader/pull/55",
+  "main": "79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+  "base": "465fead902f1f5cea423aeeaf1cbba623c9082b1",
+  "prHead": "bf42dc325cf5c19053a51dae2bebc4373d5b67f4",
+  "tree": "1a5f0276aa1b83fe45ce10a7fa46ac113b56d5d4",
+  "mergeTreeEqualsTestedHead": true,
+  "productUnchanged": true,
+  "primaryCheckoutPreserved": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "workflows": [
+    {
+      "id": 41194804733,
+      "name": "Pages demo",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41194804733",
+      "head": "79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "build",
+          "conclusion": "success"
+        },
+        {
+          "name": "deploy",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 41194804777,
+      "name": "Docker",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41194804777",
+      "head": "79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "build-package / source",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / page",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / linux",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / native",
+          "conclusion": "skipped"
+        },
+        {
+          "name": "image",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 41194804755,
+      "name": "CI",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41194804755",
+      "head": "79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "test-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-ui-runner (windows-latest)",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-ui-runner (ubuntu-latest)",
+          "conclusion": "success"
+        },
+        {
+          "name": "workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "format",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-contract-build",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-application)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-infra)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-web)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-app)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-api)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-cli)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-domain)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_queries)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_settings_repository)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_contracts)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (wasm_memory_store)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_refresh_tickets)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_opml_interop)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_unicode_title_search)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (midnight-ledger)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (newsprint)",
+          "conclusion": "success"
+        },
+        {
+          "name": "reading-workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (atlas-sidebar)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (default)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (amethyst-glass)",
+          "conclusion": "success"
+        },
+        {
+          "name": "lint-and-test",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 13040251560,
+      "name": "ci-reading-workspace",
+      "digest": "sha256:ae8f6f98659bc1970e25886e0f027093c51dfd6af397261f4b79413cd38ae972",
+      "size_in_bytes": 2191170,
+      "workflow_run": {
+        "id": 41194804755,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "79d8711d5d0752f631ff33da95d1ca86b9ef518f"
+      }
+    },
+    {
+      "id": 13040665324,
+      "name": "c6-container-check",
+      "digest": "sha256:44e8eb297b9969238dfae4ab8e7a5f24eb3b959a712baea0447356528362e497",
+      "size_in_bytes": 3545,
+      "workflow_run": {
+        "id": 41194804777,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "79d8711d5d0752f631ff33da95d1ca86b9ef518f"
+      }
+    },
+    {
+      "id": 13040530811,
+      "name": "web-package-check-linux-x86_64",
+      "digest": "sha256:774d4bb4b972a437b8f1737f3eb19b42163887708a3857355c233e1ba7728430",
+      "size_in_bytes": 1023,
+      "workflow_run": {
+        "id": 41194804777,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "79d8711d5d0752f631ff33da95d1ca86b9ef518f"
+      }
+    },
+    {
+      "id": 13040535712,
+      "name": "pages-smoke-41194804733-1",
+      "digest": "sha256:b28a66fcfbf2561941543d70a4dbf83e0aa2640accf0872cdbaf5d14e7e71179",
+      "size_in_bytes": 1101631,
+      "workflow_run": {
+        "id": 41194804733,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "79d8711d5d0752f631ff33da95d1ca86b9ef518f"
+      }
+    }
+  ],
+  "responseAdapter": {
+    "browser": "156.0.8078.80",
+    "cases": [
+      {
+        "kind": "never-issued",
+        "passed": true
+      },
+      {
+        "kind": "headers-only",
+        "passed": true
+      },
+      {
+        "kind": "without-eof",
+        "passed": true
+      },
+      {
+        "kind": "cut",
+        "passed": true
+      },
+      {
+        "kind": "http-error",
+        "passed": true
+      },
+      {
+        "kind": "invalid-json",
+        "passed": true
+      },
+      {
+        "kind": "bom-body",
+        "passed": true
+      },
+      {
+        "kind": "late-abort",
+        "passed": true
+      },
+      {
+        "kind": "different-payload",
+        "passed": true
+      },
+      {
+        "kind": "duplicate",
+        "passed": true
+      }
+    ],
+    "pageErrors": []
+  },
+  "workspace": {
+    "passed": 18,
+    "noPageErrors": true
+  },
+  "reader": {
+    "status": "passed",
+    "browser": "156.0.8078.80",
+    "serverBuild": "dev-79d8711d5d07",
+    "pageErrors": [],
+    "consoleErrors": []
+  },
+  "readerChecks": 6,
+  "container": {
+    "status": "pass",
+    "build_id": "git-79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+    "image": "rss-reader-smoke:79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+    "checks": [
+      "new data volume, login and matching build write",
+      "old build rejected without mutation",
+      "image server is the exact packaged binary",
+      "owner CLI shares the running server library",
+      "CLI rejects root and unrelated uid for owner data",
+      "owner CLI backup while server runs",
+      "graceful restart retains session and data",
+      "read-only legacy credential volume migrates unchanged; old session rejected",
+      "migrated credentials survive removal of the legacy mount"
+    ]
+  },
+  "linux": {
+    "status": "pass",
+    "build_id": "git-79d8711d5d0752f631ff33da95d1ca86b9ef518f",
+    "checks": [
+      "package hashes and WASM id",
+      "new library",
+      "login",
+      "static index",
+      "matching build writes",
+      "old build rejected without mutation"
+    ]
+  },
+  "pages": {
+    "status": "pass",
+    "storage": "memory-sqlite",
+    "reloadResets": true
+  },
+  "imagePushed": false,
+  "notRerun": [
+    "Windows WebView2 host",
+    "Android actual host",
+    "IME",
+    "accessibility",
+    "candidate native renderer"
+  ]
+}

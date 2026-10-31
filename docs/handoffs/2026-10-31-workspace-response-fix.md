@@ -5,10 +5,10 @@
 - 分支：`codex/workspace-response-completion`
 - 产品基线：main `465fead902f1f5cea423aeeaf1cbba623c9082b1`
 - 缺陷复现提交：`afb57356602475ca4ac31204fe7b5c32935ce8d9`
-- 相关 commit：本文件所在修复提交（`test(workspace): wait for the application to consume the final save`）
+- 相关 commit：`bf42dc325cf5c19053a51dae2bebc4373d5b67f4`（`test(workspace): wait for the application to consume the final save`）
 - 相关 PR：[PR #55](https://github.com/Develata/RSS-Reader/pull/55)
 - 相关 tag / release：无
-- 状态：`validated`（本地通过；远端按最终 head 单独核对）
+- 状态：`validated`（最终 PR head 检查已通过；PR #55 已合并，main 结果见[合并交接](./2026-10-31-workspace-response-merge.md)）
 
 ## 工作摘要
 
@@ -42,7 +42,7 @@
 | `actionlint .github/workflows/ci.yml`、JS 语法、文档链接、`git diff --check` | 通过 |
 | 本地构建输入身份 | server、fixture 与 29 个 Web 文件散列仍匹配已验收产物，产品源码与 main 相同，详见 `local-inputs.json` |
 
-最终 head 的 CI、Pages 和工作区产物在推送后核对，精确 SHA 结果保存在 `target/workspace-response-20261031/final-ci.json`、`final-local-remote-state.json` 和 PR 描述，不用复现提交或对照实验的结果代替，也不为将提交 SHA 写入自身而循环提交。
+最终 head `bf42dc325cf5c19053a51dae2bebc4373d5b67f4` 的 [CI 41193616038](https://github.com/Develata/RSS-Reader/actions/runs/41193616038) 36/36 成功，[Pages 41193615967](https://github.com/Develata/RSS-Reader/actions/runs/41193615967) 构建成功、PR 部署按规则跳过。下载的工作区产物 `13039812158` 通过 SHA-256 核对：Linux Chrome 156 的适配器 10/10、工作区 18/18、Reader 6/6，页面/控制台错误为 0；实际构建 `dev-ad9cbc17ce11` 对应 tree 与 head 相同的 PR 合成合并提交。精确身份见 `target/workspace-response-20261031/final-ci.json`、`final-workspace-artifact.json`、`final-local-remote-state.json`。
 
 ## 结果、风险与后续
 
@@ -52,4 +52,4 @@
 
 ## 给下一位 Agent 的备注
 
-保留主 checkout 的 HEAD、index 与 41 个变更/缺失路径，继续使用指定 E 盘工作树。该工作树含大量忽略的验收证据，不属于自动清理对象。PR #54 已合并；PR #55 的最终 head 应核对绿色检查后再决定整合，不将未修复前的绿色重跑当作此次修复依据。
+保留主 checkout 的 HEAD、index 与 41 个变更/缺失路径，继续使用指定 E 盘工作树。该工作树含大量忽略的验收证据，不属于自动清理对象。PR #54、#55 均已合并；PR #55 的合并身份与新 main 检查单列于[合并交接](./2026-10-31-workspace-response-merge.md)，不将未修复前的绿色重跑当作此次修复依据。
