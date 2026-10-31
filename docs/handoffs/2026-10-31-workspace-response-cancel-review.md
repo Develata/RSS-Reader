@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：`codex/workspace-response-cancel`
 - 审查基线：main `c2f8cca3802a695690d41aca97fd135b0eb94623`
-- 相关 commit：本记录所在修复提交（`test(workspace): reject cancellation before response EOF`）
+- 相关 commit：`ac15b77b4e1c8783544e2674b1ff6a061981e4a6`（`test(workspace): reject cancellation before response EOF`）
 - 相关 tag / release：无
-- 状态：`validated`（本地验证通过；远端检查按最终 head 另存）
+- 状态：`validated`（最终 PR head 检查通过，PR #56 已合并；新 main 结果见[合并交接](./2026-10-31-workspace-cancel-merge.md)）
 
 ## 审查结论
 
@@ -46,7 +46,7 @@
 | 三个 JS 文件 `node --check`、文档链接/JSON、`git diff --check` | 通过 |
 | `python target/postmerge-review-20261031/verify-primary.py` | 主 checkout 的 HEAD、分支、status、index 和 41 个变更/缺失路径与开工快照相同 |
 
-最终提交的远端检查和产物核对保存在同目录的 `final-ci.json`、`final-summary.json`、`final-state.json` 及 PR 描述，按实际 head 绑定；不复用 PR #55 的绿色结果代替本批验证。
+最终 head `ac15b77b` 的 [CI 41197256449](https://github.com/Develata/RSS-Reader/actions/runs/41197256449) 首轮 36/36，[Pages 41197256425](https://github.com/Develata/RSS-Reader/actions/runs/41197256425) 构建成功、PR 部署按规则跳过。下载并核对 artifact `13041164534` 的 SHA-256：Linux Chrome `156.0.8078.80` 的适配器 13/13、工作区 18/18、Reader 6/6；实际构建 `dev-faa89498c3e7` 对应 tree 与 head 相同的 PR 合成合并提交。精确身份保存在同目录的 `final-ci.json`、`final-workspace-artifact.json` 和 `final-state.json`，不复用 PR #55 的绿色结果代替本批验证。
 
 ## 风险与后续
 
@@ -54,4 +54,4 @@
 
 没有重跑 Windows WebView2、Android 实际宿主、物理 IME、辅助技术或候选原生渲染器。Chrome 的脚本化工作区验收与 Rust 规则通过不能替代这些覆盖。
 
-本批修复在独立分支提交，不向已合并 PR #55 追加实现；是否合并由后续整合处理。原始失败、历史验收、主 checkout 和原 E 盘工作树全部保留。
+本批修复经 PR #56 合并，合并身份和新主线检查见[合并交接](./2026-10-31-workspace-cancel-merge.md)。原始失败、历史验收、主 checkout 和原 E 盘工作树全部保留。
