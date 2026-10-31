@@ -418,6 +418,7 @@ async function preferenceOrdering(page) {
     console.log(`preferenceOrdering: ${labels.join(' -> ')} start`);
     let afterClicks;
     let finalSave;
+    let scenarioError;
     const finishedSaves = new Set();
     const requestIds = new Map();
     const events = [];
@@ -479,18 +480,24 @@ async function preferenceOrdering(page) {
       console.log('preferenceOrdering response reads:', JSON.stringify(
         await page.evaluate(() => window.__workspaceResponseProbe.records)));
     } catch (error) {
+      scenarioError = error;
       // Preserve the request lifecycle when CI receives headers but never reports
       // completion. Observe only: do not retry, consume a response, or weaken the wait.
       console.error('preferenceOrdering request events:', JSON.stringify({ labels,
         finalSaveRequestId: finalSave ? requestId(finalSave.request()) : null, events,
-        responseReads: await page.evaluate(() => window.__workspaceResponseProbe.records) }));
+        responseReads: await page.evaluate(() => window.__workspaceResponseProbe?.records)
+          .catch(observationError => ({ unavailable: String(observationError) })) }));
       throw error;
     } finally {
       page.off('request', observeRequest);
       page.off('response', observeSave);
       page.off('requestfinished', observeFinished);
       page.off('requestfailed', observeFailed);
-      await page.evaluate(() => window.__workspaceResponseProbe.dispose());
+      try { await page.evaluate(() => window.__workspaceResponseProbe?.dispose()); }
+      catch (cleanupError) {
+        if (!scenarioError) throw cleanupError;
+        console.error('preferenceOrdering probe cleanup:', String(cleanupError));
+      }
     }
     // Read the persisted server preference before unloading page tasks.
     await page.waitForFunction(async () => {

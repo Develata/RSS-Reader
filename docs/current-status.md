@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | main 的整合基线 | `465fead9`，已合并 PR #54；正文选择的反向依赖已移除 | 新 main CI 36/36、Reader Web 6/6、Docker 容器 9 项、Linux 包 6 项及 Pages 均通过，见[合并回执](./handoffs/2026-10-31-reader-body-merge.md) |
-| 当前接续分支 | `codex/workspace-response-completion`，[PR #55](https://github.com/Develata/RSS-Reader/pull/55) 独立调查偏好保存测试 | 补充应用实际读取响应流的诊断，现有保存行为、断言与超时不变；根因尚待同环境证据，见[诊断交接](./handoffs/2026-10-31-workspace-response-completion.md) |
+| 当前接续分支 | `codex/workspace-response-completion`，[PR #55](https://github.com/Develata/RSS-Reader/pull/55) 补充偏好保存测试诊断 | Windows Chrome 155、Linux Chrome 156 原场景及有界延迟对照通过，仍未复现历史失败；保存行为、断言与超时不变，根因未结案，见[诊断交接](./handoffs/2026-10-31-workspace-response-completion.md) |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 

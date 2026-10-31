@@ -32,7 +32,7 @@ PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 he
 
 PR #54 的实现提交 `97d75438` 再次遇到既有 `preferenceOrdering` 超时：两笔 workspace PUT 均收到 HTTP 200，随后浏览器报告 `net::ERR_ABORTED`，最终请求没有 `requestfinished`。失败发生在 Reader 场景前，偏好实现与测试均未被本批修改。Windows Chrome 149 原场景、Chrome 155 加 150 ms 受控延迟的场景均未复现；CI 使用 Linux Chrome 156，不能据此排除平台差异或认定产品已修好。原始失败、重跑结果与证据见[PR #54 交接](./handoffs/2026-10-31-reader-body-boundary.md#pr-54-核验2026-10-31)。
 
-独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 已补充实际 reader 的被动观测。本地确认响应 EOF 之后触发 abort，但仍正常收到完成事件；Linux CI 根因尚待同环境证据，见[诊断交接](./handoffs/2026-10-31-workspace-response-completion.md)。只有取得可复现反例后再单独修正；保留最终请求身份、真实服务器持久化和刷新后状态断言，不以扩大超时、忽略取消或反复重跑代替定位。
+独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 已补充实际 reader 的被动观测。Windows Chrome 155、Linux Chrome 156 的原场景与 150 ms / 500 ms 对照均通过；正常保存也在响应 EOF 后触发 abort，但仍收到完成事件。历史失败未复现，观察器也可能改变时序，根因仍未结案，见[诊断交接](./handoffs/2026-10-31-workspace-response-completion.md)。临时 CI 实验已移除，保留诊断脚本和原失败资料；不修改生产保存逻辑、放宽断言或扩大超时。
 
 ## 0.3.x 移除旧列表密度参数
 
