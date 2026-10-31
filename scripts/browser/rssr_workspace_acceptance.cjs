@@ -476,6 +476,8 @@ async function preferenceOrdering(page) {
         message: 'the final workspace response must finish', timeout: 15000,
       }).toBe(true);
       console.log('preferenceOrdering: final save finished');
+      console.log('preferenceOrdering response reads:', JSON.stringify(
+        await page.evaluate(() => window.__workspaceResponseProbe.records)));
     } catch (error) {
       // Preserve the request lifecycle when CI receives headers but never reports
       // completion. Observe only: do not retry, consume a response, or weaken the wait.

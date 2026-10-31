@@ -4,7 +4,7 @@
 - 作者 / Agent：Codex
 - 分支：`codex/workspace-response-completion`
 - 基线：PR #54 合并提交 `465fead902f1f5cea423aeeaf1cbba623c9082b1`
-- 相关 commit：pending
+- 相关 commit：被动诊断 `08a5a291`；延迟对照为本记录所在提交
 - 相关 tag / release：无
 - 状态：`draft`（正在诊断，不宣称根因已修复）
 
@@ -22,7 +22,9 @@ PR #54 已按授权合并。随后单列调查 `preferenceOrdering` 在 HTTP 200
 - `reqwest 0.12.28` 的 wasm `AbortGuard::drop` 调用 abort，`bytes_stream` 持有该 guard 到流释放；本项目 `read_body` 正常路径读取到 EOF。该调用链是已核对源码，是否导致历史 CI 失败仍待同环境证据。
 - 独立本地 fetch 探针在无/有拦截及 0/150 ms 延迟下未复现完成事件缺失；不能用未复现断言 CI 无问题。
 - `node --test scripts/browser/api_traffic.test.mjs scripts/browser/server_acceptance.test.mjs scripts/browser/workspace_response_probe.test.cjs`：13/13 通过；`actionlint .github/workflows/ci.yml` 与 `git diff --check` 通过。
-- 原始证据：`target/workspace-response-20261031/`。CI 同环境结果将在完成后补充。
+- 被动诊断 `08a5a291` 的 [CI 41190658010](https://github.com/Develata/RSS-Reader/actions/runs/41190658010)：首轮 36/36；Linux Chrome 156 原场景通过，未复现历史失败。Pages PR build 成功、deploy 按条件跳过。
+- 新增有界对照脚本，在相同原断言下各跑一次 150 ms / 500 ms CDP 网络延迟。Windows Chrome 155 两组均通过；暂挂现有 reading-workspace job 收取相同 Linux 环境证据，实验完成后移除 CI 的临时调用，不增加常驻 job。
+- 原始证据：`target/workspace-response-20261031/`。延迟对照的 CI 结果将在完成后补充。
 
 ## 结果、风险与后续
 

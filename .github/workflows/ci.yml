@@ -375,6 +375,10 @@ jobs:
             mkdir -p "$ARTIFACT_DIR"
             node "scripts/browser/$script" > "$ARTIFACT_DIR/run.log" 2>&1 || { cat "$ARTIFACT_DIR/run.log"; exit 1; }
           done
+          # Temporary bounded diagnosis; retain the original assertions and timeout.
+          export ARTIFACT_DIR="$PWD/target/ci-workspace/preference_response"
+          mkdir -p "$ARTIFACT_DIR"
+          node scripts/browser/rssr_preference_response_diagnostic.cjs > "$ARTIFACT_DIR/run.log" 2>&1 || { cat "$ARTIFACT_DIR/run.log"; exit 1; }
           export ARTIFACT_DIR="$PWD/target/ci-workspace/transport"
           mkdir -p "$ARTIFACT_DIR"
           node scripts/browser/rssr_directory_transport_acceptance.cjs --offline-fixture true --artifact-dir "$ARTIFACT_DIR" > "$ARTIFACT_DIR/run.log" 2>&1 || { cat "$ARTIFACT_DIR/run.log"; exit 1; }
