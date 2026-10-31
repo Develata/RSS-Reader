@@ -7,6 +7,7 @@ const { chromium } = require('playwright/test');
 const { readerHostLifetime } = require('./reader_host_scenarios.cjs');
 const { readerShortcutInputs } = require('./reader_shortcut_scenarios.cjs');
 const { readerFlagWrites } = require('./reader_write_scenarios.cjs');
+const { readerRereadRecovery } = require('./reader_recovery_scenarios.cjs');
 
 (async () => {
   const root = path.resolve(__dirname, '../..');
@@ -16,7 +17,7 @@ const { readerFlagWrites } = require('./reader_write_scenarios.cjs');
   assert.ok((await fs.realpath(output)).startsWith(await fs.realpath(path.join(root,'target')) + path.sep));
   const workDir = path.join(output, 'server-work');
   assert.equal(await fs.stat(workDir).then(()=>true,()=>false), false, 'use a fresh isolated server work directory');
-  const report = {status:'running',checks:[],pageErrors:[],consoleErrors:[]};
+  const report = {status:'running',checks:[],pageErrors:[],consoleErrors:[],expectedConsoleErrors:[]};
   let browser, harness, images, page;
   try {
     const png = await fs.readFile(path.join(root,'icons/icon.png'));
@@ -73,6 +74,26 @@ const { readerFlagWrites } = require('./reader_write_scenarios.cjs');
         storedFlag:async(id,flag)=>(await harness.server.api('GET',`/api/v1/entries/${id}`,session.cookie)).entry[`is_${flag}`],
       });
       report.checks.push({width,pass:true,flagWrites});
+      const errorsBefore = report.consoleErrors.length;
+      const recovery=await readerRereadRecovery({page,
+        openReader:()=>page.locator('[data-slot="entry-card-title"]').nth(3).click(),
+        ready:()=>page.locator('[data-page="reader"][data-state="loaded"][data-position-ready="true"]').waitFor(),
+        entries,
+        storedFlag:async(id,flag)=>(await harness.server.api('GET',`/api/v1/entries/${id}`,session.cookie)).entry[`is_${flag}`],
+        setStoredFlag:async(id,flag,value)=>{
+          const {csrf_token}=await harness.server.api('GET','/api/v1/session',session.cookie);
+          const response=await context.request.put(`${harness.server.origin}/api/v1/entries/${id}/${flag}`,{
+            headers:{Origin:harness.server.origin,'x-rssr-csrf':csrf_token,'x-rssr-build':harness.server.buildId},
+            data:{[flag]:value},
+          });
+          assert.ok(response.ok());await response.json();
+        },
+      });
+      const expectedErrors=report.consoleErrors.slice(errorsBefore);
+      assert.deepEqual(expectedErrors,['Failed to load resource: the server responded with a status of 503 (Service Unavailable)']);
+      report.expectedConsoleErrors.push(...expectedErrors);
+      report.consoleErrors.length=errorsBefore;
+      report.checks.push({width,pass:true,recovery});
     }
     assert.deepEqual(report.pageErrors,[]);assert.deepEqual(report.consoleErrors,[]);
     report.status='passed';
