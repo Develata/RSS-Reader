@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | main 的整合基线 | `801f6337`，包含 PR #38–#53 及合并交接；本轮已重新核对远端 SHA | PR #53 产品树来自 `21f3468a`；主线 CI 与验收见[主线回执](./handoffs/2026-10-31-reader-race-merge.md)，不作为本轮修改后的测试 |
-| 当前接续分支 | `codex/reader-body-boundary`，从 `801f6337` 起步；正文选择已移至 Reader 命令的私有模块，尚未合入 main | 同一函数体等价核对、独立规则与本批验收见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)；实际宿主与编译覆盖分别记录 |
+| 当前接续分支 | `codex/reader-body-boundary`，实现提交 `97d75438`；已推送并创建 [PR #54](https://github.com/Develata/RSS-Reader/pull/54)，尚未合入 main | 实现 SHA 的 CI 重跑后 36/36、Reader Web 6/6；首轮偏好测试失败及后续文档 head 的核验边界见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)，不把重跑记作根因修复 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -37,7 +37,7 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 ## 分支与工作树快照
 
-本轮核对：**10 个本地分支、2 个工作树、8 个真实远端分支**。接续工作树为本地 `codex/reader-body-boundary`；远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import、codex/reader-rule-boundary、codex/reader-host-boundary、codex/reader-shortcut-definition、codex/reader-race-fixes。本批不删除分支或工作树，不把 `origin/HEAD` 算作分支。
+PR #54 推送后核对：**10 个本地分支、2 个工作树、9 个真实远端分支**。接续工作树为 `codex/reader-body-boundary`；远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import、codex/reader-rule-boundary、codex/reader-host-boundary、codex/reader-shortcut-definition、codex/reader-race-fixes、codex/reader-body-boundary。本批不删除分支或工作树，不把 `origin/HEAD` 算作分支。
 
 本地保留 main、上述七个已合并的 codex 分支、当前正文选择分支和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径由本轮独立快照核对；另一任务的 JavaScript 审计文档不纳入提交。历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 

@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| Reader 正文选择模块 | [私有模块归属、同函数等价核对与独立清洗检查](./2026-10-31-reader-body-boundary.md) |
+| Reader 正文选择模块与 PR #54 | [私有模块归属、行为保持与 PR 核验](./2026-10-31-reader-body-boundary.md) |
 | PR #53 合并与 main 核验 | [合并身份、主线 CI 与工作区保全](./2026-10-31-reader-race-merge.md) |
 | Reader 并发问题测试与修复 | [旧图片消息、标记写入乱序的复现及三端回归](./2026-10-30-reader-race-fixes.md) |
 | Reader 三批整合与正文渲染边界 | [PR #50–#52 合并、主线核验与兼容契约](./2026-10-30-reader-integration.md) |

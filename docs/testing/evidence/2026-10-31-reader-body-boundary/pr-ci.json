@@ -1,0 +1,310 @@
+{
+  "pr": "https://github.com/Develata/RSS-Reader/pull/54",
+  "source": "97d75438c8ba54045f28c559cb01b2bc0de4f8a1",
+  "base": "801f6337e81f498be16a3dab9ea7db3733dbbb82",
+  "testMergeCommit": "c9213de5cfd32e1b64d972676e974b5d01d50b0e",
+  "testMergeTreeEqualsSource": true,
+  "tree": "4288e230e9d18ef40938893b6fdaaf20eac3d3f3",
+  "ci": {
+    "runId": 41187780112,
+    "url": "https://github.com/Develata/RSS-Reader/actions/runs/41187780112",
+    "attempt": 2,
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "reading-workspace",
+        "id": 124500654273,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "android-smoke",
+        "id": 124500654894,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "release-ui-runner (windows-latest)",
+        "id": 124500655168,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+        "id": 124500655304,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-contract-build",
+        "id": 124500655350,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "web-ui (newsprint)",
+        "id": 124500655370,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-application)",
+        "id": 124500655420,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-web)",
+        "id": 124500655423,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-infra)",
+        "id": 124500655424,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-app)",
+        "id": 124500655482,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+        "id": 124500655556,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_queries)",
+        "id": 124500655577,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "web-ui (midnight-ledger)",
+        "id": 124500655591,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+        "id": 124500655616,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+        "id": 124500655648,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-domain)",
+        "id": 124500655656,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+        "id": 124500655682,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_settings_repository)",
+        "id": 124500655685,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_refresh_tickets)",
+        "id": 124500655771,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-cli)",
+        "id": 124500655775,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+        "id": 124500655906,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_contracts)",
+        "id": 124500655929,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (wasm_memory_store)",
+        "id": 124500655969,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_library_unicode_title_search)",
+        "id": 124500656126,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+        "id": 124500656152,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "wasm-browser-contract (test_opml_interop)",
+        "id": 124500656233,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "test-tools",
+        "id": 124500673043,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "web-ui (default)",
+        "id": 124500673788,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "format",
+        "id": 124500675061,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "web-ui (amethyst-glass)",
+        "id": 124500676239,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "release-ui-runner (ubuntu-latest)",
+        "id": 124500676489,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "native-module (rssr-api)",
+        "id": 124500678508,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "workspace",
+        "id": 124500679040,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "web-smoke",
+        "id": 124500683310,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "web-ui (atlas-sidebar)",
+        "id": 124500684131,
+        "conclusion": "success",
+        "runAttempt": 2
+      },
+      {
+        "name": "lint-and-test",
+        "id": 124501232973,
+        "conclusion": "success",
+        "runAttempt": 2
+      }
+    ]
+  },
+  "pages": {
+    "runId": 41187780013,
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "build",
+        "conclusion": "success"
+      },
+      {
+        "name": "deploy",
+        "conclusion": "skipped"
+      }
+    ]
+  },
+  "readerRules": {
+    "platform": "Linux",
+    "passed": 35,
+    "frameworkFreeStep": "success"
+  },
+  "readerWeb": {
+    "platform": "Linux",
+    "browser": "156.0.8078.80",
+    "passed": 6,
+    "serverBuild": "dev-c9213de5cfd3",
+    "pageErrors": [],
+    "consoleErrors": []
+  },
+  "initialFailure": {
+    "runAttempt": 1,
+    "success": 34,
+    "failedJobs": [
+      "reading-workspace",
+      "lint-and-test"
+    ],
+    "scenario": "preferenceOrdering before Reader scenarios",
+    "signature": "Both workspace PUTs returned HTTP 200 then net::ERR_ABORTED; final requestfinished missing",
+    "rootCauseConfirmed": false,
+    "productOrTestChanged": false,
+    "sameSourceFailedJobsRerun": 1,
+    "artifactId": 13038065828,
+    "artifactSha256": "52595c577a4ecce76c9b72724e98ac4ba42ab350d1e63741ca5824a9805f8ea8"
+  },
+  "diagnostics": [
+    {
+      "browser": "149.0.7827.55",
+      "result": "passed",
+      "casesPassed": 10,
+      "controlledLatencyMs": 0,
+      "sameBrowserAndOSAsCI": false
+    },
+    {
+      "browser": "155.0.8059.40",
+      "result": "passed",
+      "casesPassed": 10,
+      "controlledLatencyMs": 150,
+      "sameBrowserAndOSAsCI": false
+    }
+  ],
+  "limits": [
+    "Root cause of the intermittent preference test failure is unconfirmed",
+    "Same-version Chrome download was blocked by automatic approval policy",
+    "No new Windows WebView2 / Android real-host acceptance",
+    "Pages PR build only; deploy skipped"
+  ],
+  "workspaceArtifact": {
+    "id": 13037174884,
+    "sha256": "49b6c3e7d05752f5287babb5667d713861cf301003bce6f2e953465eea6f6b35"
+  },
+  "evidenceRoot": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\reader-body-pr-20261031",
+  "evidenceSha256": {
+    "implementation-ci.json": "2258a91d412f489c9aa0a9ab144cc760dfca2bcae7c8e73b4a36cc92a442bc76",
+    "initial-ci-failure.json": "18ca5f80430728d8737f7fbad343f99ede9bd69a71fbd27de42d9eec6ec1d8dd",
+    "initial-workspace-failure.log": "4a6c6c40527956ea859189e3ddf049bfee45adbe0fbade8ec29918964691dcc5",
+    "implementation-infra.log": "6bc5dfc8515828861bd58c30c06b575c3e10c1c81e7fadced54a681c1f6bcd77",
+    "workspace-retry/reader_host/acceptance.json": "6a9efca79ce0f394c9cf2c0c3c305487be8e7266be5410b4ae8d2b9f6c3437a6",
+    "reproduction-02/reproduction.json": "4000127fd28fb42b7435fde12ef5d3678f5b0dee5a2f3ca1134a091a169c48e9",
+    "reproduction-03/reproduction.json": "4e0f2b186ea0ff8f8d48dfd4317fb0b62c08b1e69c11465a004ea8d2c9b36ec2"
+  }
+}
