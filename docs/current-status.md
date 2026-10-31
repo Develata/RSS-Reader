@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | main 的整合基线 | `8dcf710c`，包含 PR #57 修复与 PR #59 README 媒体更新及交接 | PR #59 合并后和最终 main CI 均为 36/36；构建、Pages 与附件核验边界见[README 交接](./handoffs/2026-10-31-readme-media.md)，不替代后续产品改动验收 |
-| 当前接续工作树 | E 盘既有工作树，`codex/settings-rule-boundary` 基于 `8dcf710c`；Settings 草稿、逐字段保存和回填规则的本地候选，未推送 | 普通 Rust 独立编译、Dioxus 装配与实际宿主结果统一见[本批交接](./handoffs/2026-10-31-settings-rule-boundary.md)，与历史 main CI 分开记录 |
+| 当前接续工作树 | E 盘既有工作树，`codex/settings-rule-boundary` 基于 `8dcf710c`；Settings 草稿、逐字段保存和回填规则已通过本地复审 | 普通 Rust、装配与实际 Windows 结果见[实现交接](./handoffs/2026-10-31-settings-rule-boundary.md)，新正式 Web 补验及远端整合进度见[复审记录](./handoffs/2026-10-31-settings-review-merge.md) |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 

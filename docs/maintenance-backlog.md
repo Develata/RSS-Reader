@@ -14,7 +14,7 @@
 
 ## 原生界面前置的当前顺序
 
-Reader 读取恢复后旧错误提示残留已通过 PR #57 合入 `df531fcc`，见[复现与修复](./handoffs/2026-10-31-reader-reread-recovery.md)、[主线交接](./handoffs/2026-10-31-reader-recovery-merge.md)。Settings 的草稿、逐字段保存及异步回填已完成本地有界整理：去除保存策略经组件模块引用校验的依赖，分离回填决定与 Signal 发布，并直接编译同一生产规则。当前未确认新的运行缺陷；实现与验收见[本批交接](./handoffs/2026-10-31-settings-rule-boundary.md)，尚未推送或合并。
+Reader 读取恢复后旧错误提示残留已通过 PR #57 合入 `df531fcc`，见[复现与修复](./handoffs/2026-10-31-reader-reread-recovery.md)、[主线交接](./handoffs/2026-10-31-reader-recovery-merge.md)。Settings 的草稿、逐字段保存及异步回填已完成本地有界整理：去除保存策略经组件模块引用校验的依赖，分离回填决定与 Signal 发布，并直接编译同一生产规则。当前未确认新的运行缺陷；实现与验收见[本批交接](./handoffs/2026-10-31-settings-rule-boundary.md)，后续 Web 补验、复审与整合进度见[复审记录](./handoffs/2026-10-31-settings-review-merge.md)。
 
 后续先 review、整合这批结果，再检查 Settings 主题导入与预览的宿主入口是否仍有实际复用阻碍。现有文件请求身份、页面归属和取消规则继续复用；不因已有模块独立测试通过就提前替换整页或统一所有页面控制器。
 
