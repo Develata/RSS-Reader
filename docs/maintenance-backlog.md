@@ -24,7 +24,9 @@ Reader 快捷键定义已单独去重：普通 Rust 持有绑定与导航属性�
 
 后续审查进一步修正了模块归属：共享规则与脚本生成归 `ui/reader_shortcuts/`，页面专用 hook 留在 Reader 内部，消除阅读位置对页面的反向依赖和页面经全局 hook 返回自身的依赖。规则、JS 与监听生命周期保持原样，见[归属调整回执](./handoffs/2026-10-30-reader-shortcut-cohesion.md)。
 
-下一步先按依赖顺序收口已完成的 Reader 批次，随后明确正文内容、图片资源、锚点有效期、HTML/CSS、复制、IME 和无障碍兼容要求。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。详见[长期契约](./design/native-ui-preparation.md)。
+PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 head 相同，见[整合交接](./handoffs/2026-10-30-reader-integration.md)。正文内容、图片地址、锚点有效期、HTML/CSS、复制、IME 和无障碍的[兼容契约](./design/reader-rendering-boundary.md)已按源码核实。
+
+下一小批只处理 `ui/runtime/reader.rs → pages/reader_page/support.rs` 的正文选择依赖，归到所属正文准备模块并独立验证同一生产函数；当前 24 项无框架规则检查不含该函数。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
 
 ## 0.3.x 移除旧列表密度参数
 

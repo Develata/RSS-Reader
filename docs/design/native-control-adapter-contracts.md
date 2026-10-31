@@ -38,5 +38,6 @@
 - Reader 图片激活、dialog 焦点/滚动与快捷键监听集中到 `pages/reader_page/webview/`，页面仅收图片值、原始按键和关闭请求，并通知 dialog 挂载。保持各自 Dioxus 作用域及原停止消息清理；阅读位置复用共享适配器，不新增状态镜像或通用宿主接口，见[Reader 宿主入口](./native-ui-preparation.md#reader-宿主入口2026-10-30)。
 - Reader 按键/动作只在普通 Rust `BINDINGS` 定义；宿主从它投影配置并共用同步过滤。位置捕获保留捕获阶段且不检查 `defaultPrevented`，动作派发保留冒泡阶段的该门禁；按键别名、默认动作和两个监听的归属不能在去重时悄然统一，见[快捷键边界](./native-ui-preparation.md#reader-快捷键定义与同步边界2026-10-30)。
 - 共享快捷键规则与 WebView 脚本生成归 `ui/reader_shortcuts/`；Reader 专用 hook 归页面私有 `shortcuts.rs`。`ui/reading_position` 不引用 Reader 页面，页面 `webview` 不向外暴露。共享模块不持有 session、路由、Signal 或监听生命周期，见[依赖方向](./native-ui-preparation.md#模块归属与依赖方向)。
+- 正文准备、资源地址和阅读锚点的语义见[正文渲染边界](./reader-rendering-boundary.md)。当前 DOM 锚点仅在本次运行使用，图片状态持有宿主实际选择的地址；不能把它们直接当作持久书签或原生资源句柄。候选宿主仍须证明主题、选择复制、IME 和无障碍兼容。
 - 原生 BOM 兼容点依赖锁定的 Dioxus 0.7.9/sledgehammer 0.6.5 解释器 c 字段；升级依赖必须复核初始化时序与原生字符串表验收。
 - 不改变自定义 CSS、正文 HTML、语义选择器、选择复制、IME 或系统返回能力。新的原生控件必须另留实际宿主证据；浏览器小视口不替代 Android。

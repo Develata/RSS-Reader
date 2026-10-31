@@ -1,0 +1,374 @@
+{
+  "date": "2026-10-30",
+  "scope": "Merge PRs 50-52 in order and document existing Reader rendering boundaries; no subsequent runtime changes",
+  "oldMain": "4cef074c54d7df54808e7892f950f56a7a750232",
+  "productMain": "dbbaf39008afd7d318538161d8e314374d58fb24",
+  "productTree": "eb9ada0e1cc288526b6f1b574730a13c007f0165",
+  "merges": [
+    {
+      "pr": 50,
+      "merge": "7edb118d2ec30a3427842d3e0302f021dfb5f48e",
+      "head": "ff628ed03a96e57392b94ad3655cc4cb62be736a",
+      "tree": "baac375008268b79303230b22bf5623aa01983ef",
+      "identical": true,
+      "headCi": {
+        "run": 41129157604,
+        "url": "https://github.com/Develata/RSS-Reader/actions/runs/41129157604",
+        "jobsSuccessful": 36,
+        "report": {
+          "path": "target/reader-integration-20261030/ci-41129157604-jobs.json",
+          "sha256": "8bddcc2995067b0efcd3e392538a32b9f2ef0b14fe2183a1f95c2486da9a46a5"
+        }
+      }
+    },
+    {
+      "pr": 51,
+      "merge": "5d51025ae8084d53dc30b4287463224621ecdddd",
+      "head": "6a5b91b460a112543bd5154e9b86705b83421748",
+      "tree": "3a6c20eb7af24230307d20a6eacf4a780b5c4d72",
+      "identical": true,
+      "headCi": {
+        "run": 41135027211,
+        "url": "https://github.com/Develata/RSS-Reader/actions/runs/41135027211",
+        "jobsSuccessful": 36,
+        "report": {
+          "path": "target/reader-integration-20261030/ci-41135027211-jobs.json",
+          "sha256": "5a2dc9ba9b0700574d8cb6b6067f9103a1baa576f7b19f97373dd899e67696a9"
+        }
+      }
+    },
+    {
+      "pr": 52,
+      "merge": "dbbaf39008afd7d318538161d8e314374d58fb24",
+      "head": "4d0aab02271fbc12bd424da91dd779d1d4394f88",
+      "tree": "eb9ada0e1cc288526b6f1b574730a13c007f0165",
+      "identical": true,
+      "headCi": {
+        "run": 41147314689,
+        "url": "https://github.com/Develata/RSS-Reader/actions/runs/41147314689",
+        "jobsSuccessful": 36,
+        "report": {
+          "path": "target/reader-integration-20261030/ci-41147314689-jobs.json",
+          "sha256": "c91a7973e3e4155151df3ebb11185c004e9b00537c276794de321b4a5f197ecd"
+        }
+      }
+    }
+  ],
+  "review": {
+    "kind": "self-review",
+    "externalReviewsThreadsComments": 0,
+    "blockingFindings": 0
+  },
+  "localChecks": {
+    "appPassed": 420,
+    "appIgnored": 1,
+    "frameworkFreePassed": 24,
+    "fmt": "passed",
+    "reports": [
+      {
+        "path": "target/reader-integration-20261030/fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "target/reader-integration-20261030/app-tests.log",
+        "sha256": "16316e30877d946bbc78f30858717d24ca0773a3d83c431734fa189abf9146e3"
+      },
+      {
+        "path": "target/reader-integration-20261030/framework-free.log",
+        "sha256": "7ca83d30314ecc07a3175863515fbda519eb2b359d8e50c7f66492e547f59b2a"
+      }
+    ]
+  },
+  "mainCi": {
+    "run": 41148876182,
+    "url": "https://github.com/Develata/RSS-Reader/actions/runs/41148876182",
+    "jobsSuccessful": 36,
+    "report": {
+      "path": "target/reader-integration-20261030/merge-main-ci-jobs.json",
+      "sha256": "6a5854774ae7ba20456f7c4a41560dc9807b4b54396adcf98b8f7c0767682a3d"
+    }
+  },
+  "mainCiReaderHost": {
+    "passed": 4,
+    "browser": "156.0.8078.80",
+    "serverBuild": "dev-dbbaf39008af",
+    "shortcuts": [
+      {
+        "width": 1280,
+        "filterCases": 70,
+        "acceptedKeys": 10
+      },
+      {
+        "width": 390,
+        "filterCases": 70,
+        "acceptedKeys": 10
+      }
+    ],
+    "pageErrors": [],
+    "consoleErrors": [],
+    "report": {
+      "path": "target/reader-integration-20261030/merge-main-ci/reader_host/acceptance.json",
+      "sha256": "88564478bb0d32c88a3ad698552b8dca11e28d351e4925b83e2f3dbbe61fdff1"
+    }
+  },
+  "mainDocker": {
+    "run": 41148876298,
+    "jobs": [
+      {
+        "name": "build-package / source",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / page",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / linux",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "build-package / native",
+        "status": "completed",
+        "conclusion": "skipped"
+      },
+      {
+        "name": "image",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
+    "reports": [
+      {
+        "status": "pass",
+        "buildId": "git-dbbaf39008afd7d318538161d8e314374d58fb24",
+        "checks": [
+          "new data volume, login and matching build write",
+          "old build rejected without mutation",
+          "image server is the exact packaged binary",
+          "owner CLI shares the running server library",
+          "CLI rejects root and unrelated uid for owner data",
+          "owner CLI backup while server runs",
+          "graceful restart retains session and data",
+          "read-only legacy credential volume migrates unchanged; old session rejected",
+          "migrated credentials survive removal of the legacy mount"
+        ],
+        "report": {
+          "path": "target/reader-integration-20261030/merge-main-container/result.json",
+          "sha256": "b38a2b3933b42b6e7acb7867418786a6816b8441f3310c5f8f5e86662810fca1"
+        }
+      },
+      {
+        "status": "pass",
+        "buildId": "git-dbbaf39008afd7d318538161d8e314374d58fb24",
+        "checks": [
+          "package hashes and WASM id",
+          "new library",
+          "login",
+          "static index",
+          "matching build writes",
+          "old build rejected without mutation"
+        ],
+        "report": {
+          "path": "target/reader-integration-20261030/merge-main-linux/result.json",
+          "sha256": "cbe0af4f5203fd669f8ed6da3a37b0d27e5b41d65ce80a5b233f49f742a58ce0"
+        }
+      }
+    ],
+    "registryImagePublished": false,
+    "nativeAllPlatforms": "skipped"
+  },
+  "mainPages": {
+    "run": 41148876280,
+    "head": "dbbaf39008afd7d318538161d8e314374d58fb24",
+    "buildAndDeploy": "success",
+    "smoke": {
+      "status": "pass",
+      "storage": "memory-sqlite",
+      "reloadResets": true
+    },
+    "report": {
+      "path": "target/reader-integration-20261030/merge-main-pages/run.jNLHpM/result.json",
+      "sha256": "a93736ad6569a6865d3390c13ba9a55d757f9f1a7b84e3f70a89ccce47257bce"
+    }
+  },
+  "artifacts": {
+    "merge-main-ci-artifacts.json": [
+      {
+        "id": 13022566113,
+        "name": "ci-web-public",
+        "digest": "sha256:a355066e0a5c59e43e3ac6682bad6589af43e81d3a7063246723386f5bdc4708"
+      },
+      {
+        "id": 13022536701,
+        "name": "ci-ui-amethyst-glass",
+        "digest": "sha256:61b88ab370f52dbc979c936dd7232c5c72acd11bd2261b30e40988723b492cd3"
+      },
+      {
+        "id": 13022401477,
+        "name": "release-ui-runner-ubuntu-latest",
+        "digest": "sha256:b48dc51bb1ec9c28f1d0d69796f0cab31b5d2ca5909c5f2c529e3fe4070fa631"
+      },
+      {
+        "id": 13022291668,
+        "name": "ci-wasm-contracts",
+        "digest": "sha256:1222835e97bad024806cd4a260659e3881e7729cf49ad63e39cf357460876a55"
+      },
+      {
+        "id": 13022227188,
+        "name": "ci-web-server",
+        "digest": "sha256:2fe992247aa2358d5b15131798ec7fb9096c863811aab5f3fd4fb3809c9fa1bc"
+      },
+      {
+        "id": 13022157893,
+        "name": "ci-reading-workspace",
+        "digest": "sha256:0eb825de31873038d5b611dfb79c34ab85e5d15f037acf9091b3b2cd575fa620"
+      },
+      {
+        "id": 13022113543,
+        "name": "ci-ui-default",
+        "digest": "sha256:94418c9ec9bf540a3ca5bd5bfb4170427003244ab0de6fba7cc204b7056995af"
+      },
+      {
+        "id": 13022107690,
+        "name": "ci-ui-atlas-sidebar",
+        "digest": "sha256:1e943126b7b5a83d52f6a1f0f415ebdbf6c40fca1c644293d4ce963079eb2cc2"
+      },
+      {
+        "id": 13022082658,
+        "name": "release-ui-runner-windows-latest",
+        "digest": "sha256:ee4e1275918b3f7e0af0e3d7bc840c0056d253b3e0bbb5cf37b8894b6217849c"
+      },
+      {
+        "id": 13022077808,
+        "name": "ci-ui-newsprint",
+        "digest": "sha256:989571773750cd2c45926ed3807a5c639aefd26fb879c26b5970966515f5b251"
+      },
+      {
+        "id": 13021998308,
+        "name": "ci-ui-midnight-ledger",
+        "digest": "sha256:8136858c4327f86c3648d4b5ff9cbd6dfb65a99b4fa9eafe5eaec8f64390f3ce"
+      }
+    ],
+    "merge-main-docker-artifacts.json": [
+      {
+        "id": 13022570984,
+        "name": "c6-container-check",
+        "digest": "sha256:2d7de42833d4a21d3d03d91d35e32c12a7f81aa971bfe5e6d6a160b515c79d00"
+      },
+      {
+        "id": 13022306982,
+        "name": "Develata~RSS-Reader~NG8IHT.dockerbuild",
+        "digest": "sha256:19b2609830b6a86015ebe1203da28692a0f336f2be52c7640d6dc7285b19c2c7"
+      },
+      {
+        "id": 13022281561,
+        "name": "web-package-public",
+        "digest": "sha256:14451567c83a3b0d4d662125109d6ab31a27043eb94da0f64a5e81cad4c1f654"
+      },
+      {
+        "id": 13021972655,
+        "name": "web-package-linux-x86_64",
+        "digest": "sha256:23fc8a80fdb2c54342ce1134b021f6306fe4adb6aca4441d059f782c05370f0a"
+      },
+      {
+        "id": 13021882802,
+        "name": "web-package-check-linux-x86_64",
+        "digest": "sha256:9165540b2c04df033f213a066de5656ab80c1a4827f1266d00b3a2b8e68d2485"
+      }
+    ]
+  },
+  "preservation": {
+    "primary": {
+      "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+      "branch": "feat/reading-workspace-20261024",
+      "paths": 41,
+      "headBranchStatusIndexAndFileHashesPreserved": true
+    },
+    "product": {
+      "referenceHead": "4d0aab02271fbc12bd424da91dd779d1d4394f88",
+      "files": 464,
+      "referenceManifestSha256": "cfa3a2d7d7554c0efef020f7e3ac458cea22b9e1fed3d2e83a31e7833316769c",
+      "workingCopyManifestSha256": "726261ad4d830787787d958874b48ae67b680a4482617305dd67bd76c825ee69",
+      "rawByteIdentical": 454,
+      "lfToCrlfOnly": [
+        {
+          "path": "crates/rssr-app/src/pages/reader_page/image_viewer.rs",
+          "referenceSha256": "e773cbb185badc5a0b142ab4bb48e2caa167dfc195bebbd28bc90c84ba80a20d",
+          "workingCopySha256": "a0ee9fccf81836826bec6f4cd086e5fe7ecfb1ade98975ffe7be044c2bbae413"
+        },
+        {
+          "path": "crates/rssr-app/src/pages/reader_page/result_lifecycle.rs",
+          "referenceSha256": "18532f82cd2f6bffef07bf63d90f7f2dba11a6e11fa40728d07832d4c61c3ce9",
+          "workingCopySha256": "6d7bcc940bada5be95fe7c6a7ffa6da3ac184db1d6f3e999bcd53b2f5f8cbcf1"
+        },
+        {
+          "path": "crates/rssr-app/src/pages/reader_page/session.rs",
+          "referenceSha256": "e6b57040fe41b45fcf84e575e129a6f436bd51b02f4be142f2d9b2c8709883b2",
+          "workingCopySha256": "d1eee12ac009af4406532130181bafbdff2fd58957fd39abc00c0fa3f25a87b8"
+        },
+        {
+          "path": "crates/rssr-app/src/pages/reader_page/shortcuts.rs",
+          "referenceSha256": "ace3c423ae8f6da8ea9bfca60e7b1aef68acbc7275e0149c536d956d5097263c",
+          "workingCopySha256": "f76d9922688576dd90060f449c836decf0cce759f938c38bbe1b258a6d349a7e"
+        },
+        {
+          "path": "crates/rssr-app/src/pages/reader_page/webview/mod.rs",
+          "referenceSha256": "6e13db48022cc4c180e02f30cc32d7e9936c043946a6660440f29fd2798c10a1",
+          "workingCopySha256": "f006abdda8706fa584cfff842297a4939154a127fd4fe1bacea1248a964ec693"
+        },
+        {
+          "path": "crates/rssr-app/src/ui/reader_shortcuts/mod.rs",
+          "referenceSha256": "bbe4cf3a783742ac5fcdd4596b1348049a17eeb719600491ef7e15d7f3285fe0",
+          "workingCopySha256": "044aa626bc7637c2c190249ed2ce553cfd22cee78ad9ae56aefba1834d12fe35"
+        },
+        {
+          "path": "crates/rssr-app/src/ui/reader_shortcuts/shortcut_input.js",
+          "referenceSha256": "8b63ed097b66239174961f0fda54852db81ac1606510c48640621f134d95637f",
+          "workingCopySha256": "cea4026098aaff689c34354b9f58601040760066bebd65348d2283666c3152d2"
+        },
+        {
+          "path": "crates/rssr-app/src/ui/reader_shortcuts/webview.rs",
+          "referenceSha256": "68cd5e9e783068898b76ee3ce2b25598756ec729239d6cb603f9731adb7b94e7",
+          "workingCopySha256": "562cac45540c6b13a0b2ec4b97277f0d818171488bcb5b9e7ab2b9503f2264cf"
+        },
+        {
+          "path": "crates/rssr-app/src/ui/reading_position.rs",
+          "referenceSha256": "41237dd36724289b65f17e464cf30f22f7cd8b4495eb89421714608e5aacd621",
+          "workingCopySha256": "638868b32d2207d849d0b7e9e996409ea68006102b3b15735b0d5e9d8e8d71f7"
+        },
+        {
+          "path": "crates/rssr-app/tests/reader_rules.rs",
+          "referenceSha256": "f34a2ee1de42592a4dd0874d6d99e5bfeda79de21a317feba2fcb4990ce4dbf0",
+          "workingCopySha256": "b771b3632694522b1aae166980ba2429ec99dd21000b5f05e1bb062431a934e0"
+        }
+      ],
+      "gitProductContentIdentical": true,
+      "onlyDocsDifferInGit": true
+    },
+    "localBranches": 8,
+    "worktrees": 2,
+    "remoteBranches": 7
+  },
+  "historicalNativeEvidence": {
+    "gitProductContentIdentical": true,
+    "rerunInThisTask": false,
+    "referenceHead": "4d0aab02271fbc12bd424da91dd779d1d4394f88",
+    "receipt": "docs/testing/evidence/2026-10-30-reader-shortcut-cohesion/receipt.json",
+    "windowsChecks": 8,
+    "androidDeviceChecks": 4,
+    "formalWebChecks": 4,
+    "rawByteIdenticalProductInputs": 454,
+    "lfToCrlfOnlyProductInputs": 10
+  },
+  "limits": [
+    "No new renderer or runtime change",
+    "No new actual Windows or Android execution",
+    "No physical keyboard, IME, assistive technology, macOS or Linux GUI acceptance",
+    "24 framework-free tests do not include body preparation",
+    "Final docs head checks are separately collected after push in final-main-receipt.json",
+    "Prior intermittent preference wait failure is not claimed fixed"
+  ]
+}
