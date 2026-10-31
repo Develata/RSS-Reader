@@ -42,7 +42,7 @@ HTML 先进行显示规范化，再检查树构建预算、清洗并约束公式
 
 页面装配继续先发出 `BeginLoading`，结果按文章 ID 和访问代次归属。正文载荷进入共享的不可变字符串；已读、收藏和只读重读只更新相应状态，不替换正在阅读的正文。图片本地化成功后写回供下一次打开使用，当前页面没有新的正文替换回执，以保留选区、图片焦点和位置。离页后标记写入与页面读取的不同归属见[Reader 规则边界](./native-ui-preparation.md#reader-规则与装配边界2026-10-30)。
 
-只读重读的失败或缺失提示在有效读取恢复后清除；当前显示的写入失败、结果未知或其他操作提示不因读取成功而消失。提示来源属于现有页面状态，成功重读仍保留正文，所有回执继续受访问/请求代次约束。本地修复及修复前后证据见[读取恢复交接](../handoffs/2026-10-31-reader-reread-recovery.md)，尚未合入 main。
+只读重读的失败或缺失提示在有效读取恢复后清除；当前显示的写入失败、结果未知或其他操作提示不因读取成功而消失。提示来源属于现有页面状态，成功重读仍保留正文，所有回执继续受访问/请求代次约束。修复已通过 PR #57 合入 main `df531fcc`，复现及修复前后证据见[读取恢复交接](../handoffs/2026-10-31-reader-reread-recovery.md)，主线结果见[合并回执](../handoffs/2026-10-31-reader-recovery-merge.md)。
 
 这些保留规则约束未来界面；现有 HTML 字符串本身仍不是可直接用于所有原生控件的富文本模型。
 
@@ -83,7 +83,7 @@ DOM 适配器从正文中的 `p/h1/h2/h3/pre/li/blockquote` 选择块，用 `blo
 | 链接 | 原文 URL 只接受 HTTP(S)；[external_link](../../crates/rssr-app/src/bootstrap/external_link.rs) 区分 Web 新上下文与原生系统处理 | 原文、正文链接、修饰键以及窗口/系统处理保持语义；本批没有重新执行外部系统处理器验收 |
 | 选择复制、IME、无障碍 | 当前 DOM 的选择、图片 alt/按钮角色、具名阅读区、live region 和焦点规则 | 实际文本选择/剪贴板、系统 IME、键盘与辅助技术；合成事件和普通 Rust 测试不能替代 |
 
-上述“现有依据”是回归入口，不代表已经测试任何候选渲染器。独立检查直接编译 `select_reader_body`，链接真实 `rssr-infra` 清洗；正文归属批次共 35 项，本地读取恢复修复增加两项后为 37 项。检查的是本机依赖图无 Dioxus/web-sys/Wry/Tao，不代表整个 infra 无 I/O 或 HTML 呈现已脱离宿主。迁移前后的正文规则、当前运行结果与覆盖缺口见[正文选择交接](../handoffs/2026-10-31-reader-body-boundary.md)和[读取恢复交接](../handoffs/2026-10-31-reader-reread-recovery.md)。历史宿主回归仍按[并发修复交接](../handoffs/2026-10-30-reader-race-fixes.md)的源码与产物归属。
+上述“现有依据”是回归入口，不代表已经测试任何候选渲染器。独立检查直接编译 `select_reader_body`，链接真实 `rssr-infra` 清洗；正文归属批次共 35 项，读取恢复修复增加两项后为 37 项。检查的是本机依赖图无 Dioxus/web-sys/Wry/Tao，不代表整个 infra 无 I/O 或 HTML 呈现已脱离宿主。迁移前后的正文规则、当前运行结果与覆盖缺口见[正文选择交接](../handoffs/2026-10-31-reader-body-boundary.md)和[读取恢复交接](../handoffs/2026-10-31-reader-reread-recovery.md)。历史宿主回归仍按[并发修复交接](../handoffs/2026-10-30-reader-race-fixes.md)的源码与产物归属。
 
 ## 下一批建议
 

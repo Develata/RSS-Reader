@@ -5,7 +5,7 @@
 - 分支：`codex/main-regression-20261031`，复用 E 盘接续工作树
 - 开工 HEAD：`1acef61a94a007f9c7a8fc9cd934778200723642`
 - main 基线：`60b4c6f175fc3a0cc166818307dd213c9c67c852`，开工时与真实远端一致
-- 相关 commit：本记录所在提交包含 Reader 修复、回归与交接；父提交为 `1acef61a`，本批只做本地提交
+- 相关 commit：实现、回归与候选交接为 `6a39570e`，父提交 `1acef61a`；后续 PR #57 合入 `df531fcc`，主线核验单列记录
 - 相关 tag / release：无
 - 状态：`validated`
 
@@ -69,7 +69,7 @@
 
 ## 当前状态、风险与后续
 
-- 本地修复和相称验证完成，待单独进入主线审查；不追加已合并 PR，不 push、打 tag 或发布。交付提交包含本记录和精简回执。
+- 本次实现交付时仅完成本地提交 `6a39570e`。后续按用户授权通过 PR #57 合入 main `df531fcc`；PR 与新 main 的检查单列于[合并交接](./2026-10-31-reader-recovery-merge.md)，不将下列本地验证改写为合并后重新验收。
 - 本轮 Windows 是实际宿主一般回归，错误注入发生在正式 Web 与 Rust 测试；没有声称 Windows 原生后端也执行了同一网络故障注入。
 - Android 本轮仅编译；系统返回、设备交互、macOS/Linux GUI、物理 IME、辅助技术、正式签名升级和真实资料库迁移未验收。
 - 本批只改 Reader，本轮未重跑整个 workspace、远端 CI、Docker 或 Pages；上一轮 1149 项测试及主线 CI 属于其原提交，不能替代这次候选验收。

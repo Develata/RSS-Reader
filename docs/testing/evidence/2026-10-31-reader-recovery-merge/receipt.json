@@ -1,0 +1,331 @@
+{
+  "date": "2026-10-31",
+  "pr": "https://github.com/Develata/RSS-Reader/pull/57",
+  "main": "df531fccd67012fa6d114f8cbf926dd428065f0a",
+  "merge": "df531fccd67012fa6d114f8cbf926dd428065f0a",
+  "prHead": "6a39570e079a1b6cd687ed6b2286e62797bbae4a",
+  "base": "60b4c6f175fc3a0cc166818307dd213c9c67c852",
+  "mergeTree": "1190f9f23940c0d90b55dd5737b9c9d97127e9d2",
+  "mergeTreeEqualsTestedHead": true,
+  "review": {
+    "pr": "https://github.com/Develata/RSS-Reader/pull/57",
+    "base": "60b4c6f175fc3a0cc166818307dd213c9c67c852",
+    "head": "6a39570e079a1b6cd687ed6b2286e62797bbae4a",
+    "kind": "Codex source self-review; not external reviewer approval",
+    "changedFiles": 15,
+    "actionableFindings": [],
+    "checked": [
+      "RereadFailed keeps entry identity and exposes failure() for global recovery",
+      "Session applies read outcomes only within current visit and reread generation",
+      "Successful reads clear only current read-origin feedback; generic failures and SetStatus reset its origin",
+      "Flag writes still retire older rereads and retain their existing admission and release rules",
+      "Reread keeps the body Arc and the mounted body; no new reads, retry loops or side effects",
+      "Browser regression waits for a real server flag change to appear before checking banner retirement",
+      "Injected 503 console errors are exact counted expectations; unrelated errors remain failures",
+      "Historical workspace and current candidate validation are recorded separately"
+    ],
+    "notCovered": [
+      "external independent approval",
+      "new actual Android host acceptance",
+      "physical IME and assistive technology"
+    ]
+  },
+  "prValidation": {
+    "head": "6a39570e079a1b6cd687ed6b2286e62797bbae4a",
+    "testedMerge": "17eceb98e9fbab11a90b61300de3e0e328d70a75",
+    "ci": "https://github.com/Develata/RSS-Reader/actions/runs/41204796310",
+    "ciJobs": 36,
+    "externalReviewSubmissions": 0,
+    "unresolvedReviewThreads": 0
+  },
+  "workflows": [
+    {
+      "id": 41205551964,
+      "name": "Pages demo",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41205551964",
+      "head": "df531fccd67012fa6d114f8cbf926dd428065f0a",
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "build",
+          "conclusion": "success"
+        },
+        {
+          "name": "deploy",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 41205551983,
+      "name": "Docker",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41205551983",
+      "head": "df531fccd67012fa6d114f8cbf926dd428065f0a",
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "build-package / source",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / page",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / linux",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / native",
+          "conclusion": "skipped"
+        },
+        {
+          "name": "image",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 41205551977,
+      "name": "CI",
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41205551977",
+      "head": "df531fccd67012fa6d114f8cbf926dd428065f0a",
+      "attempt": 1,
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "release-ui-runner (windows-latest)",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-ui-runner (ubuntu-latest)",
+          "conclusion": "success"
+        },
+        {
+          "name": "android-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "format",
+          "conclusion": "success"
+        },
+        {
+          "name": "workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "test-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-contract-build",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-application)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-app)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-domain)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-infra)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-web)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-api)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-cli)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_queries)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_opml_interop)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_contracts)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_unicode_title_search)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (wasm_memory_store)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_settings_repository)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_refresh_tickets)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (amethyst-glass)",
+          "conclusion": "success"
+        },
+        {
+          "name": "reading-workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (midnight-ledger)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (default)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (newsprint)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (atlas-sidebar)",
+          "conclusion": "success"
+        },
+        {
+          "name": "lint-and-test",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 13043533662,
+      "name": "ci-reading-workspace",
+      "digest": "sha256:f168008601ba731b4d252b780947013d062b613ceec406f6210de433f9fbfd2f",
+      "size_in_bytes": 2191948,
+      "workflow_run": {
+        "id": 41205551977,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "df531fccd67012fa6d114f8cbf926dd428065f0a"
+      }
+    },
+    {
+      "id": 13043808079,
+      "name": "c6-container-check",
+      "digest": "sha256:c7eddb3ead42a21614b6061bba941d5570037b2d0dd1e9d738bbccad48e0cc0b",
+      "size_in_bytes": 3544,
+      "workflow_run": {
+        "id": 41205551983,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "df531fccd67012fa6d114f8cbf926dd428065f0a"
+      }
+    },
+    {
+      "id": 13044378046,
+      "name": "web-package-check-linux-x86_64",
+      "digest": "sha256:f09f4a6a71daecde24b778dfe5861fea897e74983bd53bdfcd158a219ffbcfa1",
+      "size_in_bytes": 1021,
+      "workflow_run": {
+        "id": 41205551983,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "df531fccd67012fa6d114f8cbf926dd428065f0a"
+      }
+    },
+    {
+      "id": 13043947722,
+      "name": "pages-smoke-41205551964-1",
+      "digest": "sha256:ae8641d9205591e8f353969840c5a94e450a325b514754f5acb4d2a12683de12",
+      "size_in_bytes": 941016,
+      "workflow_run": {
+        "id": 41205551964,
+        "repository_id": 1190597886,
+        "head_repository_id": 1190597886,
+        "head_branch": "main",
+        "head_sha": "df531fccd67012fa6d114f8cbf926dd428065f0a"
+      }
+    }
+  ],
+  "acceptance": {
+    "responseAdapter": 13,
+    "workspace": 18,
+    "reader": 8,
+    "readerInjected503Errors": 2,
+    "readerUnexpectedConsoleErrors": 0,
+    "readerPageErrors": 0,
+    "browser": "156.0.8078.80",
+    "serverBuild": "dev-df531fccd670",
+    "container": 9,
+    "linux": 6
+  },
+  "pages": {
+    "status": "pass",
+    "storage": "memory-sqlite",
+    "reloadResets": true
+  },
+  "imagePushed": false,
+  "evidenceRoot": "target/reader-recovery-merge-20261031",
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "notRerun": [
+    "Windows actual host",
+    "Android actual host",
+    "physical IME",
+    "assistive technology",
+    "native renderer"
+  ]
+}

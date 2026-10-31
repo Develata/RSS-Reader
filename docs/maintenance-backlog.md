@@ -14,6 +14,8 @@
 
 ## 原生界面前置的当前顺序
 
+Reader 读取恢复后旧错误提示残留已通过 PR #57 合入 `df531fcc`，见[复现与修复](./handoffs/2026-10-31-reader-reread-recovery.md)、[主线交接](./handoffs/2026-10-31-reader-recovery-merge.md)。下一候选是 Settings 已有草稿、逐字段保存及异步回填规则的无框架独立性验证，先核对实际依赖；目前没有确认新的 Settings 缺陷，本批没有开始重构。
+
 `preferenceOrdering` 的历史 CI 超时已通过后续被动观测捕获完整反例，并单列修正测试的完成门禁；当前进度见下方[偏好保存顺序](#偏好保存顺序的-ci-不稳定点)，早期未复现记录保留原日期语义。
 
 Reader 已完成普通状态/reducer、图片状态与 Dioxus 装配分离，读取准入和回执归属复用同一规则；同一生产源码的无框架编译与现有宿主回归见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)。保持唯一状态来源，现有 session/runtime 的任务执行部分仍属于当前装配。
