@@ -1,5 +1,7 @@
 # Reader 正文选择归属与行为保持验证
 
+后续整合：PR #54 已合并到 main `465fead9`，新主线检查全部通过，见[合并回执](./2026-10-31-reader-body-merge.md)。以下保留实现与 PR 核验时的状态；偏好测试另见[独立诊断](./2026-10-31-workspace-response-completion.md)。
+
 - 日期：2026-10-31
 - 作者 / Agent：Codex
 - 分支：`codex/reader-body-boundary`

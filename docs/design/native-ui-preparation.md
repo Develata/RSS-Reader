@@ -55,7 +55,7 @@ flowchart TD
 
 共享的是规则和脚本文本；页面和 App 继续各自持有监听生命周期，原回调及状态归属不变。此次移动的等价核对和三端基线/候选结果见[模块归属交接](../handoffs/2026-10-30-reader-shortcut-cohesion.md)。
 
-PR #50–#52 已按依赖顺序合入 main `dbbaf390`，合并树与各 head 相同，见[整合交接](../handoffs/2026-10-30-reader-integration.md)。正文内容、图片资源、阅读锚点及兼容要求现有[专门契约](./reader-rendering-boundary.md)。10 月 31 日分支 `codex/reader-body-boundary` 将正文选择归入唯一调用方的私有 `ui/runtime/reader/body.rs`，去除对页面 `support.rs` 的引用，保持函数体与 infra 清洗原样；runtime 的页面回执装配仍在原处。候选渲染器另行实测，不从本批推断整页已可直接迁移。
+PR #50–#52 已按依赖顺序合入 main `dbbaf390`，合并树与各 head 相同，见[整合交接](../handoffs/2026-10-30-reader-integration.md)。正文内容、图片资源、阅读锚点及兼容要求现有[专门契约](./reader-rendering-boundary.md)。10 月 31 日的正文选择归属已通过 PR #54 合入 main `465fead9`：唯一调用方持有私有 `ui/runtime/reader/body.rs`，去除对页面 `support.rs` 的引用，保持函数体与 infra 清洗原样；runtime 的页面回执装配仍在原处。主线核验见[合并交接](../handoffs/2026-10-31-reader-body-merge.md)。候选渲染器另行实测，不从本批推断整页已可直接迁移。
 
 ## 已有可独立测试的 Rust 规则
 
