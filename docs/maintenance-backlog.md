@@ -14,7 +14,7 @@
 
 ## 原生界面前置的当前顺序
 
-`preferenceOrdering` 在 PR #50 和 #52 的 CI 曾收到最终保存成功响应，却未在 15 秒内观察到 `requestfinished`；本地按前置场景加五轮偏好测试均未复现。#52 已单独增加失败时的请求生命周期诊断，未改产品、断言或超时。根因待确认，重跑成功不能结案，见[失败记录](./handoffs/2026-10-30-reader-shortcut-definition.md#ci-失败与独立诊断)。
+`preferenceOrdering` 的历史 CI 超时已通过后续被动观测捕获完整反例，并单列修正测试的完成门禁；当前进度见下方[偏好保存顺序](#偏好保存顺序的-ci-不稳定点)，早期未复现记录保留原日期语义。
 
 Reader 已完成普通状态/reducer、图片状态与 Dioxus 装配分离，读取准入和回执归属复用同一规则；同一生产源码的无框架编译与现有宿主回归见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)。保持唯一状态来源，现有 session/runtime 的任务执行部分仍属于当前装配。
 
@@ -26,13 +26,13 @@ Reader 快捷键定义已单独去重：普通 Rust 持有绑定与导航属性�
 
 PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 head 相同，见[整合交接](./handoffs/2026-10-30-reader-integration.md)。正文内容、图片地址、锚点有效期、HTML/CSS、复制、IME 和无障碍的[兼容契约](./design/reader-rendering-boundary.md)已按源码核实。
 
-10 月 31 日的 `codex/reader-body-boundary` 已将正文选择归入唯一调用方的私有模块，消除 runtime 对页面 `support.rs` 的引用；独立检查扩至 35 项并调用同一生产函数与真实清洗，结果及待整合状态见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)。后续以实际复用阻碍决定下一步，候选渲染器仍须单独证明兼容性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
+10 月 31 日的正文选择归属已通过 PR #54 合入 main `465fead9`，消除 runtime 对页面 `support.rs` 的引用；独立检查扩至 35 项并调用同一生产函数与真实清洗，结果见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)与[主线回执](./handoffs/2026-10-31-reader-body-merge.md)。后续以实际复用阻碍决定下一步，候选渲染器仍须单独证明兼容性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
 
 ## 偏好保存顺序的 CI 不稳定点
 
 PR #54 的实现提交 `97d75438` 再次遇到既有 `preferenceOrdering` 超时：两笔 workspace PUT 均收到 HTTP 200，随后浏览器报告 `net::ERR_ABORTED`，最终请求没有 `requestfinished`。失败发生在 Reader 场景前，偏好实现与测试均未被本批修改。Windows Chrome 149 原场景、Chrome 155 加 150 ms 受控延迟的场景均未复现；CI 使用 Linux Chrome 156，不能据此排除平台差异或认定产品已修好。原始失败、重跑结果与证据见[PR #54 交接](./handoffs/2026-10-31-reader-body-boundary.md#pr-54-核验2026-10-31)。
 
-后续应优先在同环境观测应用实际收到的响应流、请求取消与 DevTools 完成事件，区分保存失败和验收同步信号的问题。只有取得可复现反例后再单独修正；保留最终请求身份、真实服务器持久化和刷新后状态断言，不以扩大超时、忽略取消或反复重跑代替定位。
+独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 先增加被动观测，随后在 `afb57356` 的 CI 捕获完整反例：原 reader 已读完 `true` 和 EOF，取消时也已完成，但 DevTools 不再报告 `requestfinished`。现已单列修正测试门禁，精确匹配最终 PUT 的 payload 与完整布尔响应；保留真实持久化、重载断言和 15 秒上限，产品保存行为不变。普通工具测试 14 项、Windows 浏览器适配反例 10 项和正式 Web 18 场景通过，最终远端检查与边界见[修复交接](./handoffs/2026-10-31-workspace-response-fix.md)。这不代表所有偏好保存问题均已排除。
 
 ## 0.3.x 移除旧列表密度参数
 

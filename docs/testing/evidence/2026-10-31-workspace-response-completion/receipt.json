@@ -1,0 +1,260 @@
+{
+  "date": "2026-10-31",
+  "issueStatus": "unresolved-not-reproduced",
+  "productMain": "465fead902f1f5cea423aeeaf1cbba623c9082b1",
+  "passiveProbeHead": "08a5a291e090c5e661f03f4a25d7d40ab2476f36",
+  "passiveProbeCi": [
+    {
+      "id": 41190657987,
+      "name": "Pages demo",
+      "status": "completed",
+      "conclusion": "success",
+      "total": 2,
+      "success": 1,
+      "skipped": [
+        "deploy"
+      ],
+      "unfinished": [],
+      "failed": []
+    },
+    {
+      "id": 41190658010,
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "success",
+      "total": 36,
+      "success": 36,
+      "skipped": [],
+      "unfinished": [],
+      "failed": []
+    }
+  ],
+  "controlledHead": "c79af82da22969c76dc6df2014c30f8c530cfde6",
+  "controlledWorkflow": {
+    "id": 41191391042,
+    "url": "https://github.com/Develata/RSS-Reader/actions/runs/41191391042",
+    "workspaceJob": 124509266964,
+    "workspaceConclusion": "success",
+    "note": "This receipt verifies the completed workspace experiment, not the later final PR head."
+  },
+  "artifact": {
+    "id": 13039560374,
+    "name": "ci-reading-workspace",
+    "digest": "sha256:69588c64256c7300b9878b363c6059871dae875b5732841ab56fdbd21d1b89df",
+    "size_in_bytes": 2192930
+  },
+  "linuxExperiment": {
+    "browser": "156.0.8078.80",
+    "cases": [
+      {
+        "latencyMs": 150,
+        "status": "passed"
+      },
+      {
+        "latencyMs": 500,
+        "status": "passed"
+      }
+    ],
+    "pageErrors": [],
+    "status": "passed"
+  },
+  "linuxResponseReads": [
+    {
+      "id": 1,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 2,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 1,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 2,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 1,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 2,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 1,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    },
+    {
+      "id": 2,
+      "chunks": [
+        {
+          "done": false,
+          "bytes": 4,
+          "text": "true"
+        },
+        {
+          "done": true,
+          "bytes": 0,
+          "text": ""
+        }
+      ],
+      "done": true,
+      "status": 200,
+      "aborted": true,
+      "doneWhenAborted": true
+    }
+  ],
+  "windowsExperiment": {
+    "browser": "155.0.8059.40",
+    "cases": [
+      {
+        "latencyMs": 150,
+        "status": "passed"
+      },
+      {
+        "latencyMs": 500,
+        "status": "passed"
+      }
+    ],
+    "pageErrors": [],
+    "status": "passed"
+  },
+  "localInputIdentity": {
+    "productBaseline": "97d75438c8ba54045f28c559cb01b2bc0de4f8a1",
+    "sameProductAsMain": "465fead902f1f5cea423aeeaf1cbba623c9082b1",
+    "serverSha256": "356e10d015aff2a4e5d044a3b862a13c19d111a08bcf5874aecd2b839947913d",
+    "fixtureSha256": "28e99cfe46a304034872be15cb591061bea4d711d31e25074b27c68fb233e069",
+    "publicFilesVerified": 29,
+    "publicManifestSha256": "c55bc08a35cfabb53d33cab5e9c6160855b631c3369fc50fc02e042744a61919"
+  },
+  "nodeTests": {
+    "total": 13,
+    "passed": 13,
+    "covers": [
+      "original promise and reader identity",
+      "no extra read",
+      "truncation and cancellation are not EOF",
+      "cleanup preserves another observer"
+    ]
+  },
+  "unchanged": [
+    "production code",
+    "final PUT identity check",
+    "15 second completion timeout",
+    "requestfinished requirement",
+    "persisted preference and reload assertions"
+  ],
+  "limits": [
+    "Historical missing-requestfinished failure not reproduced",
+    "Observation callbacks may change scheduling",
+    "No new Windows WebView2 or Android host acceptance"
+  ]
+}
