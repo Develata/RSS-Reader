@@ -59,6 +59,28 @@ exports.readerHostLifetime = async ({page, openReader, ready, entries, systemBac
   });
   try {
     assert.deepEqual(await snapshot(), idle);
+    // Both native hosts and Web deliver image bridge messages asynchronously.
+    // Queue activation and a real navigation in one turn, before a modal can
+    // make the old page inert. The image must remain owned by its original visit.
+    await openReader(); await ready();
+    await expect.poll(snapshot).toEqual(reading);
+    await page.locator('[data-action="open-reader-image"]').first().waitFor();
+    const originalEntry = await page.locator('[data-page="reader"]').getAttribute('data-position-key');
+    await expect(page.locator('[data-nav="next-unread-entry"]')).toBeEnabled();
+    await page.evaluate(() => {
+      document.querySelector('[data-action="open-reader-image"]').click();
+      document.querySelector('[data-nav="next-unread-entry"]').click();
+    });
+    await expect(page.locator('[data-page="reader"]')).not.toHaveAttribute('data-position-key',originalEntry);
+    await ready();
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await expect(page.locator('[data-layout="reader-image-viewer"]')).toHaveCount(0);
+    facts.push({mode:'activation-then-navigation',originalEntry,
+      currentEntry:await page.locator('[data-page="reader"]').getAttribute('data-position-key')});
+    await page.locator('[data-nav="back"]').click(); await ready();
+    await expect(page.locator('[data-page="reader"]')).toHaveAttribute('data-position-key',originalEntry);
+    await page.locator('[data-nav="back"]').click(); await entries();
+    await expect.poll(snapshot).toEqual(idle);
     for (const mode of ['button', 'back', 'unmount']) {
       await openReader(); await ready();
       await expect.poll(snapshot).toEqual(reading);

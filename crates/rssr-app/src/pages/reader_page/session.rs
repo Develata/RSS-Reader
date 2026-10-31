@@ -9,7 +9,7 @@ use super::{
     intent::ReaderPageIntent,
     reducer::reduce_reader_page_intent,
     result_lifecycle::{ReaderResultScope, RereadPlan, plan_reread},
-    state::ReaderPageState,
+    state::{ReaderFlag, ReaderPageState},
 };
 
 pub(super) fn dispatch_reader_page_intent(
@@ -135,33 +135,45 @@ impl ReaderPageSession {
 
     /// The reader's buttons and shortcuts toggle: they ask for the opposite of what it shows.
     pub(crate) fn toggle_read(self, via_shortcut: bool) {
-        let Some(read) = self.known_flags().map(|(read, _)| !read) else { return };
-        self.spawn_flag_write(UiCommand::Reader(ReaderCommand::SetRead {
-            entry_id: self.entry_id,
-            read,
-            via_shortcut,
-        }));
+        let Some(read) = self.known_flags(ReaderFlag::Read).map(|(read, _)| !read) else { return };
+        self.spawn_flag_write(
+            ReaderFlag::Read,
+            UiCommand::Reader(ReaderCommand::SetRead {
+                entry_id: self.entry_id,
+                read,
+                via_shortcut,
+            }),
+        );
     }
 
     pub(crate) fn toggle_starred(self, via_shortcut: bool) {
-        let Some(starred) = self.known_flags().map(|(_, starred)| !starred) else { return };
-        self.spawn_flag_write(UiCommand::Reader(ReaderCommand::SetStarred {
-            entry_id: self.entry_id,
-            starred,
-            via_shortcut,
-        }));
+        let Some(starred) = self.known_flags(ReaderFlag::Starred).map(|(_, starred)| !starred)
+        else {
+            return;
+        };
+        self.spawn_flag_write(
+            ReaderFlag::Starred,
+            UiCommand::Reader(ReaderCommand::SetStarred {
+                entry_id: self.entry_id,
+                starred,
+                via_shortcut,
+            }),
+        );
     }
 
     /// 已读与收藏，只在它们是这篇文章存储里的值时给出；加载中按下的切换不发出。
-    fn known_flags(self) -> Option<(bool, bool)> {
+    fn known_flags(self, flag: ReaderFlag) -> Option<(bool, bool)> {
         let state = self.state.peek();
-        state.flags_known(self.entry_id).then_some((state.is_read, state.is_starred))
+        state.can_write_flag(self.entry_id, flag).then_some((state.is_read, state.is_starred))
     }
 
     /// User-confirmed flag writes belong to the app. Reading and automatic image
     /// localization still belong to the visit; neither should outlive navigation.
-    fn spawn_flag_write(self, command: UiCommand) {
+    fn spawn_flag_write(self, flag: ReaderFlag, command: UiCommand) {
         let shell = consume_context::<crate::ui::AppShellState>();
+        // Set the gate before spawning: buttons and shortcuts can arrive before
+        // the next render. The existing visit scope also owns its release.
+        dispatch_reader_page_intent(self.state, ReaderPageIntent::FlagWriteStarted(flag));
         let scope = self.state.with_peek(|state| ReaderResultScope::capture(self.entry_id, state));
         shell.spawn_in_shell(async move {
             let intents = run_ui_command(command).await;
@@ -172,6 +184,10 @@ impl ReaderPageSession {
                     {
                         dispatch_reader_page_intent(self.state, intent);
                     }
+                    dispatch_reader_page_intent(
+                        self.state,
+                        ReaderPageIntent::FlagWriteFinished(flag),
+                    );
                 });
             } else {
                 for intent in intents.into_iter().filter_map(UiIntent::into_reader_page_intent) {
@@ -263,6 +279,80 @@ mod tests {
             }
         }
         panic!("reader operation did not finish");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reader_buttons_and_shortcuts_share_a_flag_gate_and_failure_releases_it() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        for (operation, flag) in
+            [("set_entry_read", ReaderFlag::Read), ("set_entry_starred", ReaderFlag::Starred)]
+        {
+            let backend = Scripted::over_new_library();
+            let hold = backend.hold(operation);
+            backend.fail_once(
+                operation,
+                rssr_api::BackendError::new(rssr_api::ErrorCode::Network, "flag response failed"),
+            );
+            let _host = test_host::install(backend.clone());
+            let mut dom = VirtualDom::new(write_test_app);
+            dom.rebuild_in_place();
+            let probe = dom.in_scope(ScopeId::APP, consume_context::<WriteProbe>);
+            let session = probe.session.peek().unwrap();
+            let toggle = |shortcut| match flag {
+                ReaderFlag::Read => session.toggle_read(shortcut),
+                ReaderFlag::Starred => session.toggle_starred(shortcut),
+            };
+            let body = session.snapshot().body_text;
+            dom.in_scope(probe.scope.peek().unwrap(), || {
+                // Both entry points can run before the next render.
+                toggle(false);
+                toggle(true);
+                toggle(false);
+            });
+            until_write(&mut dom, || hold.waiting() == 1).await;
+            assert_eq!(backend.calls(operation), 1);
+            assert!(session.snapshot().flag_write_pending(flag));
+            hold.release();
+            until_write(&mut dom, || !session.snapshot().flag_write_pending(flag)).await;
+            assert!(session.snapshot().status.contains("flag response failed"));
+            assert!(std::sync::Arc::ptr_eq(&body, &session.snapshot().body_text));
+
+            dom.in_scope(probe.scope.peek().unwrap(), || toggle(true));
+            until_write(&mut dom, || hold.waiting() == 1).await;
+            assert_eq!(backend.calls(operation), 2, "a completed failure must allow a new action");
+            hold.release();
+            until_write(&mut dom, || !session.snapshot().flag_write_pending(flag)).await;
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn an_old_flag_completion_cannot_release_the_new_visits_gate() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+        let backend = Scripted::over_new_library();
+        let hold = backend.hold("set_entry_starred");
+        let _host = test_host::install(backend.clone());
+        let mut dom = VirtualDom::new(write_test_app);
+        dom.rebuild_in_place();
+        let (mut probe, shell) = dom.in_scope(ScopeId::APP, || {
+            (consume_context::<WriteProbe>(), consume_context::<crate::ui::AppShellState>())
+        });
+        let first = probe.session.peek().unwrap();
+        dom.in_scope(probe.scope.peek().unwrap(), || first.toggle_starred(false));
+        until_write(&mut dom, || hold.waiting() == 1).await;
+        dom.in_scope(ScopeId::APP, || probe.visible.set(false));
+        dom.render_immediate_to_vec();
+        dom.in_scope(ScopeId::APP, || probe.visible.set(true));
+        dom.render_immediate_to_vec();
+        let next = probe.session.peek().unwrap();
+        dom.in_scope(probe.scope.peek().unwrap(), || next.toggle_starred(false));
+        until_write(&mut dom, || hold.waiting() == 2).await;
+        hold.release();
+        until_write(&mut dom, || shell.job_notice().is_some()).await;
+        assert!(next.snapshot().flag_write_pending(ReaderFlag::Starred));
+        dom.in_scope(probe.scope.peek().unwrap(), || next.toggle_starred(true));
+        assert_eq!(backend.calls("set_entry_starred"), 2);
+        hold.release();
+        until_write(&mut dom, || !next.snapshot().flag_write_pending(ReaderFlag::Starred)).await;
     }
 
     #[tokio::test(flavor = "current_thread")]

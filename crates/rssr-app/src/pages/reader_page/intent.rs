@@ -1,4 +1,4 @@
-use super::state::ReaderPageLoadedContent;
+use super::state::{ReaderFlag, ReaderPageLoadedContent};
 use crate::ui::failure::UiFailure;
 
 #[derive(Debug, Clone)]
@@ -28,6 +28,9 @@ pub(crate) enum ReaderPageIntent {
     },
     /// A backend call failed (C4b item 1).
     Failed(UiFailure),
+    /// One in-flight write per flag in this visit; read and starred remain independent.
+    FlagWriteStarted(ReaderFlag),
+    FlagWriteFinished(ReaderFlag),
     /// The read-only refresh's answer (C4b item 2): the flags and the neighbours. The body, the
     /// title and what the page did with them (image localization, position) stay.
     ApplyReread {
