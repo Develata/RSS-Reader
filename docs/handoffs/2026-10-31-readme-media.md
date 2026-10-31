@@ -4,9 +4,9 @@
 - 作者 / Agent：Codex
 - 分支：`codex/readme-media-20261031`
 - 源码 HEAD：`f3d26a90e08ac9a0dc2f30677633d96c46195ce1`（截图时 main）
-- 相关 commit：pending；本地文档提交后执行标准 GC，再补回执
+- 相关 commit：`40c3e0de`（README、媒体约定、旧图删除与初始交接）；本记录随后以单独的本地文档提交补充 GC 回执
 - 相关 tag / release：无；本次截图不代表 v0.2.1 发布包
-- 状态：`draft`
+- 状态：`validated`
 
 ## 工作摘要
 
@@ -57,12 +57,30 @@
 
 文档检查覆盖根 README、CONTRIBUTING 和 docs 共 349 份 Markdown、1734 个本地链接：没有失效链接或锚点。最终 diff 仅含上述文档和旧图删除，`git diff --check` 通过；主 checkout 的 HEAD、分支、index 与 41 个改动/缺失路径均与任务开始时一致。
 
-本地提交后先记录 `git count-objects -vH` / `git status --short`，确认没有并发 Git 写入或锁文件，再执行不带激进参数的 `git gc`，比较实际对象目录字节并执行 `git fsck --full --no-dangling`。GC 尚待执行，最终结果补入本节，不用历史结果替代。
+`40c3e0de` 提交后，工作树干净。检查没有 Git 锁文件或并发 Git 写入；机器上三个已有 Git 进程仅执行只读的 `config --null --get core.fsmonitor`，未停止这些其他会话的进程。随后运行一次无附加参数的 `git gc`，退出码 0；`git fsck --full --no-dangling` 退出码 0，输出为空。
+
+| `git count-objects -vH` | GC 前 | GC 后 |
+| --- | --- | --- |
+| count | 801 | 0 |
+| size | 1.98 MiB | 0 bytes |
+| in-pack | 20839 | 20736 |
+| packs | 2 | 2 |
+| size-pack | 14.61 MiB | 14.77 MiB |
+| prune-packable | 0 | 0 |
+| garbage | 1 | 1 |
+| size-garbage | 0 bytes | 0 bytes |
+| `.git/objects` 文件长度合计 | 18170549 字节 | 15659416 字节 |
+
+对象目录文件长度合计减少 **2511133 字节（约 2.39 MiB）**。这是同一次 GC 前后的文件字节测量，非磁盘分配簇大小；计数中的 size / size-pack 不包含该目录全部辅助文件。GC 后再提交本交接回执会产生少量新的松散对象，不改变上表这次 GC 的测量结果。
+
+GC 前后均有 `garbage found: .../.git/worktrees/native-back-policy/refs` 警告。只读核对该路径是既有空目录（2026-10-29），计入 1 项、0 字节；未手工清理 Git 元数据。`fsck` 没有报告对象损坏或缺失。
+
+所有分支与 tag 的引用值、当前 HEAD、index、工作树状态在 GC 前后完全一致；旧图历史 blob 仍存在且大小为 651701 字节。主 checkout 的 HEAD、分支、index 和 41 个改动/缺失路径在 GC 后仍与原基线一致。详见证据目录中的 `gc-before.json`、`gc-after.json`、`gc-comparison.json`、`fsck.log`、`fsck-exit.txt` 与 `primary-preservation.json`。
 
 ## 当前状态、风险与后续事项
 
 - 当前授权为本地提交；不 push、不创建 PR、不发布。文档分支仍需后续发布到远端，Issue 与附件已按本任务授权创建。
-- `E:/gitclone/RSS-Reader` 主 checkout 原有 41 个改动/缺失路径已建立 HEAD、分支、index 和文件散列基线，收尾时再次核对；该 checkout 不切换、不清理、不提交。
+- `E:/gitclone/RSS-Reader` 主 checkout 原有 41 个改动/缺失路径已按 HEAD、分支、index 和文件散列基线核对，保持不变；没有切换、清理或提交该 checkout。
 - 本次只验证截图所需的正式 Web 页面和文档；没有修改产品代码，不将这次截图当作完整产品回归或原生宿主验收。
 - 外部附件依赖 GitHub 可达性；保留媒体 Issue 和独立本地备份，今后界面有实质变化时复用该 Issue 更新。
 
