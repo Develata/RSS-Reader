@@ -13,8 +13,8 @@
 | 范围 | 当前事实 | 证据与边界 |
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
-| main 的产品整合基线 | `ed0714d3`，包含 PR #38–#53；E 盘接续工作树已快进到 main | PR #53 合并树等于 `21f3468a`；合并后检查见[主线回执](./handoffs/2026-10-31-reader-race-merge.md)。此前 `dbbaf390` 的三批整合结果仍作为[历史证据](./handoffs/2026-10-30-reader-integration.md)保留 |
-| 本轮后续提交 | main 上的合并交接、维护状态及证据文档；没有后续产品代码变化 | 产品继续对应 `21f3468a`，本地三端产物身份见[修复回执](./testing/evidence/2026-10-30-reader-race-fixes/receipt.json)。后续文档 head 的 CI 按其精确 SHA 单独核对 |
+| main 的整合基线 | `801f6337`，包含 PR #38–#53 及合并交接；本轮已重新核对远端 SHA | PR #53 产品树来自 `21f3468a`；主线 CI 与验收见[主线回执](./handoffs/2026-10-31-reader-race-merge.md)，不作为本轮修改后的测试 |
+| 当前接续分支 | `codex/reader-body-boundary`，从 `801f6337` 起步；正文选择已移至 Reader 命令的私有模块，尚未合入 main | 同一函数体等价核对、独立规则与本批验收见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)；实际宿主与编译覆盖分别记录 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -33,13 +33,13 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 1. **保留已收口的规则边界。** App 设置读取已经审查、CI 和合并；不再列为候选。主题选择的现有行为已完成专项，不继续扩大 Shell 提取或重复实现系统弹窗。
 2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留接续工作树与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布新版本。
-3. **处理下一条具体依赖。** Reader 并发修复已合并；后续实现仍聚焦命令装配对页面 `support.rs` 的正文选择引用，保留候选顺序与清洗政策，并独立验证同一生产函数。实际原生正文渲染器仍需验证主题、选择复制、IME 和无障碍；没有第二种实现前不新增通用框架、crate 或全局宿主接口。见[下一批范围](./design/reader-rendering-boundary.md#下一批建议)。
+3. **收口正文选择模块。** 当前分支已移除命令装配对页面 `support.rs` 的引用，保留候选顺序、函数体与唯一清洗实现；先完成该分支整合，再由实际复用阻碍选择下一步。实际原生正文渲染器仍需验证主题、选择复制、IME 和无障碍；没有第二种实现前不新增通用框架、crate 或全局宿主接口。见[后续边界](./design/reader-rendering-boundary.md#下一批建议)。
 
 ## 分支与工作树快照
 
-合并后核对：**9 个本地分支、2 个工作树、8 个真实远端分支**。接续工作树现为 main；远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import、codex/reader-rule-boundary、codex/reader-host-boundary、codex/reader-shortcut-definition、codex/reader-race-fixes。本批不删除分支或工作树，不把 `origin/HEAD` 算作分支。
+本轮核对：**10 个本地分支、2 个工作树、8 个真实远端分支**。接续工作树为本地 `codex/reader-body-boundary`；远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import、codex/reader-rule-boundary、codex/reader-host-boundary、codex/reader-shortcut-definition、codex/reader-race-fixes。本批不删除分支或工作树，不把 `origin/HEAD` 算作分支。
 
-本地保留 main、上述七个已合并的 codex 分支和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径已逐项核对未变；另一任务的 JavaScript 审计文档不纳入提交。历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
+本地保留 main、上述七个已合并的 codex 分支、当前正文选择分支和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径由本轮独立快照核对；另一任务的 JavaScript 审计文档不纳入提交。历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 
 ## 验证结论的边界
 

@@ -14,10 +14,10 @@ def main():
     root = Path(__file__).resolve().parent.parent
     target = args.target_dir.resolve()
     target.mkdir(parents=True, exist_ok=True)
-    # Build only the existing API dependency graph. Do not use rssr-app artifacts, stubs,
-    # copied rule implementations, or a new Cargo package to make this probe pass.
+    # Build the existing infra dependency graph for the real HTML cleaner, without the app.
+    # Do not use rssr-app artifacts, stubs, copied rules, or a new Cargo package for this probe.
     build = subprocess.run(
-        ["cargo", "build", "-p", "rssr-api", "--locked", "--target-dir", str(target),
+        ["cargo", "build", "-p", "rssr-infra", "--locked", "--target-dir", str(target),
          "--message-format=json"], cwd=root, text=True, stdout=subprocess.PIPE, check=True,
     )
     libraries = {}
@@ -34,7 +34,7 @@ def main():
     forbidden = {name for name in compiled if name.startswith(("dioxus", "web_sys", "wry", "tao"))}
     if forbidden:
         raise RuntimeError(f"UI dependencies entered the rule build: {sorted(forbidden)}")
-    required = ("rssr_api", "rssr_domain", "serde")
+    required = ("rssr_api", "rssr_domain", "rssr_infra", "serde", "url")
     executable = target / ("reader-rules.exe" if os.name == "nt" else "reader-rules")
     command = ["rustc", "--edition=2024", "--test", "--deny=warnings",
                "--crate-name=reader_rules", "crates/rssr-app/tests/reader_rules.rs",

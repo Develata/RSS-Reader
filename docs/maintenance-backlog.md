@@ -26,7 +26,7 @@ Reader 快捷键定义已单独去重：普通 Rust 持有绑定与导航属性�
 
 PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 head 相同，见[整合交接](./handoffs/2026-10-30-reader-integration.md)。正文内容、图片地址、锚点有效期、HTML/CSS、复制、IME 和无障碍的[兼容契约](./design/reader-rendering-boundary.md)已按源码核实。
 
-下一小批只处理 `ui/runtime/reader.rs → pages/reader_page/support.rs` 的正文选择依赖，归到所属正文准备模块并独立验证同一生产函数；当前 24 项无框架规则检查不含该函数。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
+10 月 31 日的 `codex/reader-body-boundary` 已将正文选择归入唯一调用方的私有模块，消除 runtime 对页面 `support.rs` 的引用；独立检查扩至 35 项并调用同一生产函数与真实清洗，结果及待整合状态见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)。后续以实际复用阻碍决定下一步，候选渲染器仍须单独证明兼容性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
 
 ## 0.3.x 移除旧列表密度参数
 
