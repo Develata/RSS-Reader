@@ -195,9 +195,9 @@ Reader 的同种标记写入未完成时，该按钮禁用并显示 `aria-busy="
 
 已保存的内置主题 CSS 是当时的文本快照，升级保留原样并继续识别旧版本身份。要采用新版样式，重新点击对应卡片预览，再点“保存设置”；旧版本显示“当前已选”不代表已替换成最新 CSS。以上变更属于页面呈现与 session，不改变 settings application 用例或配置格式。
 
-保存按主线 SettingsPatch 逐字段提交，只有编辑过的 CSS 参与界面语法校验；存储、已提交编辑和后来编辑按 stored → submitted → pending 投影。save_policy.rs 负责补丁准备及回执汇总，session 保留主线门禁、失败恢复和任务作用域。保存成功清除 submitted，后续 pending 继续保留；失败把 submitted 合并回 pending 下方。
+保存按主线 SettingsPatch 逐字段提交，只有编辑过的 CSS 参与界面语法校验；存储、已提交编辑和后来编辑按 stored → submitted → pending 投影。普通 Rust 的 draft_edits.rs 负责编辑转换和失败恢复，save_policy.rs 直接复用 domain 校验并准备补丁、汇总回执，draft_projection.rs 决定回填后的草稿、预设/预览保留与字段提示代次。session 保留 Signal、主线门禁调用顺序、ThemeController 和任务作用域。保存成功清除 submitted，后续 pending 继续保留；失败把 submitted 合并回 pending 下方。
 
-初次加载和下载只更新 stored，不覆盖尚未保存的逐字段编辑。读取受最新代次与成功写入版本约束；写入期间的读取回执暂存，成功写入丢弃，失败且没有更新读取时再应用。跨刷新/登录的草稿恢复沿用主线。
+初次加载和下载只更新 stored，不覆盖尚未保存的逐字段编辑。读取受最新代次与成功写入版本约束；写入期间的读取回执暂存，成功写入丢弃，失败且没有更新读取时再应用。request_lifecycle.rs 在实际投影时检查 App 的设置版本；若已变化，session 仅用当前设置回填，不重新存入旧读取结果。跨刷新/登录的草稿恢复沿用主线。
 
 保存与实际下载共用同步 gate；下载确认及目标捕获保持主线规则，保存中被拒绝的下载保留确认。上传和下载属于 App，离页仍完成回执并触发重新读取，更新实际存储主题。数值解析提示按字段投影代次退休，未被存储结果供应的编辑字段保留提示。
 

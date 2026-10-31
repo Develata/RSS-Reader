@@ -1,8 +1,8 @@
 //! Preparation and receipt folding for per-field SettingsPatch saves. Draft overlays
 //! live in draft_edits, read/write ordering in request_lifecycle; the session owns effects.
-use super::{intent::SettingsPageIntent, themes::validate_custom_css};
+use super::intent::SettingsPageIntent;
 use rssr_application::SettingsPatch;
-use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, UserSettings};
+use rssr_domain::{DEFAULT_ENTRIES_PAGE_SIZE, UserSettings, validation::validate_custom_css};
 
 pub(super) fn validate_patch(patch: &SettingsPatch) -> Result<(), String> {
     if let Some(css) = &patch.custom_css {

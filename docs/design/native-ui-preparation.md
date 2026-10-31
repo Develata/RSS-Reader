@@ -21,6 +21,14 @@
 - 图片激活消息携带已有的 `load_generation` 文本值；普通 Rust 检查访问身份，hook 再确认当前正文已就绪后才打开。换文章及重新访问同一文章时，迟到消息均不能打开旧图片。图片状态仍只保存资源引用与替代文本，不复制 Reader 状态或新增访问计数器。
 - `scripts/check_reader_rule_boundary.py` 用同一生产源码和既有测试编译独立测试程序，显式链接 `rssr-api`、`rssr-domain`、`rssr-infra`、serde 和 url；本机依赖构建不得出现 Dioxus/web-sys/Wry/Tao。正文选择加入后使用真实 infra 清洗，不创建 Cargo package 或替身状态/清洗器。CI 的现有检查步骤移到 `rssr-infra` job 复用依赖缓存；完整 app 测试继续验证装配。原批证据见[规则交接](../handoffs/2026-10-30-reader-rule-boundary.md)，扩充后的 35 项见[正文选择交接](../handoffs/2026-10-31-reader-body-boundary.md)。
 
+## Settings 草稿与回填边界（2026-10-31）
+
+- 页面私有的 `draft_edits.rs` 继续独占 submitted/pending 补丁转换；`request_lifecycle.rs` 继续管理读取身份、保存/下载共享门禁及暂存读取。读取真正投影时再比较 App 的设置版本，包括写入结束后释放的读取；版本已变则显示当前设置，不再次应用旧回执。
+- `draft_projection.rs` 接收已有编辑、存储设置、上次 CSS、数值提示代次及回填来源，返回草稿和发布决定。保持 stored → submitted → pending；未编辑数值字段即使值相同也更新提示代次，编辑字段保留提示；仅 CSS 实际改变使旧文件导入失效。读取/下载和保存成功分别沿用原预设选择、显式 CSS 预览保留规则。
+- `save_policy.rs` 直接使用 domain 的 CSS 校验，摆脱含 Dioxus 组件的 `themes` 聚合模块；仍只校验和规范化已编辑字段。成功仅清除 submitted，失败把 submitted 放回后来 pending 下方；状态文字本身不算保存确认，结果未知继续使用既有提示。
+- `SettingsPageSession` 仍是页面状态持有者，采集事实、按原顺序发布 Signal、更新 ThemeController 和预览；预设识别、文件选择、任务作用域、Shell 恢复草稿以及保存/下载命令装配留在当前适配层。未增加通用控制器或另一份草稿，不改变 Backend、配置格式与 0.2.x 密度兼容。
+- `scripts/check_settings_rule_boundary.py` 只构建既有 API/application/domain 依赖图，再直接编译同一生产模块及普通 Rust 事件序列；拒绝 Dioxus/web-sys/Wry/Tao。它与完整 app 的 Dioxus 集成测试分别验证规则独立性和实际装配，挂入已有 `rssr-api` CI job。具体源码、环境与覆盖范围见[本批交接](../handoffs/2026-10-31-settings-rule-boundary.md)。
+
 ## Reader 宿主入口（2026-10-30）
 
 `pages/reader_page/webview/` 集中当前 Reader 的图片激活、图片 dialog 和快捷键桥接。页面装配只接收带访问身份的 `ReaderImageActivation`、原始按键字符串、关闭请求，并在 dialog 挂载后通知适配器；不再持有这些监听的 `Eval`、停止消息或脚本路径。宿主提取批次原样移动三个脚本；后续快捷键去重见下节，图片消息的访问隔离见上节。
@@ -69,6 +77,7 @@ PR #50–#52 已按依赖顺序合入 main `dbbaf390`，合并树与各 head 相
 | `ui/reader_shortcuts/policy.rs` | 阅读快捷键、修饰键/输入法排除 | 将平台键盘输入映射为普通 Rust 值，由 Reader 私有装配执行导航和 session 命令 |
 | `hooks/use_mobile_back_navigation/policy.rs` | history/fallback 选择、系统返回决策、首页提示及代次、超时和恢复前台 | 页面 dismiss 事实、路由事实、signal 投影、计时器、位置采集和 Android 退后台 |
 | `ui/shell/settings_read_lifecycle.rs` | App 设置启动/只读读取、在途请求合并、页面读取归属、旧回执与错误归属 | App 任务作用域、命令执行、ThemeController 存储与响应式状态发布 |
+| `pages/settings_page/{draft_edits,draft_projection,request_lifecycle,save_policy}.rs` | 逐字段编辑/保存/恢复、回填来源、预览保留及字段提示代次 | 页面 Signal、ThemeController、预设识别、文件导入、命令和任务作用域 |
 | `pages/entries_page/request_lifecycle.rs` | 初始化/查询的独立代次、偏好就绪准入、旧结果过滤、写入后重查决策、列表到达后的返回页码顺序 | 页面任务作用域、命令执行、位置存储读取、signal 发布与既有查询触发 effect |
 
 这些模块不直接查询数据库或网络。业务动作继续走 facade/session → `UiCommand` → runtime → `Backend` → application；平台 I/O 由 infra 的本地或 HTTP 适配器承担。前端交互状态不下沉到 application/domain，不建立另一份文章数据或第二套业务状态。
