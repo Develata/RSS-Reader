@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
 | main 的整合基线 | `465fead9`，已合并 PR #54；正文选择的反向依赖已移除 | 新 main CI 36/36、Reader Web 6/6、Docker 容器 9 项、Linux 包 6 项及 Pages 均通过，见[合并回执](./handoffs/2026-10-31-reader-body-merge.md) |
-| 当前接续分支 | `codex/workspace-response-completion`，[PR #55](https://github.com/Develata/RSS-Reader/pull/55) 补充偏好保存测试诊断 | Windows Chrome 155、Linux Chrome 156 原场景及有界延迟对照通过，仍未复现历史失败；保存行为、断言与超时不变，根因未结案，见[诊断交接](./handoffs/2026-10-31-workspace-response-completion.md) |
+| 当前接续分支 | `codex/workspace-response-completion`，[PR #55](https://github.com/Develata/RSS-Reader/pull/55) 修正偏好测试的完成门禁 | CI 已捕获“原 reader 读完后取消、DevTools 缺少完成事件”的反例；门禁改为匹配最终请求的完整应用读取，保留真实存储和重载断言，产品行为不变，见[修复交接](./handoffs/2026-10-31-workspace-response-fix.md) |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -33,7 +33,7 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 1. **保留已收口的规则边界。** App 设置读取已经审查、CI 和合并；不再列为候选。主题选择的现有行为已完成专项，不继续扩大 Shell 提取或重复实现系统弹窗。
 2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留接续工作树与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布新版本。
-3. **定位偏好保存测试的不稳定点。** 正文选择模块已通过 PR #54 整合，先补齐响应读取和浏览器完成事件的同环境证据，再决定是否需要修正测试或产品。后续模块提取由实际复用阻碍驱动；原生正文渲染器仍须验证主题、选择复制、IME 和无障碍。见[后续边界](./design/reader-rendering-boundary.md#下一批建议)。
+3. **收口偏好测试的完成门禁修正。** 正文选择模块已通过 PR #54 整合；偏好测试已有 CI 反例和独立修正，先核对 PR #55 最终 head 的检查。后续模块提取由实际复用阻碍驱动；原生正文渲染器仍须验证主题、选择复制、IME 和无障碍。见[后续边界](./design/reader-rendering-boundary.md#下一批建议)。
 
 ## 分支与工作树快照
 

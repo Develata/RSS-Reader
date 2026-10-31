@@ -1,0 +1,264 @@
+{
+  "date": "2026-10-31",
+  "status": "test-false-negative-reproduced-and-fixed-locally",
+  "productMain": "465fead902f1f5cea423aeeaf1cbba623c9082b1",
+  "productUnchanged": true,
+  "reproduction": {
+    "head": "afb57356602475ca4ac31204fe7b5c32935ce8d9",
+    "ciRun": 41192079327,
+    "workspaceJob": 124511266545,
+    "jobsPassed": 34,
+    "jobsFailed": 2,
+    "artifact": {
+      "id": 13038982256,
+      "digest": "sha256:499c634140972394840a203005c719c993a1865dc5a4ae0f8859af53cbbec5e0",
+      "size_in_bytes": 173148
+    },
+    "trace": {
+      "labels": [
+        "来源",
+        "时间"
+      ],
+      "finalSaveRequestId": 2,
+      "events": [
+        {
+          "event": "request",
+          "id": 1,
+          "elapsedMs": 46,
+          "workspace": {
+            "grouping_mode": "source",
+            "show_archived": false,
+            "read_filter": "all",
+            "starred_filter": "all",
+            "selected_feed_urls": []
+          }
+        },
+        {
+          "event": "response",
+          "id": 1,
+          "elapsedMs": 184,
+          "workspace": {
+            "grouping_mode": "source",
+            "show_archived": false,
+            "read_filter": "all",
+            "starred_filter": "all",
+            "selected_feed_urls": []
+          },
+          "status": 200
+        },
+        {
+          "event": "request",
+          "id": 2,
+          "elapsedMs": 189,
+          "workspace": {
+            "grouping_mode": "time",
+            "show_archived": false,
+            "read_filter": "all",
+            "starred_filter": "all",
+            "selected_feed_urls": []
+          }
+        },
+        {
+          "event": "finished",
+          "id": 1,
+          "elapsedMs": 189,
+          "workspace": {
+            "grouping_mode": "source",
+            "show_archived": false,
+            "read_filter": "all",
+            "starred_filter": "all",
+            "selected_feed_urls": []
+          }
+        },
+        {
+          "event": "response",
+          "id": 2,
+          "elapsedMs": 190,
+          "workspace": {
+            "grouping_mode": "time",
+            "show_archived": false,
+            "read_filter": "all",
+            "starred_filter": "all",
+            "selected_feed_urls": []
+          },
+          "status": 200
+        },
+        {
+          "event": "failed",
+          "id": 2,
+          "elapsedMs": 191,
+          "workspace": {
+            "grouping_mode": "time",
+            "show_archived": false,
+            "read_filter": "all",
+            "starred_filter": "all",
+            "selected_feed_urls": []
+          },
+          "failure": {
+            "errorText": "net::ERR_ABORTED"
+          }
+        }
+      ],
+      "responseReads": [
+        {
+          "id": 1,
+          "chunks": [
+            {
+              "done": false,
+              "bytes": 4,
+              "text": "true"
+            },
+            {
+              "done": true,
+              "bytes": 0,
+              "text": ""
+            }
+          ],
+          "done": true,
+          "status": 200,
+          "aborted": true,
+          "doneWhenAborted": true
+        },
+        {
+          "id": 2,
+          "chunks": [
+            {
+              "done": false,
+              "bytes": 4,
+              "text": "true"
+            },
+            {
+              "done": true,
+              "bytes": 0,
+              "text": ""
+            }
+          ],
+          "done": true,
+          "status": 200,
+          "aborted": true,
+          "doneWhenAborted": true
+        }
+      ]
+    }
+  },
+  "sourceSha256Lf": {
+    "scripts/browser/workspace_response_probe.cjs": "3319055223182e1e9fe561f67c3f30939644091e97238d91ba593035f34bf557",
+    "scripts/browser/workspace_response_probe.test.cjs": "39232a307b070809de56794af0cda3b345b47dac9020db364b19bf104d2592e2",
+    "scripts/browser/workspace_response_probe.browser.cjs": "04039ebabbe630621c1e9d8c1f67c389f35ec3307b4626fb3ea58b008b5bc039",
+    "scripts/browser/rssr_workspace_acceptance.cjs": "a87d5394fcd86c555282674f19090193ab9ade4b8d94c1d0f73f1f3d1215c598",
+    ".github/workflows/ci.yml": "6a5985d9ace1574c825679a41e3057db174bc982a7ad2ffc918626eff7460ee5"
+  },
+  "localInputIdentity": {
+    "productBaseline": "97d75438c8ba54045f28c559cb01b2bc0de4f8a1",
+    "sameProductAsMain": "465fead902f1f5cea423aeeaf1cbba623c9082b1",
+    "serverSha256": "356e10d015aff2a4e5d044a3b862a13c19d111a08bcf5874aecd2b839947913d",
+    "fixtureSha256": "28e99cfe46a304034872be15cb591061bea4d711d31e25074b27c68fb233e069",
+    "publicFilesVerified": 29,
+    "publicManifestSha256": "c55bc08a35cfabb53d33cab5e9c6160855b631c3369fc50fc02e042744a61919"
+  },
+  "nodeToolsPassed": 14,
+  "observerTestsRerunAfterBomFix": 4,
+  "browserAdapter": {
+    "browser": "155.0.8059.40",
+    "status": "passed",
+    "cases": [
+      {
+        "kind": "never-issued",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "headers-only",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "without-eof",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "cut",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "http-error",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "invalid-json",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "bom-body",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "late-abort",
+        "passed": true,
+        "completed": true
+      },
+      {
+        "kind": "different-payload",
+        "passed": true,
+        "completed": false
+      },
+      {
+        "kind": "duplicate",
+        "passed": true,
+        "completed": false
+      }
+    ],
+    "pageErrors": []
+  },
+  "workspace": {
+    "browser": "155.0.8059.40",
+    "passed": [
+      "selection",
+      "sources",
+      "editing",
+      "responsive",
+      "editEdges",
+      "queryStability",
+      "importNames",
+      "sourceIdentity",
+      "pendingWrites",
+      "preferenceOrdering",
+      "shortSourceDialog",
+      "dialogComposition",
+      "preferencesSurviveNavigation",
+      "reopeningDuringSourceEdit",
+      "articleWritesSurviveNavigation",
+      "preferencesRecoveredAfterArticleWrites",
+      "readerWritesSurviveNavigation",
+      "toolbarThemes"
+    ],
+    "pageErrors": 0,
+    "note": "Full local suite preceded the test observer BOM preservation adjustment; the 10-case browser test covers that adjustment and final CI reruns the workspace."
+  },
+  "reviewRegression": {
+    "case": "BOM must not be silently normalized into valid JSON",
+    "before": "AssertionError [ERR_ASSERTION]: bom-body\n\ntrue !== false\n",
+    "after": "passed"
+  },
+  "retainedAssertions": [
+    "final PUT exists and HTTP succeeds",
+    "no final save while writes held despite stored initial value",
+    "exact request payload",
+    "app reader EOF and JSON bool",
+    "stored server preference",
+    "reload state",
+    "15 second timeout"
+  ],
+  "notRerun": [
+    "Windows WebView2 actual host",
+    "Android actual host",
+    "IME",
+    "accessibility"
+  ],
+  "finalCiEvidence": "target/workspace-response-20261031/final-ci.json and final-local-remote-state.json; checked after final push"
+}

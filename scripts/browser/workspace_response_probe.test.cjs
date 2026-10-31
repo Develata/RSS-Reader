@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const vm = require('node:vm');
-const { installWorkspaceResponseProbe } = require('./workspace_response_probe.cjs');
+const { installWorkspaceResponseProbe, workspaceResponseCompleted } = require('./workspace_response_probe.cjs');
+
+const payload = JSON.stringify({ read_filter: 'all', grouping_mode: 'time' });
 
 function fixture() {
   const pending = [];
@@ -28,7 +30,7 @@ function fixture() {
   });
   const controller = new AbortController();
   const start = async () => {
-    assert.equal(window.fetch('/api/v1/workspace', { method: 'PUT', signal: controller.signal }), response);
+    assert.equal(window.fetch('/api/v1/workspace', { method: 'PUT', body: payload, signal: controller.signal }), response);
     return (await response).body.getReader();
   };
   return { window, stream, response, start, pending, controller, fetch, read, getReader, Reader, Stream };
@@ -43,6 +45,7 @@ test('observes the original reader without consuming extra bytes or replacing pr
   f.pending.shift().resolve({ done: false, value: bytes });
   assert.equal((await first).value, bytes);
   assert.equal(f.window.__workspaceResponseProbe.records[0].done, false);
+  assert.equal(workspaceResponseCompleted(f.window.__workspaceResponseProbe.records, payload), false);
   const end = reader.read();
   f.pending.shift().resolve({ done: true });
   await end;
@@ -51,6 +54,7 @@ test('observes the original reader without consuming extra bytes or replacing pr
   assert.equal(record.done, true);
   assert.equal(record.doneWhenAborted, true);
   assert.equal(record.chunks[0].text, 'true');
+  assert.equal(workspaceResponseCompleted(f.window.__workspaceResponseProbe.records, payload), true);
   assert.equal(reader.reads.length, 2);
   f.window.__workspaceResponseProbe.dispose();
   assert.equal(f.window.fetch, f.fetch);
@@ -69,7 +73,22 @@ test('headers and cancellation do not imply a complete application read', async 
   assert.equal(record.done, false);
   assert.equal(record.doneWhenAborted, false);
   assert.match(record.readError, /body truncated/);
+  assert.equal(workspaceResponseCompleted(f.window.__workspaceResponseProbe.records, payload), false);
   f.window.__workspaceResponseProbe.dispose();
+});
+
+test('completion requires one matching successful boolean body, not an initial value or headers', () => {
+  const complete = { requestBody: payload, status: 200, done: true,
+    chunks: [{ text: 'true' }, { text: '' }], aborted: true, doneWhenAborted: true };
+  assert.equal(workspaceResponseCompleted([], payload), false, 'the final PUT was never issued');
+  assert.equal(workspaceResponseCompleted([{ ...complete, requestBody: 'different choice' }], payload), false);
+  assert.equal(workspaceResponseCompleted([complete, complete], payload), false, 'duplicate payloads are ambiguous');
+  for (const invalid of [
+    { status: 503 }, { done: false }, { readError: 'truncated' }, { fetchError: 'failed' },
+    { requestBodyError: 'unreadable' }, { truncated: true }, { doneWhenAborted: false },
+    { chunks: [{ text: 'tr' }] }, { chunks: [{ text: '{"error":"failed"}' }] },
+  ]) assert.equal(workspaceResponseCompleted([{ ...complete, ...invalid }], payload), false, JSON.stringify(invalid));
+  assert.equal(workspaceResponseCompleted([{ ...complete, chunks: [{ text: 'false' }] }], payload), true);
 });
 
 test('ignores unrelated reads and does not overwrite another observer during cleanup', async () => {

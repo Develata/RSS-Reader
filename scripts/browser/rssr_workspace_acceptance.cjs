@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { expect } = require('playwright/test');
 const fixture = require('./directory_fixture.cjs');
-const { installWorkspaceResponseProbe } = require('./workspace_response_probe.cjs');
+const { installWorkspaceResponseProbe, workspaceResponseCompleted } = require('./workspace_response_probe.cjs');
 const rows = '[data-layout="entry-card"]';
 const action = name => `[data-action="${name}"]`;
 const selected = `${rows}[data-selected="true"]`;
@@ -419,7 +419,6 @@ async function preferenceOrdering(page) {
     let afterClicks;
     let finalSave;
     let scenarioError;
-    const finishedSaves = new Set();
     const requestIds = new Map();
     const events = [];
     const started = Date.now();
@@ -441,7 +440,6 @@ async function preferenceOrdering(page) {
       if (workspace.read_filter === 'all' && workspace.grouping_mode === 'time') finalSave = response;
     };
     const observeFinished = request => {
-      finishedSaves.add(request);
       record('finished', request);
     };
     const observeFailed = request => record('failed', request, { failure: request.failure() });
@@ -469,12 +467,16 @@ async function preferenceOrdering(page) {
         assert.equal(initial.grouping_mode, 'time');
         assert.equal(finalSave, undefined, 'no final save can complete while writes are held');
       });
-      // Continuing the held route only sends it. Wait for the queued final PUT
-      // to finish before reloading can cancel the document's remaining tasks.
+      // Continuing the held route only sends it. Wait for the exact final PUT's
+      // successful bool to reach the app's reader before unloading the document.
+      // reqwest aborts after EOF on drop; DevTools can then report ERR_ABORTED
+      // instead of requestfinished even though the app has consumed the body.
       await expect.poll(() => Boolean(finalSave), { message: 'the final workspace save must respond', timeout: 15000 }).toBe(true);
       assert.ok(finalSave.ok(), `the final workspace save failed: ${finalSave.status()}`);
-      await expect.poll(() => finishedSaves.has(finalSave.request()), {
-        message: 'the final workspace response must finish', timeout: 15000,
+      const finalRequestBody = finalSave.request().postData();
+      await expect.poll(async () => workspaceResponseCompleted(
+        await page.evaluate(() => window.__workspaceResponseProbe.records), finalRequestBody), {
+        message: 'the app must consume the complete final workspace response', timeout: 15000,
       }).toBe(true);
       console.log('preferenceOrdering: final save finished');
       console.log('preferenceOrdering response reads:', JSON.stringify(
@@ -482,7 +484,7 @@ async function preferenceOrdering(page) {
     } catch (error) {
       scenarioError = error;
       // Preserve the request lifecycle when CI receives headers but never reports
-      // completion. Observe only: do not retry, consume a response, or weaken the wait.
+      // completion. These facts still distinguish early cancellation from EOF.
       console.error('preferenceOrdering request events:', JSON.stringify({ labels,
         finalSaveRequestId: finalSave ? requestId(finalSave.request()) : null, events,
         responseReads: await page.evaluate(() => window.__workspaceResponseProbe?.records)

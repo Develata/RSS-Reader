@@ -14,7 +14,7 @@
 
 ## 原生界面前置的当前顺序
 
-`preferenceOrdering` 在 PR #50 和 #52 的 CI 曾收到最终保存成功响应，却未在 15 秒内观察到 `requestfinished`；本地按前置场景加五轮偏好测试均未复现。#52 已单独增加失败时的请求生命周期诊断，未改产品、断言或超时。根因待确认，重跑成功不能结案，见[失败记录](./handoffs/2026-10-30-reader-shortcut-definition.md#ci-失败与独立诊断)。
+`preferenceOrdering` 的历史 CI 超时已通过后续被动观测捕获完整反例，并单列修正测试的完成门禁；当前进度见下方[偏好保存顺序](#偏好保存顺序的-ci-不稳定点)，早期未复现记录保留原日期语义。
 
 Reader 已完成普通状态/reducer、图片状态与 Dioxus 装配分离，读取准入和回执归属复用同一规则；同一生产源码的无框架编译与现有宿主回归见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)。保持唯一状态来源，现有 session/runtime 的任务执行部分仍属于当前装配。
 
@@ -32,7 +32,7 @@ PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 he
 
 PR #54 的实现提交 `97d75438` 再次遇到既有 `preferenceOrdering` 超时：两笔 workspace PUT 均收到 HTTP 200，随后浏览器报告 `net::ERR_ABORTED`，最终请求没有 `requestfinished`。失败发生在 Reader 场景前，偏好实现与测试均未被本批修改。Windows Chrome 149 原场景、Chrome 155 加 150 ms 受控延迟的场景均未复现；CI 使用 Linux Chrome 156，不能据此排除平台差异或认定产品已修好。原始失败、重跑结果与证据见[PR #54 交接](./handoffs/2026-10-31-reader-body-boundary.md#pr-54-核验2026-10-31)。
 
-独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 已补充实际 reader 的被动观测。Windows Chrome 155、Linux Chrome 156 的原场景与 150 ms / 500 ms 对照均通过；正常保存也在响应 EOF 后触发 abort，但仍收到完成事件。历史失败未复现，观察器也可能改变时序，根因仍未结案，见[诊断交接](./handoffs/2026-10-31-workspace-response-completion.md)。临时 CI 实验已移除，保留诊断脚本和原失败资料；不修改生产保存逻辑、放宽断言或扩大超时。
+独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 先增加被动观测，随后在 `afb57356` 的 CI 捕获完整反例：原 reader 已读完 `true` 和 EOF，取消时也已完成，但 DevTools 不再报告 `requestfinished`。现已单列修正测试门禁，精确匹配最终 PUT 的 payload 与完整布尔响应；保留真实持久化、重载断言和 15 秒上限，产品保存行为不变。普通工具测试 14 项、Windows 浏览器适配反例 10 项和正式 Web 18 场景通过，最终远端检查与边界见[修复交接](./handoffs/2026-10-31-workspace-response-fix.md)。这不代表所有偏好保存问题均已排除。
 
 ## 0.3.x 移除旧列表密度参数
 

@@ -368,6 +368,9 @@ jobs:
           export RSSR_WEB_BIN="$PWD/target/ci-server/rssr-web"
           export RSSR_FIXTURE_BIN="$PWD/target/ci-server/examples/browser_fixture_library"
           chmod +x "$RSSR_WEB_BIN" "$RSSR_FIXTURE_BIN"
+          export ARTIFACT_DIR="$PWD/target/ci-workspace/response_probe"
+          mkdir -p "$ARTIFACT_DIR"
+          node scripts/browser/workspace_response_probe.browser.cjs > "$ARTIFACT_DIR/run.log" 2>&1 || { cat "$ARTIFACT_DIR/run.log"; exit 1; }
           for suite in workspace entries_lifecycle directory_window directory_window_boundaries directory_window_review directory_page_order native_preparation reader_host; do
             script="rssr_${suite}_acceptance.cjs"
             if [[ "$suite" == directory_window_boundaries || "$suite" == directory_window_review ]]; then script="rssr_${suite}.cjs"; fi
