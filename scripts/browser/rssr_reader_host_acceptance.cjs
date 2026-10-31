@@ -5,6 +5,7 @@ const path = require('node:path');
 const http = require('node:http');
 const { chromium } = require('playwright/test');
 const { readerHostLifetime } = require('./reader_host_scenarios.cjs');
+const { readerShortcutInputs } = require('./reader_shortcut_scenarios.cjs');
 
 (async () => {
   const root = path.resolve(__dirname, '../..');
@@ -57,6 +58,13 @@ const { readerHostLifetime } = require('./reader_host_scenarios.cjs');
         screenshot:()=>page.screenshot({path:path.join(output,`${width}-cleanup.png`),animations:'disabled'}),
       });
       report.checks.push({width,pass:true,facts});
+      const shortcuts=await readerShortcutInputs({page,
+        openReader:()=>page.locator('[data-slot="entry-card-title"]').nth(3).click(),
+        ready:()=>page.locator('[data-page="reader"][data-state="loaded"][data-position-ready="true"]').waitFor(),
+        entries,
+        screenshot:()=>page.screenshot({path:path.join(output,`${width}-shortcuts.png`),animations:'disabled'}),
+      });
+      report.checks.push({width,pass:true,shortcuts});
     }
     assert.deepEqual(report.pageErrors,[]);assert.deepEqual(report.consoleErrors,[]);
     report.status='passed';

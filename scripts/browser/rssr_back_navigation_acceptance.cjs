@@ -240,6 +240,15 @@ assert.ok(options['reader-host'] === undefined || (options['reader-host'] === 't
         });
         (report.hostLifetimes ??= []).push({width,facts});
       });
+      if (options['reader-host'] === 'true') await check('reader-shortcut-inputs-' + width, async () => {
+        const { readerShortcutInputs } = require('./reader_shortcut_scenarios.cjs');
+        const facts = await readerShortcutInputs({page,
+          openReader:()=>page.locator('[data-slot="entry-card-title"]').nth(3).click(),
+          ready:async()=>{await reader();await settle();}, entries:async()=>{await entries();await settle();},
+          screenshot:()=>screenshot(width+'-reader-shortcut-inputs'),
+        });
+        (report.shortcutInputs ??= []).push({width,facts});
+      });
       if (!readerOnly) await check('source-directory-and-edit-dismiss-' + width, async () => {
         await click(action('open-source-filter')); await page.locator('#source-filter-dialog').waitFor();
         await screenshot(width + '-source');

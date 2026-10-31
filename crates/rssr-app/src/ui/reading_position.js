@@ -50,15 +50,9 @@ const onClick = event => {
     emit('capture', selected);
 };
 const onKeyNavigation = event => {
-    // 与 pages/reader_page/webview/reader_shortcuts.js 的切文边界一致。搜索框里的光标移动、系统组合键和
-    // 图片查看器里的按键不会切文，也不应为它们扫描整篇正文。
-    const target = event.target;
-    if (!['arrowleft','arrowright','j','k'].includes(String(event.key).toLowerCase())
-        || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.isComposing
-        || (target instanceof Element && (target.isContentEditable
-            || target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])')))
-        || document.querySelector('dialog[open]')
-        || !document.querySelector('[data-page="reader"]')) return;
+    // Keep capture in this phase, before target/bubble handlers. The shared host
+    // predicate deliberately does not apply dispatch's defaultPrevented gate.
+    if (!acceptsReaderShortcut(event, true)) return;
     emit('capture');
 };
 const onLeave = () => emit('capture');

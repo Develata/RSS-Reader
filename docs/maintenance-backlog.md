@@ -14,11 +14,17 @@
 
 ## 原生界面前置的当前顺序
 
+`preferenceOrdering` 在 PR #50 和 #52 的 CI 曾收到最终保存成功响应，却未在 15 秒内观察到 `requestfinished`；本地按前置场景加五轮偏好测试均未复现。#52 已单独增加失败时的请求生命周期诊断，未改产品、断言或超时。根因待确认，重跑成功不能结案，见[失败记录](./handoffs/2026-10-30-reader-shortcut-definition.md#ci-失败与独立诊断)。
+
 Reader 已完成普通状态/reducer、图片状态与 Dioxus 装配分离，读取准入和回执归属复用同一规则；同一生产源码的无框架编译与现有宿主回归见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)。保持唯一状态来源，现有 session/runtime 的任务执行部分仍属于当前装配。
 
 Reader 图片激活、dialog 焦点/滚动、快捷键桥接及卸载入口已集中到所属 `webview/` 适配模块，现有状态、JS 内容与任务作用域保持不变，阅读位置复用共享入口；实际 Windows、Android 真机和正式 Web 的基线/候选已通过，见[本批交接](./handoffs/2026-10-30-reader-host-boundary.md)。这是当前 Dioxus/WebView 的明确替换位置，不能写成全部装配已脱离框架。
 
-下一步以小批次去重 Reader 快捷键定义，覆盖同步默认动作、输入过滤、布局与切文前捕获；不顺带推广至全应用键盘框架。随后明确正文内容、图片资源、锚点有效期、HTML/CSS、复制、IME 和无障碍兼容要求。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。详见[长期契约](./design/native-ui-preparation.md)。
+Reader 快捷键定义已单独去重：普通 Rust 持有绑定与导航属性，宿主由其生成配置并共用同步过滤，保留捕获/冒泡两阶段的 `defaultPrevented` 差别和原监听作用域。Windows、Android 真机与正式 Web 的基线/候选回执见[本批交接](./handoffs/2026-10-30-reader-shortcut-definition.md)，没有推广为全应用键盘框架。
+
+后续审查进一步修正了模块归属：共享规则与脚本生成归 `ui/reader_shortcuts/`，页面专用 hook 留在 Reader 内部，消除阅读位置对页面的反向依赖和页面经全局 hook 返回自身的依赖。规则、JS 与监听生命周期保持原样，见[归属调整回执](./handoffs/2026-10-30-reader-shortcut-cohesion.md)。
+
+下一步先按依赖顺序收口已完成的 Reader 批次，随后明确正文内容、图片资源、锚点有效期、HTML/CSS、复制、IME 和无障碍兼容要求。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。详见[长期契约](./design/native-ui-preparation.md)。
 
 ## 0.3.x 移除旧列表密度参数
 

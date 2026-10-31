@@ -16,7 +16,7 @@
 | 原生字符串表 | rssr_native_transport_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> | 实际 Windows EXE/WebView2、单库与传输；不操作 OS 选择器 |
 | 原生返回专项 | rssr_back_navigation_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> --fixture-dir <fixture> | Windows 实际 WebView2；Android 独立测试包的系统返回、保存门禁、采集失败/超时/取消、首页提示与恢复前台 |
 | Reader 宿主专项 | 上行命令加 --reader-only true | 只运行图片关闭/回焦/位置恢复、M/F 写入保留正文、输入排除、J/方向键切文与工具栏返回；Android 图片关闭使用实际系统返回。repeat/composing 为受控事件，不证明物理键盘/系统 IME；不需要保存锁工具 |
-| Reader 宿主生命周期 | 上行 Reader 命令另加 --reader-host true；正式 Web 用 node scripts/browser/rssr_reader_host_acceptance.cjs | 共用 reader_host_scenarios.cjs；三次进入分别由按钮、Esc/Android 实际系统返回、带浮层离页结束，检查焦点/滚动/body 样式和 Reader 监听/observer 清理。正式 Web 为真实服务器与隔离 SQLite，进入 reading-workspace CI |
+| Reader 宿主生命周期与快捷键 | 上行 Reader 命令另加 --reader-host true；正式 Web 用 node scripts/browser/rssr_reader_host_acceptance.cjs | 共用 reader_host_scenarios.cjs 和 reader_shortcut_scenarios.cjs；检查三种关闭/离页、焦点/滚动/body 样式、监听/observer 清理，以及按键过滤、同步默认动作和切文前捕获。正式 Web 为真实服务器与隔离 SQLite，进入 reading-workspace CI |
 | 主题选择宿主专项 | rssr_theme_selector_windows.mjs / rssr_theme_selector_android.mjs | Windows 实际 EXE + UIA + CDP；Android 真机系统列表、adb 选择/返回、预览及显式保存。不是新增 OS 控件或完整辅助技术验收 |
 | Android 主题文件导入 | rssr_theme_import_android.mjs | 实际 DocumentsUI + ContentResolver + JNI；测试包专属提供器控制文件、读取错误和延迟；与真实云端提供器、正式包权限验收区分 |
 | Android 编译 | cargo check -p rssr-app --target aarch64-linux-android --locked 及 PR android-smoke | 仅编译/CI smoke，不能替代上行真机检查；选择器、IME 和辅助技术另验 |
@@ -26,6 +26,12 @@ Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library
 新增 Settings 脚本进入 CI 的 reading-workspace 作业，失败保留 JSON、日志、截图；正常 PR 检查必须基于冲突解决后的新 head，旧分支 workflow_dispatch 成功不能代替。
 
 Reader 正式 Web 运行器直接复用 `server_harness.mjs`，使用上述产物环境变量及 `target/` 下全新 `ARTIFACT_DIR`。它只在新夹具库加入本机图片，不访问线上来源。监听探针记录真实回调/AbortSignal 与 observer，不替换应用回调或业务状态；退出 Reader 时排除随后新建的 Entries 监听。浮层期间离页由受控路由动作触发，不是物理点击穿透 inert。滚动比较以 dialog 挂载时保存的位置为准，同时记录按键前和激活时位置；脚本化鼠标/按键不证明物理输入设备。完整基线/候选与采样修订见[Reader 宿主回执](../handoffs/2026-10-30-reader-host-boundary.md)。
+
+快捷键场景打开列表第四篇，每个视口检查 70 个排除/阶段边界与 10 个有效键值，再检查离页后输入。它包装原 `Element.querySelectorAll` 观察正文位置扫描，记录目标节点事件到达前的扫描数和 `dispatchEvent` 返回时的 `defaultPrevented`；应用测量和回调仍执行原实现。有效按键实际导航并返回恢复位置，或等待标记状态改变再恢复；重复、组字、修饰键、可编辑祖先、通用 dialog、预先阻止与目标停止传播均为受控事实。用当前包同路径重跑基线/候选，不把合成 `KeyboardEvent` 写成系统键盘或 IME 实测，见[快捷键回执](../handoffs/2026-10-30-reader-shortcut-definition.md)。
+
+表单与可编辑目标用未预先取消的按键验证排除，并断言宿主没有 `preventDefault`；不能让预先取消的门禁掩盖编辑目标过滤失效。`contenteditable="false"` 是允许捕获的对照，单独预先取消它以检查捕获阶段且不触发实际切文。已用移除 M/F 编辑目标过滤的受控故障确认：旧测试漏报，修正后的输入框 M 用例会失败；该故障注入不进入产品代码。
+
+共享快捷键模块与页面装配的归属调整继续使用上述同一测试，不另造替身控制器或重复实现；独立编译直接加载移动后的生产 `policy.rs`。本次脚本哈希、模块依赖复核和真实三端基线/候选回执见[模块归属交接](../handoffs/2026-10-30-reader-shortcut-cohesion.md)。
 
 ## 验收约束
 

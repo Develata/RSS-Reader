@@ -1,0 +1,522 @@
+{
+  "base": "9368d7aa095b7bd7649ff0bb64015849c1e2ef4a",
+  "implementationCommit": "commit containing this receipt",
+  "branch": "codex/reader-shortcut-definition",
+  "pullRequest": 52,
+  "evidenceRoot": "target/reader-shortcut-cohesion-20261030",
+  "productInputs": 464,
+  "productManifestSha256": "cfa3a2d7d7554c0efef020f7e3ac458cea22b9e1fed3d2e83a31e7833316769c",
+  "review": {
+    "base": "9368d7aa095b7bd7649ff0bb64015849c1e2ef4a",
+    "policyOnlyVisibilityChanged": true,
+    "dispatchBodyUnchanged": true,
+    "scriptProjectionBodyUnchanged": true,
+    "scripts": [
+      {
+        "baselinePath": "crates/rssr-app/src/pages/reader_page/webview/shortcut_input.js",
+        "candidatePath": "crates/rssr-app/src/ui/reader_shortcuts/shortcut_input.js",
+        "sha256": "8b63ed097b66239174961f0fda54852db81ac1606510c48640621f134d95637f"
+      },
+      {
+        "baselinePath": "crates/rssr-app/src/pages/reader_page/webview/reader_shortcuts.js",
+        "candidatePath": "crates/rssr-app/src/pages/reader_page/webview/reader_shortcuts.js",
+        "sha256": "73b34841d40ff42a4142e01b512e5da7a41d86b44ad8f106a4f303b27fc5d2e1"
+      },
+      {
+        "baselinePath": "crates/rssr-app/src/pages/reader_page/webview/image_events.js",
+        "candidatePath": "crates/rssr-app/src/pages/reader_page/webview/image_events.js",
+        "sha256": "6091b0d27be9c8f6f0a27514c4e7789c21b06b06fe82cefdc137d588dd9dc1e1"
+      },
+      {
+        "baselinePath": "crates/rssr-app/src/pages/reader_page/webview/image_dialog.js",
+        "candidatePath": "crates/rssr-app/src/pages/reader_page/webview/image_dialog.js",
+        "sha256": "3761c6db2c715a4f0e3c2312dbbf5242a0c124fef5bf0d4b1dc223662b38ffb5"
+      },
+      {
+        "baselinePath": "crates/rssr-app/src/ui/reading_position.js",
+        "candidatePath": "crates/rssr-app/src/ui/reading_position.js",
+        "sha256": "8b7f4190e0c2e8dd99313906493aa5243af86a1c5b42f9318db7fe3590b3ae1b"
+      }
+    ],
+    "sharedModuleHasNoFrameworkPageRouterImport": true,
+    "readingPositionHasNoPageImport": true,
+    "globalHookHasNoReaderDependency": true,
+    "productInputsVerified": 464,
+    "productManifestSha256": "cfa3a2d7d7554c0efef020f7e3ac458cea22b9e1fed3d2e83a31e7833316769c"
+  },
+  "localChecks": {
+    "appTestsPassed": 420,
+    "appTestsIgnored": 1,
+    "frameworkFreePassed": 24,
+    "fmt": "passed",
+    "clippyAppAllTargetsWarningsDenied": "passed",
+    "windowsBuild": "passed",
+    "wasmCheck": "passed",
+    "webBuild": "passed",
+    "androidBuild": "passed"
+  },
+  "hostRuns": [
+    {
+      "platform": "windows",
+      "variant": "baseline",
+      "checksPassed": 8,
+      "path": "target/reader-shortcut-cohesion-20261030/windows-baseline-01/acceptance/acceptance.json",
+      "sha256": "035b8e626cce93b0f046e3ac288ac6c84f27f9b39e89f5e0b899f569b1e080db",
+      "runtime": "156.0.4314.50",
+      "serverBuild": null,
+      "inputCases": [
+        {
+          "width": 1280,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        },
+        {
+          "width": 390,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "platform": "windows",
+      "variant": "candidate",
+      "checksPassed": 8,
+      "path": "target/reader-shortcut-cohesion-20261030/windows-candidate-01/acceptance/acceptance.json",
+      "sha256": "2216a9e0d5f8d9d43316251955e3751f961c51f11b15af61aa833e537abe13fa",
+      "runtime": "156.0.4314.50",
+      "serverBuild": null,
+      "inputCases": [
+        {
+          "width": 1280,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        },
+        {
+          "width": 390,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "platform": "web",
+      "variant": "baseline",
+      "checksPassed": 4,
+      "path": "target/reader-shortcut-cohesion-20261030/web-baseline-01/acceptance.json",
+      "sha256": "3ac4c0af434541a28b8f770d0ce24bc09d936e7c0e5580c9cdb3eb68788e6d26",
+      "runtime": "155.0.8059.40",
+      "serverBuild": "dev-6a5b91b460a1-dirty-386fbe63b04a",
+      "inputCases": [
+        {
+          "width": 1280,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        },
+        {
+          "width": 390,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "platform": "web",
+      "variant": "candidate",
+      "checksPassed": 4,
+      "path": "target/reader-shortcut-cohesion-20261030/web-candidate-01/acceptance.json",
+      "sha256": "51798e6ccc03ce35ae21fa07f9c505d4b1bab4e2f57b744adeab9cf4df323e93",
+      "runtime": "155.0.8059.40",
+      "serverBuild": "dev-9368d7aa095b-dirty-0bd8abcd08b5",
+      "inputCases": [
+        {
+          "width": 1280,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        },
+        {
+          "width": 390,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "platform": "android",
+      "variant": "baseline",
+      "checksPassed": 4,
+      "path": "target/reader-shortcut-cohesion-20261030/android-cohesion-baseline-01/acceptance/acceptance.json",
+      "sha256": "c92478b86452d4b7fa3abcad0883e306d7330ec904626d04e8c508da10806f4d",
+      "runtime": "156.0.8078.47",
+      "serverBuild": null,
+      "inputCases": [
+        {
+          "width": 392,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "platform": "android",
+      "variant": "candidate",
+      "checksPassed": 4,
+      "path": "target/reader-shortcut-cohesion-20261030/android-cohesion-candidate-01/acceptance/acceptance.json",
+      "sha256": "c3ad17bf421a390da196fb62e93ec65e222b8f76aadd2846d2c31d97eb23451e",
+      "runtime": "156.0.8078.47",
+      "serverBuild": null,
+      "inputCases": [
+        {
+          "width": 392,
+          "boundaries": 70,
+          "acceptedKeys": 10,
+          "navigations": 6
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    }
+  ],
+  "artifacts": {
+    "windowsExeSha256": "16e52e7921313fb0d7220cf64d9afec4b0e006f4422ddd948b36bd59866da9ea",
+    "webServerSha256": "2fa6876d3be23bea480da904cea079ee28e1a7fe2fc7eafca7c6b22e1946d435",
+    "android": {
+      "base": "9368d7aa095b7bd7649ff0bb64015849c1e2ef4a",
+      "productManifestSha256": "cfa3a2d7d7554c0efef020f7e3ac458cea22b9e1fed3d2e83a31e7833316769c",
+      "productInputsVerified": 464,
+      "buildId": "reader-cohesion-9368d7aa-cfa3a2d7d755",
+      "apkSha256": "535f37a69aa208d64acb840cc428e33de3bd38ecca235cf3aa40d88f63167cfb",
+      "librarySha256": "b7f9b17a42c8be4765758e22f9cdcb058ec2f60fb84ce8cd15859170546944f5",
+      "dxVersion": "0.7.9",
+      "generatedActivityMatches": true,
+      "dependencySourceMatches": true
+    }
+  },
+  "preservation": {
+    "primaryHead": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "primaryBranch": "feat/reading-workspace-20261024",
+    "primaryStatusAndIndexUnchanged": true,
+    "primaryPathsVerified": 41,
+    "androidOriginalFilesVerified": 6,
+    "dailyApkUnchanged": true,
+    "adbMappingsUnchanged": true
+  },
+  "visualReview": {
+    "initialPairs": 22,
+    "initialEqualPixels": 21,
+    "initialDifferences": [
+      {
+        "platform": "windows",
+        "name": "1280-reader-after-shortcuts.png",
+        "changedPixels": 47,
+        "bbox": [
+          160,
+          26,
+          180,
+          36
+        ],
+        "baselineSha256": "20190b7e6401a4d17d8e1f8b2b4c5a5b0311f876fb52c0349574dfb25f2eb081",
+        "candidateSha256": "7c80e125cd2774f219650a118dd7f9dc109d9cc26b5dbd62f19d5a531508185b"
+      }
+    ],
+    "repeatDifferences": [
+      {
+        "platform": "windows",
+        "name": "1280-reader-after-shortcuts.png",
+        "changedPixels": 47,
+        "bbox": [
+          160,
+          26,
+          180,
+          36
+        ],
+        "baselineSha256": "7c80e125cd2774f219650a118dd7f9dc109d9cc26b5dbd62f19d5a531508185b",
+        "candidateSha256": "20190b7e6401a4d17d8e1f8b2b4c5a5b0311f876fb52c0349574dfb25f2eb081"
+      },
+      {
+        "platform": "windows",
+        "name": "390-reader-after-shortcuts.png",
+        "changedPixels": 1413,
+        "bbox": [
+          22,
+          3,
+          76,
+          58
+        ],
+        "baselineSha256": "e818ce0169e5615b7c3143429f3ad3ccb3c3245e0361a1992da3fe7630585f19",
+        "candidateSha256": "5c172e31d2616bd5f1a4b89661fbdf89fe1259f2706fb68c3e7c0ccc1c42d512"
+      }
+    ],
+    "windowsRuns": [
+      {
+        "run": "windows-baseline-01",
+        "checksPassed": 8,
+        "controlledPointerProbe": false
+      },
+      {
+        "run": "windows-baseline-02",
+        "checksPassed": 8,
+        "controlledPointerProbe": false
+      },
+      {
+        "run": "windows-baseline-03",
+        "checksPassed": 8,
+        "controlledPointerProbe": true
+      },
+      {
+        "run": "windows-candidate-01",
+        "checksPassed": 8,
+        "controlledPointerProbe": false
+      },
+      {
+        "run": "windows-candidate-02",
+        "checksPassed": 8,
+        "controlledPointerProbe": false
+      },
+      {
+        "run": "windows-candidate-03",
+        "checksPassed": 8,
+        "controlledPointerProbe": true
+      }
+    ],
+    "allOriginalWindowsNamesShareExactImagesAcrossVersions": 12,
+    "pointerAwayControls": [
+      {
+        "name": "1280-reader-after-shortcuts-pointer-away.png",
+        "baselineSha256": "829e8f0e7102cd0c79cc55b78ab5b2b6f2940e7684c81486bb3a40f2bb7795e1",
+        "candidateSha256": "829e8f0e7102cd0c79cc55b78ab5b2b6f2940e7684c81486bb3a40f2bb7795e1",
+        "changedPixels": 0,
+        "bbox": null,
+        "facts": {
+          "baseline": {
+            "before": {
+              "hover": true,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 147.6666717529297,
+                "y": 7.6666669845581055,
+                "width": 44,
+                "height": 44,
+                "top": 7.6666669845581055,
+                "right": 191.6666717529297,
+                "bottom": 51.666666984558105,
+                "left": 147.6666717529297
+              },
+              "transform": "matrix(1, 0, 0, 1, 0, -1)",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            },
+            "after": {
+              "hover": false,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 147.6666717529297,
+                "y": 8.666666984558105,
+                "width": 44,
+                "height": 44,
+                "top": 8.666666984558105,
+                "right": 191.6666717529297,
+                "bottom": 52.666666984558105,
+                "left": 147.6666717529297
+              },
+              "transform": "none",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            }
+          },
+          "candidate": {
+            "before": {
+              "hover": true,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 147.6666717529297,
+                "y": 7.6666669845581055,
+                "width": 44,
+                "height": 44,
+                "top": 7.6666669845581055,
+                "right": 191.6666717529297,
+                "bottom": 51.666666984558105,
+                "left": 147.6666717529297
+              },
+              "transform": "matrix(1, 0, 0, 1, 0, -1)",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            },
+            "after": {
+              "hover": false,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 147.6666717529297,
+                "y": 8.666666984558105,
+                "width": 44,
+                "height": 44,
+                "top": 8.666666984558105,
+                "right": 191.6666717529297,
+                "bottom": 52.666666984558105,
+                "left": 147.6666717529297
+              },
+              "transform": "none",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            }
+          }
+        }
+      },
+      {
+        "name": "390-reader-after-shortcuts-pointer-away.png",
+        "baselineSha256": "5c172e31d2616bd5f1a4b89661fbdf89fe1259f2706fb68c3e7c0ccc1c42d512",
+        "candidateSha256": "5c172e31d2616bd5f1a4b89661fbdf89fe1259f2706fb68c3e7c0ccc1c42d512",
+        "changedPixels": 0,
+        "bbox": null,
+        "facts": {
+          "baseline": {
+            "before": {
+              "hover": true,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 27.33333396911621,
+                "y": 7.6666669845581055,
+                "width": 44,
+                "height": 44,
+                "top": 7.6666669845581055,
+                "right": 71.33333396911621,
+                "bottom": 51.666666984558105,
+                "left": 27.33333396911621
+              },
+              "transform": "matrix(1, 0, 0, 1, 0, -1)",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            },
+            "after": {
+              "hover": false,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 27.33333396911621,
+                "y": 8.666666984558105,
+                "width": 44,
+                "height": 44,
+                "top": 8.666666984558105,
+                "right": 71.33333396911621,
+                "bottom": 52.666666984558105,
+                "left": 27.33333396911621
+              },
+              "transform": "none",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            }
+          },
+          "candidate": {
+            "before": {
+              "hover": true,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 27.33333396911621,
+                "y": 7.6666669845581055,
+                "width": 44,
+                "height": 44,
+                "top": 7.6666669845581055,
+                "right": 71.33333396911621,
+                "bottom": 51.666666984558105,
+                "left": 27.33333396911621
+              },
+              "transform": "matrix(1, 0, 0, 1, 0, -1)",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            },
+            "after": {
+              "hover": false,
+              "active": false,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 27.33333396911621,
+                "y": 8.666666984558105,
+                "width": 44,
+                "height": 44,
+                "top": 8.666666984558105,
+                "right": 71.33333396911621,
+                "bottom": 52.666666984558105,
+                "left": 27.33333396911621
+              },
+              "transform": "none",
+              "transition": "transform 0.12s, border-color 0.12s, background 0.12s",
+              "devicePixelRatio": 1.0000000298023224,
+              "reducedMotion": false
+            }
+          }
+        }
+      }
+    ],
+    "qualification": "Original screenshots retained. Pointer controls move to (0,0) after the original screenshot and wait 350 ms without altering product, focus, CSS, or assertions. Initial runs lack hover facts; do not infer an exact cause for those individual differences."
+  },
+  "evidenceHashes": {
+    "product-files.json": "cfa3a2d7d7554c0efef020f7e3ac458cea22b9e1fed3d2e83a31e7833316769c",
+    "cohesion-review.json": "41851131a55b3c94d62659800e253235f3937fd8e0d684b162329af6f6e5496e",
+    "host-results.json": "59eb211e78722659d86b562ea35b725d6b1b0ede1f9221b6ec620ffa190a4a2c",
+    "host-results-final.json": "ed3ac7ee89576de028b8cc5cf8581c6e48a093f0b53677ef5debc3e0986550ad",
+    "visual-review.json": "fd805b7336e14f1cd6d0858cf0d89a6de7c43a0876cb9972b83dd4377dfd2082",
+    "web-baseline-files.json": "cedcc135124144dbad50872b61a4ad94d067032a3909140382f176f4199c9f0c",
+    "web-candidate-files.json": "c5db0684c598c3cec6558f448fe700dfae09bce9987ea86c369431733c843267",
+    "android-artifacts-final.json": "f1b273d06d0bd7bb97060f6fb822cabbd4fb5901e21058235cf87f6112e1f033",
+    "app-tests.log": "28a8d6982559736d5897abb2fce6b81cf6669ca1779e5fd5bf147b706c109a6a",
+    "framework-free.log": "7fa1513595bb97b458f14d56c1a598766a5e956464ce21c4f3dd5072d236ccc8",
+    "clippy.log": "0f4e727d42010e3fe3f07d2fbc688650ac37058ba39bd3f83f57bc81b8ce0b23",
+    "wasm-check.log": "0b6f30caf97739e24c852b71ce0711743bdc422af2607bd617955151c3a44b83",
+    "native-build.log": "c6282e1ba2288be9e265e999713ef6351c86dc1ebaf199bed61e470c7983a9f8",
+    "web-build.log": "88141c9712d886b93679cd1668ec253f732edf99990e9fd23cf6de6abbcbf25e",
+    "android-build.log": "47d906aab088839657ee4efdac769a5eedc3042c534e0e8c1cd82ab00ba4f7f3",
+    "observe-screenshots.cjs": "62d4bb549064ab88631b12edbfcdcb5e72c3d58a9fec61ab549e021469764951"
+  },
+  "ci": {
+    "statusAtCommit": "not yet run for this commit",
+    "finalReceipt": "ci-receipt-final.json",
+    "authority": "pull request head checks; previous head success is historical"
+  },
+  "notCovered": [
+    "physical keyboard",
+    "system IME",
+    "assistive technology",
+    "macOS/Linux native interactions",
+    "replacement renderer",
+    "Docker/release acceptance"
+  ]
+}

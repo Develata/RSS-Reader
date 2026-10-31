@@ -5,6 +5,8 @@ use std::{cell::Cell, rc::Rc};
 
 use dioxus::prelude::*;
 
+use crate::ui::reader_shortcuts;
+
 use super::image_viewer_state::ReaderImage;
 
 // Keep cancellation in the owning Dioxus scope, including a scope dropped while
@@ -49,12 +51,14 @@ pub(super) fn use_image_dialog(on_close: Callback<()>) -> Callback<()> {
     })
 }
 
-pub(crate) fn use_shortcut_keys(on_key: Callback<String>) {
+pub(super) fn use_shortcut_keys(on_key: Callback<String>) {
     let bridge = use_listener_cleanup();
     use_future(move || {
         let bridge = Rc::clone(&bridge);
         async move {
-            let mut eval = document::eval(include_str!("reader_shortcuts.js"));
+            let mut eval = document::eval(&reader_shortcuts::webview::script(include_str!(
+                "reader_shortcuts.js"
+            )));
             bridge.set(Some(eval));
             while let Ok(key) = eval.recv::<String>().await {
                 on_key.call(key);

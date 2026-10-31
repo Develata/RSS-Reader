@@ -150,6 +150,8 @@ Feeds reducer 用正在提交的地址 `Option<String>` 同步去重，按钮以
 
 `data-layout="reader-shortcut-scope"` 是可用 Tab 进入的具名 `region`，提供 M / F / J / K / 左右方向键说明和可见焦点。快捷键监听整个阅读页，不要求焦点在阅读区（`pages/reader_page/webview/reader_shortcuts.js`）；输入框与可编辑区域内、带修饰键、输入法组合中、自动重复以及图片查看器打开时的事件放行。底栏固定在视口底部，渲染在阅读页之外，以免主题的 `backdrop-filter` 困住 fixed 定位。收藏按钮的固定名称与 `aria-pressed` 搭配，底栏四个装饰图标均为 `aria-hidden="true"`。
 
+按键与动作统一定义在普通 Rust `ui/reader_shortcuts/policy.rs` 的 `BINDINGS`，当前 WebView 由同模块的适配代码生成静态配置并共用 `shortcut_input.js`。页面专用 hook 归 `pages/reader_page/shortcuts.rs`，共享阅读位置不引用页面模块。切文位置仍在捕获阶段测量，保留对已被阻止事件的原采集行为；冒泡阶段才检查 `defaultPrevented` 并同步阻止默认动作。此区别、作用域及受控输入验收见[快捷键适配边界](./native-ui-preparation.md#reader-快捷键定义与同步边界2026-10-30)。
+
 动态操作结果使用持续挂载的 `StatusBanner` live region：`role="status"`、`aria-live="polite"`、`aria-atomic="true"`。空消息区域保留在可访问树中但不占布局空间；加载/成功/错误更新文本时不抢焦点。静态空列表或归档说明不参与播报。颜色状态继续使用 `data-state="info|success|error"`，不把错误色自动映射成打断式通知。
 
 Reader 的收藏 / 已读成功反馈通过按钮状态和 `sr-only` live region 呈现，正文不因成功提示重排；错误仍为可见状态条。标记命令携带目标值（`SetRead` / `SetStarred`），结果区分已改变、本来就是与文章不存在；文章不存在时以错误色调的可见状态条提示。上一 / 下一未读按钮及方向快捷键只选择未读目标，无目标时按钮禁用并提供 title 说明；同订阅文章导航沿用独立按钮，不作为未读操作的回退。
