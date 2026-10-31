@@ -79,7 +79,7 @@ jobs:
         with:
           node-version: 24
       - name: Check browser traffic tracking and acceptance error reporting
-        run: node --test scripts/browser/api_traffic.test.mjs scripts/browser/server_acceptance.test.mjs
+        run: node --test scripts/browser/api_traffic.test.mjs scripts/browser/server_acceptance.test.mjs scripts/browser/workspace_response_probe.test.cjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt

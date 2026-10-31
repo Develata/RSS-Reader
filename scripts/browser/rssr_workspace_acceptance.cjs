@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { expect } = require('playwright/test');
 const fixture = require('./directory_fixture.cjs');
+const { installWorkspaceResponseProbe } = require('./workspace_response_probe.cjs');
 const rows = '[data-layout="entry-card"]';
 const action = name => `[data-action="${name}"]`;
 const selected = `${rows}[data-selected="true"]`;
@@ -412,6 +413,7 @@ async function pendingWrites(page) {
 async function preferenceOrdering(page) {
   await seed(page, new URL(page.url()).origin);
   for (const labels of [['仅未读', '仅未读'], ['来源', '时间']]) {
+    await page.evaluate(installWorkspaceResponseProbe);
     const before = await page.getByRole('button', { name: '仅未读', exact: true }).getAttribute('aria-pressed');
     console.log(`preferenceOrdering: ${labels.join(' -> ')} start`);
     let afterClicks;
@@ -478,13 +480,15 @@ async function preferenceOrdering(page) {
       // Preserve the request lifecycle when CI receives headers but never reports
       // completion. Observe only: do not retry, consume a response, or weaken the wait.
       console.error('preferenceOrdering request events:', JSON.stringify({ labels,
-        finalSaveRequestId: finalSave ? requestId(finalSave.request()) : null, events }));
+        finalSaveRequestId: finalSave ? requestId(finalSave.request()) : null, events,
+        responseReads: await page.evaluate(() => window.__workspaceResponseProbe.records) }));
       throw error;
     } finally {
       page.off('request', observeRequest);
       page.off('response', observeSave);
       page.off('requestfinished', observeFinished);
       page.off('requestfailed', observeFailed);
+      await page.evaluate(() => window.__workspaceResponseProbe.dispose());
     }
     // Read the persisted server preference before unloading page tasks.
     await page.waitForFunction(async () => {
