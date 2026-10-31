@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| README 当前界面与媒体托管 | [真实 Web 截图、GitHub Attachments 与安全 GC](./2026-10-31-readme-media.md) |
 | Reader 读取恢复提示修复与 PR #57 | [主线核验与工作区保全](./2026-10-31-reader-recovery-merge.md)、[旧错误残留的复现、修复与故障回归](./2026-10-31-reader-reread-recovery.md) |
 | main 补充测试与 Windows 实际宿主 | [1149 项 Rust 回归、Web/Windows 实测及测试输入隔离](./2026-10-31-main-regression.md) |
 | PR #56 合并与取消完成判定 | [主线验收与工作区保全](./2026-10-31-workspace-cancel-merge.md)、[提前取消假阳性的复现、修复与回归](./2026-10-31-workspace-response-cancel-review.md) |
@@ -40,6 +41,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-31 | [README 截图更新、附件核验与本地 GC](./2026-10-31-readme-media.md) |
 | 2026-10-31 | [PR #57 合并与 Reader 读取恢复主线验收](./2026-10-31-reader-recovery-merge.md) |
 | 2026-10-31 | [Reader 读取恢复提示修复与故障回归](./2026-10-31-reader-reread-recovery.md) |
 | 2026-10-31 | [当前 main 补充回归与 Windows 实际宿主检查](./2026-10-31-main-regression.md) |

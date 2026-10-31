@@ -9,9 +9,9 @@
   <a href="#get-started"><img alt="Release targets: Windows, Linux, macOS, Android, Web" src="https://img.shields.io/badge/Targets-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20Web-0078D4"></a>
 </p>
 
-![RSS-Reader Web article list with reading navigation and time directory](../assets/readme/rss-reader-overview.png)
+![RSS-Reader Web article list with reading navigation and time directory](https://github.com/user-attachments/assets/2f28803c-2b02-4e83-a9c2-3acdfbf18167)
 
-_Actual Web interface with sample subscriptions and articles._
+_Actual Web interface from main (2026-10-31), with sample subscriptions and articles._
 
 RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Desktop and Android keep a library on the device. Self-hosted Web keeps one library on the server, shared by browsers and the CLI using that server data directory. JSON, OPML, and optional WebDAV exchange subscriptions and settings between separate libraries.
 

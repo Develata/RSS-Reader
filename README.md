@@ -9,9 +9,9 @@
   <a href="#30-秒开始阅读"><img alt="Release targets: Windows, Linux, macOS, Android, Web" src="https://img.shields.io/badge/Targets-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20Web-0078D4"></a>
 </p>
 
-![RSS-Reader Web 版文章首页：文章列表、阅读导航与时间目录](assets/readme/rss-reader-overview.png)
+![RSS-Reader Web 版文章首页：文章列表、阅读导航与时间目录](https://github.com/user-attachments/assets/2f28803c-2b02-4e83-a9c2-3acdfbf18167)
 
-_Web 版实际界面；订阅与文章使用演示数据。_
+_2026-10-31 main 的 Web 版实际界面；订阅与文章使用演示数据。_
 
 RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。桌面与 Android 的资料库留在设备上；自托管 Web 的资料库保存在服务器上，各浏览器登录后访问同一份数据。独立资料库之间可以通过 JSON、OPML 或可选的 WebDAV 交换配置。
 
