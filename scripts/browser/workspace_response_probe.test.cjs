@@ -9,6 +9,8 @@ function fixture() {
   const pending = [];
   class Reader {
     reads = [];
+    cancellation = Promise.resolve();
+    cancel() { return this.cancellation; }
     read() {
       const promise = new Promise((resolve, reject) => pending.push({ resolve, reject }));
       this.reads.push(promise);
@@ -17,12 +19,14 @@ function fixture() {
   }
   class Stream {
     reader = new Reader();
+    cancel() { return Promise.resolve(); }
     getReader() { return this.reader; }
   }
   const stream = new Stream();
   const response = Promise.resolve({ status: 200, body: stream });
   const fetch = () => response;
   const read = Reader.prototype.read, getReader = Stream.prototype.getReader;
+  const readerCancel = Reader.prototype.cancel, streamCancel = Stream.prototype.cancel;
   const window = { fetch };
   vm.runInNewContext(`(${installWorkspaceResponseProbe})()`, {
     window, location: { href: 'http://localhost/entries' }, URL, TextDecoder,
@@ -33,7 +37,8 @@ function fixture() {
     assert.equal(window.fetch('/api/v1/workspace', { method: 'PUT', body: payload, signal: controller.signal }), response);
     return (await response).body.getReader();
   };
-  return { window, stream, response, start, pending, controller, fetch, read, getReader, Reader, Stream };
+  return { window, stream, response, start, pending, controller, fetch, read, getReader,
+    readerCancel, streamCancel, Reader, Stream };
 }
 
 test('observes the original reader without consuming extra bytes or replacing promises', async () => {
@@ -60,6 +65,37 @@ test('observes the original reader without consuming extra bytes or replacing pr
   assert.equal(f.window.fetch, f.fetch);
   assert.equal(f.Reader.prototype.read, f.read);
   assert.equal(f.Stream.prototype.getReader, f.getReader);
+  assert.equal(f.Reader.prototype.cancel, f.readerCancel);
+  assert.equal(f.Stream.prototype.cancel, f.streamCancel);
+});
+
+test('cancellation before EOF stays incomplete even after pending reads close and cancel is repeated', async () => {
+  const f = fixture(), reader = await f.start();
+  try {
+    const first = reader.read();
+    f.pending.shift().resolve({ done: false, value: new TextEncoder().encode('true') });
+    await first;
+    const end = reader.read();
+    assert.equal(reader.cancel('stop before EOF'), reader.cancellation);
+    f.pending.shift().resolve({ done: true });
+    await end;
+    assert.equal(reader.cancel('repeat after the pending read closed'), reader.cancellation);
+    assert.equal(workspaceResponseCompleted(f.window.__workspaceResponseProbe.records, payload), false);
+  } finally { f.window.__workspaceResponseProbe.dispose(); }
+});
+
+test('cancellation after a complete read preserves completion and the original cancel promise', async () => {
+  const f = fixture(), reader = await f.start();
+  try {
+    const first = reader.read();
+    f.pending.shift().resolve({ done: false, value: new TextEncoder().encode('true') });
+    await first;
+    const end = reader.read();
+    f.pending.shift().resolve({ done: true });
+    await end;
+    assert.equal(reader.cancel('already consumed'), reader.cancellation);
+    assert.equal(workspaceResponseCompleted(f.window.__workspaceResponseProbe.records, payload), true);
+  } finally { f.window.__workspaceResponseProbe.dispose(); }
 });
 
 test('headers and cancellation do not imply a complete application read', async () => {
@@ -86,6 +122,7 @@ test('completion requires one matching successful boolean body, not an initial v
   for (const invalid of [
     { status: 503 }, { done: false }, { readError: 'truncated' }, { fetchError: 'failed' },
     { requestBodyError: 'unreadable' }, { truncated: true }, { doneWhenAborted: false },
+    { cancelledBeforeEof: true },
     { chunks: [{ text: 'tr' }] }, { chunks: [{ text: '{"error":"failed"}' }] },
   ]) assert.equal(workspaceResponseCompleted([{ ...complete, ...invalid }], payload), false, JSON.stringify(invalid));
   assert.equal(workspaceResponseCompleted([{ ...complete, chunks: [{ text: 'false' }] }], payload), true);
@@ -97,7 +134,11 @@ test('ignores unrelated reads and does not overwrite another observer during cle
   assert.equal(f.window.__workspaceResponseProbe.records.length, 0);
   const replacement = () => {};
   f.window.fetch = replacement;
+  f.Reader.prototype.cancel = replacement;
+  f.Stream.prototype.cancel = replacement;
   f.window.__workspaceResponseProbe.dispose();
   assert.equal(f.window.fetch, replacement);
+  assert.equal(f.Reader.prototype.cancel, replacement);
+  assert.equal(f.Stream.prototype.cancel, replacement);
   assert.equal(f.window.__workspaceResponseProbe, undefined);
 });

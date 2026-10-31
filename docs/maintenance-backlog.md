@@ -34,6 +34,8 @@ PR #54 的实现提交 `97d75438` 再次遇到既有 `preferenceOrdering` 超时
 
 独立 [PR #55](https://github.com/Develata/RSS-Reader/pull/55) 先增加被动观测，随后在 `afb57356` 的 CI 捕获完整反例：原 reader 已读完 `true` 和 EOF，取消时也已完成，但 DevTools 不再报告 `requestfinished`。现已单列修正测试门禁并合入 main `79d8711d`，精确匹配最终 PUT 的 payload 与完整布尔响应；保留真实持久化、重载断言和 15 秒上限，产品保存行为不变。普通工具测试 14 项、Windows 浏览器适配反例 10 项和正式 Web 18 场景通过，最终 PR head 与本地覆盖见[修复交接](./handoffs/2026-10-31-workspace-response-fix.md)，合并后的新检查和下载产物单列于[主线回执](./handoffs/2026-10-31-workspace-response-merge.md)。该签名的测试假阴性已修正，不代表所有偏好保存问题均已排除。
 
+合并后审查在 `c2f8cca3` 另复现了测试假阳性：提前取消 reader 会产生 `done=true`，旧观察器可能把布尔前缀当成完整响应。候选分支 `codex/workspace-response-cancel` 已补充取消事实和 13 项真实浏览器正反例，产品保存实现未改；复现、完整工作区回归及整合状态见[审查交接](./handoffs/2026-10-31-workspace-response-cancel-review.md)。这与上面已合并的 DevTools 完成事件假阴性分别留证。
+
 ## 0.3.x 移除旧列表密度参数
 
 用户已批准在 0.3.x 做破坏性更新。当前批次先移除设置控件、预览状态和紧凑 CSS 分支，统一原默认间距；0.2.x 暂时保留 `list_density` 的序列化、存储、API 和 CLI 兼容，UI 保存不发送该字段，读取或保存其他字段也不改写其旧值。不是新的独立模块，也不为它继续提取策略。实现与验收见[交接](./handoffs/2026-10-30-density-retirement.md)。
