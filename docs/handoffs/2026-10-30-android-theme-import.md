@@ -6,7 +6,7 @@
 - 产品基线：`ef04ded9955699e1175b3904d470c2e9046edf9f`
 - 当前产品提交：`bfa6fda12412133e334b3566f7a127c1a48d6a62`
 - 相关 commit：BOM 修复 `58501e56cbaf44302f6be541d4bdbf96ef438bb5`；Android 适配 `bfa6fda12412133e334b3566f7a127c1a48d6a62`
-- 远端评审：[PR #49](https://github.com/Develata/RSS-Reader/pull/49)，尚未合并；Checks 按该 PR 的当前 head 核对
+- 远端评审：[PR #49](https://github.com/Develata/RSS-Reader/pull/49)，已合入 main `4cef074c54d7df54808e7892f950f56a7a750232`；后续整合见下方回执
 - 相关 tag / release：无；未发布
 - 状态：`validated`（本地和实际宿主）
 
@@ -61,3 +61,7 @@
 实现、源码复核、普通 Rust 和实际宿主验收已完成，未发现未处理的阻塞项；两笔产品提交均已推送至 `origin/codex/android-theme-import`，PR #49 已建立。后续回执只更新文档，不改变本轮验收的产品输入。本批不宣称正式签名升级、真实云端文档提供器、Activity 重建/进程回收全生命周期、系统 IME / 辅助技术、macOS/Linux GUI 或性能验收；Web GUI 未本地重跑。测试提供器的错误/延迟是受控故障，真实系统选择器与 JNI 确有运行。
 
 独立原生设置面板继续只作为设计候选；0.3.x 密度参数删除另按[维护待办](../maintenance-backlog.md)推进。当前长期规则见[原生适配契约](../design/native-control-adapter-contracts.md)。
+
+## 后续整合回执（2026-10-30）
+
+用户批准 Reader 接续前先收口 PR #49。复核 head `b03ebc4e` 未变化、无未处理评审、Checks 37 成功 / 1 Pages deploy 跳过（其中 CI 36/36）；按 expected-head 合并为 `4cef074c`，合并树与已验 head 完全一致，本地 main 同步快进。main 的 CI `41123073739`、Pages `41123073638` 与 Docker `41123073747` 成功；不扩大为新的容器手工验收。新工作使用 `codex/reader-rule-boundary`，见[接续交接](./2026-10-30-reader-rule-boundary.md)。

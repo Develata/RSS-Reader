@@ -1,6 +1,6 @@
 # 维护状态
 
-核对日期：2026-10-30。当前进入**复用已提取规则、接入具体宿主能力的阶段**：返回策略和 App 设置读取通过 PR #46、#47 合入 main；主题模式选择保留现有宿主控件。本批已接入 Android 系统主题文件选择器并完成真机验收。界面仍使用 Dioxus / WebView；独立原生设置面板尚属设计候选。
+核对日期：2026-10-30。近期目标是让 WebView 成为可替换的界面实现，让未来 Rust 原生界面复用同一交互规则；JS 行数仅作辅助指标。返回、App 设置读取和 Android 系统主题文件导入已进入 main。本批以 Reader 分离普通 Rust 规则与 Dioxus 装配，证明依赖独立性并验证当前宿主行为；界面仍使用 Dioxus / WebView。
 
 列表密度选项和紧凑样式、仓库 `.agents/` 的 9 份旧 skill 已经由 PR #48 合入 main；旧密度参数仅暂留 0.2.x 兼容，0.3.x 破坏性删除已批准但不在本批实施。Android 导入验收发现的开头 BOM 呈现缺陷已在旧包复现后独立修复，见[当前交接](./handoffs/2026-10-30-android-theme-import.md)。
 
@@ -11,8 +11,8 @@
 | 范围 | 当前事实 | 证据与边界 |
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
-| 最新 main | `ef04ded9`；本地 main 已快进到同一提交 | PR #38–#48 已合并；PR #48 head 与合并 main 的 CI 各 36/36，Pages 成功；main Docker workflow 成功。合并树与 head `8ace1781` 相同，见[整合回执](./handoffs/2026-10-30-density-retirement.md#后续整合回执2026-10-30) |
-| 当前工作分支 | `codex/android-theme-import`，复用原 E 盘工作树；BOM 修复 `58501e56`、Android 导入 `bfa6fda1` 已推送，[PR #49](https://github.com/Develata/RSS-Reader/pull/49) 尚未合并 | Rust 391 通过 / 1 忽略，Android 真机 10 组、Windows 实际 WebView2 13 组通过；格式、Clippy、Wasm / Android 构建通过。提交、产物、受控故障与未覆盖范围见[本批交接](./handoffs/2026-10-30-android-theme-import.md) |
+| 最新 main | `4cef074c`；本地 main 已快进到同一提交 | PR #38–#49 已合并；PR #49 head 与合并 main 的 CI 各 36/36，main Pages / Docker workflow 成功。合并树与 head `b03ebc4e` 相同，见[整合回执](./handoffs/2026-10-30-android-theme-import.md#后续整合回执2026-10-30) |
+| 当前工作分支 | `codex/reader-rule-boundary`，[PR #50](https://github.com/Develata/RSS-Reader/pull/50)；复用原 E 盘工作树，产品提交 `82beaf52`，尚未合并 | app 418 通过 / 1 忽略；独立无框架编译 23 项通过。Windows 基线/候选各 4 组、Android 真机各 2 组、正式 Web 两种离页写入通过；12 张宿主截图逐字节相同。产物、首次 CI 超时与重查范围见[本批交接](./handoffs/2026-10-30-reader-rule-boundary.md)，远端 Checks 以 PR 当前 head 为准 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -29,13 +29,13 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 1. **保留已收口的规则边界。** App 设置读取已经审查、CI 和合并；不再列为候选。主题选择的现有行为已完成专项，不继续扩大 Shell 提取或重复实现系统弹窗。
 2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留当前候选与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布。
-3. **明确真正的原生表单边界。** 下一设计候选是 Windows 独立原生设置面板的小样，限主题选择、取消和显式保存。先具体说明窗口/session 所有权、CSS 兼容、回退与宿主验收；该设计尚未完成，也未批准整页替换、新框架、crate 或数据库迁移。详见[评估结论与完成标准](./design/native-theme-selector-assessment.md)。
+3. **按替换成本推进下一批。** Reader 规则独立性样本完成后，收敛所属功能的焦点、滚动、事件监听及清理入口；快捷键定义去重单独提交并保留同步默认动作和切文前捕获。随后明确正文内容/资源/锚点与 HTML/DOM 渲染边界。独立原生设置面板仍是候选，不优先于上述步骤；没有第二种实现前不新增通用框架、crate 或宿主接口。见[长期方向和本批边界](./design/native-ui-preparation.md)。
 
 ## 分支与工作树快照
 
-截至本批推送后核对：**5 个本地分支、2 个工作树、4 个真实远端分支（main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import）**。本批新增 Android 导入分支，复用原工作树；之前的 4 条失效登记和 5 个旧工作树已清理，本轮没有清理或新建工作树，不把 `origin/HEAD` 算作分支。
+截至本批推送后核对：**6 个本地分支、2 个工作树、5 个真实远端分支**。本批新增 `codex/reader-rule-boundary`，其余远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import；复用原工作树，不删除分支或新建工作树，不把 `origin/HEAD` 算作分支。
 
-本地保留 main、已合并的 `codex/native-back-policy` / `codex/shell-settings-lifecycle`、当前 `codex/android-theme-import` 和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout 的 40 条既有状态、暂存区及 42 个文件/缺失路径本批复核无变化；另一任务新增的 `2026-10-30-main-javascript-audit.md` 保留，不纳入提交。历史备份与恢复方式仍见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
+本地保留 main、已合并的 `codex/native-back-policy` / `codex/shell-settings-lifecycle` / `codex/android-theme-import`、当前 `codex/reader-rule-boundary` 和主 checkout 的 `feat/reading-workspace-20261024`。本批开始时主 checkout 的状态、index 与 41 个文件/缺失路径已复核保留；另一任务的 JavaScript 审计文档不纳入提交。历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 
 ## 验证结论的边界
 

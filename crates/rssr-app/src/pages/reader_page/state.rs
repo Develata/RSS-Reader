@@ -1,4 +1,4 @@
-use crate::bootstrap::ReaderNavigation;
+use rssr_domain::EntryNavigation as ReaderNavigation;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

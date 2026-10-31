@@ -1,13 +1,4 @@
-use dioxus::prelude::*;
-
 use super::{intent::ReaderPageIntent, state::ReaderPageState};
-
-pub(crate) fn dispatch_reader_page_intent(
-    mut state: Signal<ReaderPageState>,
-    intent: ReaderPageIntent,
-) {
-    state.with_mut(|state| reduce_reader_page_intent(state, intent));
-}
 
 pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: ReaderPageIntent) {
     match intent {

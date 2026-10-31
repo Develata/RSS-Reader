@@ -1,5 +1,6 @@
 pub(crate) mod facade;
 mod image_viewer;
+mod image_viewer_state;
 pub(crate) mod intent;
 pub(crate) mod reducer;
 mod result_lifecycle;
@@ -21,7 +22,7 @@ use crate::{
 pub(crate) use self::session::ReaderPageSession;
 
 use self::facade::ReaderPageFacade;
-use self::reducer::dispatch_reader_page_intent;
+use self::session::dispatch_reader_page_intent;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
@@ -186,7 +187,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
             }
         }
-        if let image_viewer::ImageViewerState::Open(image) = viewer() {
+        if let image_viewer_state::ImageViewerState::Open(image) = viewer() {
             image_viewer::ReaderImageViewer { image, on_close: move |_| { viewer.write().close(); } }
         }
     }

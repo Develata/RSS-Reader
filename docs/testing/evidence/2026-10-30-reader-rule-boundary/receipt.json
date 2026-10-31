@@ -1,0 +1,181 @@
+{
+  "date": "2026-10-30",
+  "base": "4cef074c54d7df54808e7892f950f56a7a750232",
+  "productCommit": "82beaf5219988117b2908a05afff6c2222e1c32a",
+  "productManifestSha256": "94ac16a8a93ff60d1bc5d11489de8df3d86ceed77545712c63fd6f7ad783fa7e",
+  "productFiles": 393,
+  "rust": {
+    "appPassed": 418,
+    "appIgnored": 1,
+    "productionModuleTestsInSeparateHarness": 23,
+    "frameworkFreeStandalonePassed": 23,
+    "newReadLifecycleTests": 4
+  },
+  "fmt": "pass",
+  "clippy": "pass",
+  "wasmCheck": "pass",
+  "webBuild": "pass; dx 0.7.9, release --debug-symbols false",
+  "androidBuild": {
+    "source": "4cef074c54d7df54808e7892f950f56a7a750232",
+    "productManifestSha256": "94ac16a8a93ff60d1bc5d11489de8df3d86ceed77545712c63fd6f7ad783fa7e",
+    "apkSha256": "2c8e245d519dc8d8644daa3c36b711c83440cad54ed4947c051862196c4c5856",
+    "librarySha256": "63ed0b7f1ea5ec40383d1f9f5b64c52890e84ab88aefe6e3507b3a5044864160",
+    "dxVersion": "0.7.9",
+    "generatedActivityMatches": true,
+    "dependencySourceMatches": true,
+    "productInputsVerified": 393
+  },
+  "native": {
+    "windowsBaseline": {
+      "path": "target/reader-rule-boundary-20261030/windows-baseline-02/acceptance/acceptance.json",
+      "sha256": "044ac924c99a3203da882e76e2d6673674abe2a63a677ccdc975f6fa311ce0fb",
+      "checks": 4,
+      "artifactSha256": "7b2d2bd0ac8ffe9522e6bc3db2e61ff3d7b341624bec22dd8d27e95add7f7f47",
+      "hostVersion": "156.0.4314.50",
+      "scriptSha256": "1dfee183c92404192af43b23ee6ad90b0f863f780e093d4ebd014780f3090236"
+    },
+    "windowsCandidate": {
+      "path": "target/reader-rule-boundary-20261030/windows-candidate-01/acceptance/acceptance.json",
+      "sha256": "1f397a6267857a6b1abd3dcbd2b08d1a68a7bedc3b353178ed36e6ff4393a4a5",
+      "checks": 4,
+      "artifactSha256": "b13817f72ffc6f0a1242adae8f64c8a0beae226dd55240091396a817b53a3fd7",
+      "hostVersion": "156.0.4314.50",
+      "scriptSha256": "1dfee183c92404192af43b23ee6ad90b0f863f780e093d4ebd014780f3090236"
+    },
+    "androidBaseline": {
+      "path": "target/reader-rule-boundary-20261030/android-baseline-01/acceptance/acceptance.json",
+      "sha256": "ed6dc27101cdf693114aa4f0c0e75b14185b5765ff2def73128f4df321786661",
+      "checks": 2,
+      "artifactSha256": "80723aa721f43084a06338edc5e4e85b1e03c20dc9f07581125160b538116352",
+      "hostVersion": "156.0.8078.47",
+      "scriptSha256": "1dfee183c92404192af43b23ee6ad90b0f863f780e093d4ebd014780f3090236"
+    },
+    "androidCandidate": {
+      "path": "target/reader-rule-boundary-20261030/android-reader-rules-candidate-01/acceptance/acceptance.json",
+      "sha256": "c7e9c4b6f0b2b0ac2564da2dbbcc83444570190d1194e838d82091923449287c",
+      "checks": 2,
+      "artifactSha256": "2c8e245d519dc8d8644daa3c36b711c83440cad54ed4947c051862196c4c5856",
+      "hostVersion": "156.0.8078.47",
+      "scriptSha256": "1dfee183c92404192af43b23ee6ad90b0f863f780e093d4ebd014780f3090236"
+    }
+  },
+  "web": {
+    "status": "passed",
+    "checks": [
+      {
+        "name": "reader-read-and-star-writes-survive-navigation",
+        "pass": true,
+        "operations": 2
+      }
+    ],
+    "pageErrors": [],
+    "consoleErrors": []
+  },
+  "visual": {
+    "windows": [
+      {
+        "name": "1280-entries.png",
+        "sameBytes": true
+      },
+      {
+        "name": "1280-image.png",
+        "sameBytes": true
+      },
+      {
+        "name": "1280-reader-after-shortcuts.png",
+        "sameBytes": true
+      },
+      {
+        "name": "1280-reader.png",
+        "sameBytes": true
+      },
+      {
+        "name": "390-entries.png",
+        "sameBytes": true
+      },
+      {
+        "name": "390-image.png",
+        "sameBytes": true
+      },
+      {
+        "name": "390-reader-after-shortcuts.png",
+        "sameBytes": true
+      },
+      {
+        "name": "390-reader.png",
+        "sameBytes": true
+      }
+    ],
+    "android": [
+      {
+        "name": "392-entries.png",
+        "sameBytes": true
+      },
+      {
+        "name": "392-image.png",
+        "sameBytes": true
+      },
+      {
+        "name": "392-reader-after-shortcuts.png",
+        "sameBytes": true
+      },
+      {
+        "name": "392-reader.png",
+        "sameBytes": true
+      }
+    ]
+  },
+  "preservation": {
+    "primaryHead": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "primaryPathsVerified": 41,
+    "primaryIndexAndStatusUnchanged": true,
+    "androidOriginalFilesVerified": 6,
+    "dailyApkUnchanged": true,
+    "adbMappingsUnchanged": true
+  },
+  "review": "No unresolved blocker found in source review; no production defect fix in this extraction",
+  "mainCi": {
+    "run": 41123073739,
+    "head": "4cef074c54d7df54808e7892f950f56a7a750232",
+    "success": 36,
+    "total": 36
+  },
+  "prCi": {
+    "pr": 50,
+    "run": 41127100378,
+    "head": "050efdd7c53dba2e0460b07c8980032576e42b93",
+    "attempt": 2,
+    "success": 36,
+    "total": 36,
+    "retryScope": "Only failed jobs; no source changes",
+    "firstAttempt": {
+      "success": 34,
+      "failure": 2,
+      "failedJobs": ["reading-workspace", "lint-and-test"],
+      "assertion": "preferenceOrdering: the final workspace response must finish",
+      "rootCause": "unconfirmed; not reproduced locally",
+      "evidence": "target/reader-rule-boundary-20261030/pr50-workspace-first"
+    },
+    "localDiagnostic": {
+      "browser": "Chrome 155.0.8059.40 on Windows",
+      "precedingScenariosPassed": 9,
+      "preferenceOrderingTrialsPassed": 5,
+      "workspaceRequestFailures": 0,
+      "pageErrors": 0,
+      "evidence": "target/reader-rule-boundary-20261030/pr50-workspace-local-candidate-01/diagnostic.json"
+    },
+    "retryEvidence": "target/reader-rule-boundary-20261030/pr50-workspace-retry",
+    "pagesRun": 41127100466,
+    "pagesConclusion": "success",
+    "laterDocumentationHead": "Check the current PR head separately; this receipt is bound to 050efdd7"
+  },
+  "evidenceDirectory": "target/reader-rule-boundary-20261030",
+  "notCovered": [
+    "physical keyboard/IME",
+    "assistive technology",
+    "macOS/Linux GUI",
+    "release upgrade",
+    "alternative renderer",
+    "performance benchmark"
+  ]
+}
