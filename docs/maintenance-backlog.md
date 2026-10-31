@@ -14,7 +14,9 @@
 
 ## 原生界面前置的当前顺序
 
-Reader 读取恢复后旧错误提示残留已通过 PR #57 合入 `df531fcc`，见[复现与修复](./handoffs/2026-10-31-reader-reread-recovery.md)、[主线交接](./handoffs/2026-10-31-reader-recovery-merge.md)。下一候选是 Settings 已有草稿、逐字段保存及异步回填规则的无框架独立性验证，先核对实际依赖；目前没有确认新的 Settings 缺陷，本批没有开始重构。
+Reader 读取恢复后旧错误提示残留已通过 PR #57 合入 `df531fcc`，见[复现与修复](./handoffs/2026-10-31-reader-reread-recovery.md)、[主线交接](./handoffs/2026-10-31-reader-recovery-merge.md)。Settings 的草稿、逐字段保存及异步回填已完成本地有界整理：去除保存策略经组件模块引用校验的依赖，分离回填决定与 Signal 发布，并直接编译同一生产规则。当前未确认新的运行缺陷；实现与验收见[本批交接](./handoffs/2026-10-31-settings-rule-boundary.md)，尚未推送或合并。
+
+后续先 review、整合这批结果，再检查 Settings 主题导入与预览的宿主入口是否仍有实际复用阻碍。现有文件请求身份、页面归属和取消规则继续复用；不因已有模块独立测试通过就提前替换整页或统一所有页面控制器。
 
 `preferenceOrdering` 的历史 CI 超时已通过后续被动观测捕获完整反例，并单列修正测试的完成门禁；当前进度见下方[偏好保存顺序](#偏好保存顺序的-ci-不稳定点)，早期未复现记录保留原日期语义。
 

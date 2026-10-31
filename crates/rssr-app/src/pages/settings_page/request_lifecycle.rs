@@ -17,6 +17,24 @@ pub(super) struct LoadedSettings {
     pub(super) applied: u64,
 }
 
+#[derive(Debug, PartialEq)]
+pub(super) enum LoadProjection {
+    Apply(UserSettings),
+    ShowCurrent,
+}
+
+impl LoadedSettings {
+    /// Decide against the app revision at projection time, including a reply held by a write.
+    /// A newer app application supplies the page instead; it must not be stored a second time.
+    pub(super) fn resolve(self, current_applied: u64) -> LoadProjection {
+        if self.applied == current_applied {
+            LoadProjection::Apply(self.settings)
+        } else {
+            LoadProjection::ShowCurrent
+        }
+    }
+}
+
 #[derive(Clone, Default, PartialEq)]
 pub(super) struct SettingsRequestLifecycle {
     in_flight: bool,
@@ -82,6 +100,13 @@ mod tests {
 
     fn settings() -> UserSettings {
         UserSettings { entries_page_size: 80, ..Default::default() }
+    }
+
+    #[test]
+    fn application_revision_selects_the_source_without_reapplying_newer_settings() {
+        let loaded = LoadedSettings { settings: settings(), applied: 7 };
+        assert_eq!(loaded.clone().resolve(7), LoadProjection::Apply(settings()));
+        assert_eq!(loaded.resolve(8), LoadProjection::ShowCurrent);
     }
 
     #[test]

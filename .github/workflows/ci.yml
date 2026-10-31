@@ -196,6 +196,10 @@ jobs:
         if: matrix.package == 'rssr-infra'
         run: python3 scripts/check_reader_rule_boundary.py --target-dir target
 
+      - name: Compile Settings rules without a UI framework
+        if: matrix.package == 'rssr-api'
+        run: python3 scripts/check_settings_rule_boundary.py --target-dir target
+
       - name: CLI smoke
         if: matrix.package == 'rssr-cli'
         run: cargo run --locked -p rssr-cli -- --help

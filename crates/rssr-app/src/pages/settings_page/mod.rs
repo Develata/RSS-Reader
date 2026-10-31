@@ -1,6 +1,7 @@
 mod appearance;
 mod browser;
 mod draft_edits;
+mod draft_projection;
 mod facade;
 pub(crate) mod intent;
 mod preferences;

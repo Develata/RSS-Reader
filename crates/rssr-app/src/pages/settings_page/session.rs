@@ -1,6 +1,9 @@
 use super::{
     draft_edits::Edits,
-    request_lifecycle::{SettingsLoadRequest, SettingsRequestLifecycle},
+    draft_projection::{DraftProjection, ProjectionSource, project_stored},
+    request_lifecycle::{
+        LoadProjection, LoadedSettings, SettingsLoadRequest, SettingsRequestLifecycle,
+    },
 };
 use std::future::Future;
 
@@ -84,19 +87,6 @@ impl SettingsPageSession {
 
     pub(crate) fn numeric_revisions(self) -> [u64; 4] {
         (self.numeric_revisions)()
-    }
-
-    /// Only fields supplied by stored settings retire parse feedback. Fields with
-    /// submitted/pending edits still overlay the stored value and keep their feedback.
-    fn note_numeric_projection(mut self) {
-        let edited = self.edits.peek().numeric_edits();
-        self.numeric_revisions.with_mut(|revisions| {
-            for (revision, edited) in revisions.iter_mut().zip(edited) {
-                if !edited {
-                    *revision = revision.wrapping_add(1);
-                }
-            }
-        });
     }
 
     /// A draft kept before a reload or a sign-in becomes the pending edits, over the settings the
@@ -238,7 +228,7 @@ impl SettingsPageSession {
     pub(crate) fn end_write(mut self) {
         let held_load = self.requests.write().end_write();
         if let Some(loaded) = held_load {
-            self.apply_load(loaded.settings, loaded.applied);
+            self.apply_load(loaded);
         }
     }
 
@@ -303,7 +293,7 @@ impl SettingsPageSession {
     fn receive_load(mut self, request: SettingsLoadRequest, settings: UserSettings) {
         let loaded = self.requests.write().receive_load(request, settings);
         if let Some(loaded) = loaded {
-            self.apply_load(loaded.settings, loaded.applied);
+            self.apply_load(loaded);
         }
     }
 
@@ -312,11 +302,12 @@ impl SettingsPageSession {
     /// again. They are a write's (an import, a download), which the load may predate, or the
     /// shell's start read; either way nothing written is undone, and the next re-read brings
     /// anything newer.
-    fn apply_load(self, settings: UserSettings, applied: u64) {
-        if self.theme.stored_count() == applied {
-            self.apply_stored_settings(settings);
-        } else {
-            self.show_stored_settings(self.theme.settings.peek().clone());
+    fn apply_load(self, loaded: LoadedSettings) {
+        match loaded.resolve(self.theme.stored_count()) {
+            LoadProjection::Apply(settings) => self.apply_stored_settings(settings),
+            LoadProjection::ShowCurrent => {
+                self.show_stored_settings(self.theme.settings.peek().clone());
+            }
         }
     }
 
@@ -344,18 +335,38 @@ impl SettingsPageSession {
 
     /// The page's view of the stored settings, with the edits on top.
     fn show_stored_settings(mut self, settings: UserSettings) {
-        self.note_numeric_projection();
-        let draft = self.edits.peek().over(&settings);
-        if draft.custom_css != self.draft.peek().custom_css {
-            self.invalidate_theme_import();
-        }
-        if !self.edits.peek().edit_custom_css() {
-            self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
-            self.preview_css.set(None);
-        }
-        self.draft.set(draft);
+        let projection = self.project_stored(&settings, ProjectionSource::Stored);
+        self.publish_projection(projection);
         self.stored.set(settings);
         self.refresh_preview();
+    }
+
+    fn project_stored(
+        self,
+        settings: &UserSettings,
+        source: ProjectionSource<'_>,
+    ) -> DraftProjection {
+        project_stored(
+            &self.edits.peek(),
+            settings,
+            &self.draft.peek().custom_css,
+            *self.numeric_revisions.peek(),
+            source,
+        )
+    }
+
+    fn publish_projection(mut self, projection: DraftProjection) {
+        self.numeric_revisions.set(projection.numeric_revisions);
+        if projection.invalidate_theme_import {
+            self.invalidate_theme_import();
+        }
+        if projection.refresh_preset {
+            self.preset_choice.set(detect_preset_key(&projection.draft.custom_css).to_string());
+        }
+        if projection.clear_css_preview {
+            self.preview_css.set(None);
+        }
+        self.draft.set(projection.draft);
     }
 
     /// A save stored `settings`: its edits are done, the ones made since stay on top. The preset
@@ -369,19 +380,15 @@ impl SettingsPageSession {
         self.note_stored();
         self.edits.write().saved();
         self.publish_draft();
-        self.note_numeric_projection();
-        let draft = self.edits.peek().over(&settings);
-        if draft.custom_css != self.draft.peek().custom_css {
-            self.invalidate_theme_import();
-        }
-        if self.preset_choice.peek().as_str() == submitted_preset {
-            self.preset_choice.set(detect_preset_key(&draft.custom_css).to_string());
-        }
+        let projection = self.project_stored(
+            &settings,
+            ProjectionSource::Saved {
+                current_preset: self.preset_choice.peek().as_str(),
+                submitted_preset,
+            },
+        );
         let has_unsaved_edits = !self.edits.peek().pending().is_empty();
-        if self.edits.peek().pending().custom_css.is_none() {
-            self.preview_css.set(None);
-        }
-        self.draft.set(draft);
+        self.publish_projection(projection);
         self.stored.set(settings.clone());
         self.theme.store(settings);
         self.refresh_preview();
