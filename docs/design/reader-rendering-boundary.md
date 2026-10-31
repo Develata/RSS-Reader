@@ -1,6 +1,6 @@
 # Reader 正文、资源与渲染边界
 
-核对日期：2026-10-30，源码基线为 PR #50–#52 整合后的 main `dbbaf390`，与 `4d0aab02` 文件树相同。本文件记录当前实现、兼容要求和下一批边界；没有引入原生正文渲染器或新的公共接口。
+核对日期：2026-10-30，基于 PR #50–#52 整合及文档提交后的 main `0c5e31a6`，另纳入本分支的 Reader 并发修复。main 的产品源码仍与 `4d0aab02` 相同，修复的合并状态见[维护状态](../current-status.md)。本文件记录实现、兼容要求和下一批边界；没有引入原生正文渲染器或新的公共接口。
 
 Reader 规则能脱离 Dioxus 编译，说明这些状态转移可复用；正文仍包含 HTML，图片地址与锚点仍由当前宿主解释。用普通 Rust 类型承载数据，不等于数据的呈现语义已脱离 WebView。
 
@@ -13,7 +13,7 @@ Reader 规则能脱离 Dioxus 编译，说明这些状态转移可复用；正�
 | HTML 处理 | [infra html/reader.rs](../../crates/rssr-infra/src/html/reader.rs) | 地址与懒加载规范化、清洗、MathML 与解析预算 | 继续复用唯一处理链路；不能因更换控件绕过或复制解析政策 |
 | 命令装配与页面状态 | [runtime/reader.rs](../../crates/rssr-app/src/ui/runtime/reader.rs)、[state.rs](../../crates/rssr-app/src/pages/reader_page/state.rs) | 生成加载回执；正文进入 `Arc<str>`，状态与访问归属沿用现有规则 | runtime/session 仍是当前装配；纯 reducer 与归属规则不另建状态副本 |
 | 正文呈现 | [ReaderPage](../../crates/rssr-app/src/pages/reader_page/mod.rs) | HTML 放入 `reader-body-html`，文本放入 `pre`；布局、选区和样式由当前宿主完成 | HTML 插入、排版及主题兼容需要由候选渲染器实际证明 |
-| 图片处理与打开 | [图片本地化](../../crates/rssr-infra/src/local_backend/image_localization.rs)、[图片事件](../../crates/rssr-app/src/pages/reader_page/webview/image_events.js) | 后端按预算缓存；宿主选择实际显示源并发出 `src/alt` | 缓存写入属于后端；图片解码、源选择、激活和焦点属于宿主 |
+| 图片处理与打开 | [图片本地化](../../crates/rssr-infra/src/local_backend/image_localization.rs)、[图片事件](../../crates/rssr-app/src/pages/reader_page/webview/image_events.js) | 后端按预算缓存；宿主选择实际显示源并发出 `generation/src/alt`，普通规则核对访问身份 | 缓存写入属于后端；图片解码、源选择、激活和焦点属于宿主 |
 | 阅读位置 | [Rust 控制器](../../crates/rssr-app/src/ui/reading_position/controller.rs)、[DOM 适配器](../../crates/rssr-app/src/ui/reading_position.js) | 普通事实驱动保存/恢复；宿主生成锚点、测量并执行滚动 | 复用恢复规则；当前 DOM 锚点不是跨渲染器书签 |
 
 ```mermaid
@@ -48,6 +48,7 @@ HTML 先进行显示规范化，再检查树构建预算、清洗并约束公式
 
 - 业务正文可包含远端地址。当前 [BodyAssetLocalizer](../../crates/rssr-infra/src/fetch/client/body_asset_localizer.rs) 在预算内下载并生成 `data:<type>;base64,...`，失败或未处理的来源继续按既有流程保留。它不是独立图片文件 ID 服务。
 - 浏览器负责 `picture/srcset` 的实际选择、图片解码和显示。打开图片时当前适配器读取 `img.currentSrc || img.src` 与 `alt`；图片状态只持有这些普通值。不能把此地址当作文章身份、缓存主键或未来原生资源句柄。
+- 激活消息绑定正文的既有访问代次，以文本传输避免 JavaScript 数值精度损失；普通规则拒绝不匹配的代次，hook 拒绝未就绪正文。旧图片消息在切文后或返回同一文章的新访问中均不生效；这个短期消息身份不作为持久化资源 ID。
 - 当前普通图片激活支持点击、Enter 和空格；修饰键、非主按钮和已有文本选择按原逻辑放行。打开后由 dialog 处理模态、焦点与滚动锁；关闭/卸载恢复已有 body 样式和滚动，原焦点节点仍连接时回焦。
 - 内容指纹、陈旧缓存写回防护、预算及后台轮转继续归现有 infra/application 边界；详见[图片身份与预算](./reader-processing-budgets.md#候选与正文身份)。界面替换不增加另一份缓存状态或自行直接抓取正文。
 
@@ -80,7 +81,7 @@ DOM 适配器从正文中的 `p/h1/h2/h3/pre/li/blockquote` 选择块，用 `blo
 | 链接 | 原文 URL 只接受 HTTP(S)；[external_link](../../crates/rssr-app/src/bootstrap/external_link.rs) 区分 Web 新上下文与原生系统处理 | 原文、正文链接、修饰键以及窗口/系统处理保持语义；本批没有重新执行外部系统处理器验收 |
 | 选择复制、IME、无障碍 | 当前 DOM 的选择、图片 alt/按钮角色、具名阅读区、live region 和焦点规则 | 实际文本选择/剪贴板、系统 IME、键盘与辅助技术；合成事件和普通 Rust 测试不能替代 |
 
-上述“现有依据”是回归入口，不代表已经测试任何候选渲染器。现有 24 项无框架检查不包含 `select_reader_body` 或 HTML 准备链；下一批须直接引用同一生产函数验证独立性，不能沿用这 24 项作证明。测试应分别记录纯输入规则、宿主自动化、实际原生输入与未覆盖项；版本与产物见[本批整合交接](../handoffs/2026-10-30-reader-integration.md)。
+上述“现有依据”是回归入口，不代表已经测试任何候选渲染器。当前 27 项无框架检查不包含 `select_reader_body` 或 HTML 准备链；下一批须直接引用同一生产函数验证独立性，不能沿用这些检查作证明。测试应分别记录纯输入规则、宿主自动化、实际原生输入与未覆盖项；整合基线见[整合交接](../handoffs/2026-10-30-reader-integration.md)，新增回归及产物见[并发修复交接](../handoffs/2026-10-30-reader-race-fixes.md)。
 
 ## 下一批建议
 

@@ -1,6 +1,12 @@
 use rssr_domain::EntryNavigation as ReaderNavigation;
 use std::sync::Arc;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReaderFlag {
+    Read,
+    Starred,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ReaderPageLoadedContent {
     pub(crate) title: String,
@@ -33,6 +39,8 @@ pub(crate) struct ReaderPageState {
     pub(crate) is_starred: bool,
     /// 每次加载递增：A → B → A 后，第一次 A 的结果也必须视为过期。
     pub(crate) load_generation: u64,
+    pub(crate) read_write_pending: bool,
+    pub(crate) starred_write_pending: bool,
     /// Bumped by every read-only refresh issued and every flag change the page applies: an
     /// earlier refresh's answer is dropped, since it may have read before the later one or before
     /// the write (C4b item 2; review C4B-B-01).
@@ -77,6 +85,8 @@ impl ReaderPageState {
             is_read: false,
             is_starred: false,
             load_generation: 0,
+            read_write_pending: false,
+            starred_write_pending: false,
             reread_generation: 0,
             reread_wanted: false,
             asset_localization_requested: false,
@@ -93,6 +103,24 @@ impl ReaderPageState {
         self.current_entry_id == entry_id && self.content_loaded && self.error.is_none()
     }
 
+    pub(crate) fn flag_write_pending(&self, flag: ReaderFlag) -> bool {
+        match flag {
+            ReaderFlag::Read => self.read_write_pending,
+            ReaderFlag::Starred => self.starred_write_pending,
+        }
+    }
+
+    pub(crate) fn can_write_flag(&self, entry_id: i64, flag: ReaderFlag) -> bool {
+        self.flags_known(entry_id) && !self.flag_write_pending(flag)
+    }
+
+    pub(super) fn set_flag_write_pending(&mut self, flag: ReaderFlag, pending: bool) {
+        match flag {
+            ReaderFlag::Read => self.read_write_pending = pending,
+            ReaderFlag::Starred => self.starred_write_pending = pending,
+        }
+    }
+
     /// 开始加载 `entry_id`。
     ///
     /// 同一篇的显式重载保留提示，切换文章时清空提示。
@@ -101,6 +129,8 @@ impl ReaderPageState {
         let switched_entry = self.current_entry_id != entry_id;
         self.current_entry_id = entry_id;
         self.load_generation = self.load_generation.wrapping_add(1);
+        self.read_write_pending = false;
+        self.starred_write_pending = false;
         if switched_entry {
             self.status.clear();
             self.status_tone = "info".to_string();

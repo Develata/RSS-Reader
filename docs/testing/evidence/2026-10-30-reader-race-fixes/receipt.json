@@ -1,0 +1,119 @@
+{
+  "base": "0c5e31a6cca607c5ba6f8783b2fc3923c0eb1160",
+  "branch": "codex/reader-race-fixes",
+  "rawEvidence": "target/reader-bugcheck-20261030/",
+  "productManifestSha256": "ba02c31a44b5a69460d27b45d9cc47079c9a568c442b6c79a13308b1087433c4",
+  "productInputsVerified": 464,
+  "baselineReproduction": {
+    "path": "web-probe-baseline-02/acceptance.json",
+    "sha256": "55177b0f1f2718eb05af07eaa031492d1f12ca675d3a0f8efda5a5628b787e8a",
+    "failedChecks": [
+      "activation-then-navigation",
+      "delayed-starred-response",
+      "delayed-read-response"
+    ],
+    "bugTypes": 2,
+    "scope": "Real server and Web; controlled image/navigation ordering and delayed delivery of completed writes"
+  },
+  "candidateReports": {
+    "web": {
+      "path": "web-candidate-01/acceptance.json",
+      "sha256": "ec4dd542f7d0b5aca1d262aeb7dfc8c02ea06619c9d39d92ec7dc89b12d559f4",
+      "checksPassed": 6,
+      "browser": "155.0.8059.40",
+      "serverBuild": "dev-0c5e31a6cca6-dirty-6de697eefeee"
+    },
+    "windows": {
+      "path": "windows-candidate-01/acceptance/acceptance.json",
+      "sha256": "89a20a02af8e9b122dd730eed4f846906f7102b5a9a121ec78b367c343c7f183",
+      "checksPassed": 8,
+      "webViewVersion": "156.0.4314.50",
+      "identity": {
+        "platform": "windows",
+        "pid": 41608,
+        "exe": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\reader-bugcheck-20261030\\windows-candidate-01\\rssr-app.exe",
+        "profile": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\reader-bugcheck-20261030\\windows-candidate-01\\webview",
+        "cdp": "http://127.0.0.1:9291",
+        "artifactSha256": "278465844126b8afa07ab30d6641b02cf9cb7db97947b5fd4983e6dfddf485f5",
+        "fixtureEntries": 100,
+        "fixtureSha256": "73C9ECF136ADD10888089DE4C275EF5E2942540C9C0836D58F22B6E482D45559",
+        "source": "0c5e31a6cca607c5ba6f8783b2fc3923c0eb1160",
+        "sourcePatchSha256": "8AB94BF86CE978E3A060678BA5C4BAC2F543EB8919945CA4AFE068DD277BCA7E"
+      }
+    },
+    "android": {
+      "path": "android-race-candidate-01/acceptance/acceptance.json",
+      "sha256": "aef18b0d5bfa93f9df813b8968df44368ca16a29b204e0e422c86c1f78d3c4b5",
+      "checksPassed": 4,
+      "webViewVersion": "156.0.8078.47",
+      "identity": {
+        "platform": "android",
+        "variant": "candidate",
+        "serial": "caa0c283",
+        "package": "io.github.develata.rssreader.backpolicytest",
+        "pid": 10627,
+        "apk": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\reader-bugcheck-20261030\\reader-race-final.apk",
+        "cdp": "http://127.0.0.1:9292",
+        "artifactSha256": "a5f6b4966be1abf66eda9b0d22b4743874c06846bbece3a63b975d5c7d19955f",
+        "fixtureEntries": 100,
+        "fixtureSha256": "73C9ECF136ADD10888089DE4C275EF5E2942540C9C0836D58F22B6E482D45559",
+        "source": "0c5e31a6cca607c5ba6f8783b2fc3923c0eb1160",
+        "productManifestSha256": "BA02C31A44B5A69460D27B45D9CC47079C9A568C442B6C79A13308B1087433C4"
+      }
+    },
+    "extendedImages": {
+      "path": "web-image-probe-candidate/acceptance.json",
+      "sha256": "07ac3170d1456fab40ef6999813f50e92e66b9b3a2b63b295c60aefa6067ade3",
+      "checksPassed": 2,
+      "browser": "155.0.8059.40",
+      "serverBuild": "dev-0c5e31a6cca6-dirty-6de697eefeee"
+    }
+  },
+  "rustTests": {
+    "baselineWorkspace": {
+      "passed": 1129,
+      "failed": 0,
+      "ignored": 4,
+      "suites": 64,
+      "logSha256": "6e6a3c813e5e664cdaf7469e409de36313e164a231cdd0e5a7298573b03724d4"
+    },
+    "candidateApp": {
+      "passed": 428,
+      "failed": 0,
+      "ignored": 1,
+      "suites": 4,
+      "logSha256": "583650b58f0ddd6c8ee27373e240f5d3e907aea8e35961176ac4d1c142a84242"
+    }
+  },
+  "frameworkFreePassed": 27,
+  "androidArtifact": {
+    "base": "0c5e31a6cca607c5ba6f8783b2fc3923c0eb1160",
+    "productManifestSha256": "ba02c31a44b5a69460d27b45d9cc47079c9a568c442b6c79a13308b1087433c4",
+    "productInputsVerified": 464,
+    "buildId": "reader-race-0c5e31a6-ba02c31a44b5",
+    "apkSha256": "a5f6b4966be1abf66eda9b0d22b4743874c06846bbece3a63b975d5c7d19955f",
+    "librarySha256": "efa9f4551d18400f100f214d52de55c9efc7cba1549a5ef2131512510c743f15",
+    "dxVersion": "0.7.9",
+    "generatedActivityMatches": true,
+    "dependencySourceMatches": true
+  },
+  "preservation": {
+    "primaryCheckout": {
+      "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+      "branch": "feat/reading-workspace-20261024",
+      "filesAndMissingPaths": 41,
+      "headStatusIndexAndFilesUnchanged": true
+    },
+    "android": {
+      "originalFilesRestored": 6,
+      "dailyApkUnchanged": true,
+      "originalMappingsRestored": true,
+      "originalDataArchiveSha256": "544a4f93dc6c97273a4a0f5f4c83cc9a3a82e7a58c9d1a9a460d9eef402b5e28"
+    }
+  },
+  "limitations": [
+    "No physical keyboard, IME, assistive technology, macOS or Linux GUI acceptance",
+    "Slow write response regression runs on real server Web; native hosts cover normal writes and image visit fencing",
+    "Flag gates belong to one Reader visit; no cross-client or cross-device global ordering"
+  ]
+}

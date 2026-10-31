@@ -23,7 +23,7 @@ const open = event => {
     // Only image activation consumes its native link/space action. Text selection is untouched.
     event.preventDefault();
     img.focus({preventScroll: true});
-    dioxus.send({src, alt: img.alt || ''});
+    dioxus.send({generation: root.dataset.readerGeneration, src, alt: img.alt || ''});
 };
 root.addEventListener('click', open, {signal: controller.signal});
 root.addEventListener('keydown', open, {signal: controller.signal});

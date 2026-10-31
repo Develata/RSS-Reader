@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 
 use crate::ui::reader_shortcuts;
 
-use super::image_viewer_state::ReaderImage;
+use super::image_viewer_state::ReaderImageActivation;
 
 // Keep cancellation in the owning Dioxus scope, including a scope dropped while
 // its receive task is waiting. The task itself keeps its existing scope lifetime.
@@ -22,14 +22,14 @@ fn use_listener_cleanup() -> Rc<Cell<Option<document::Eval>>> {
     bridge
 }
 
-pub(super) fn use_image_activations(on_image: Callback<ReaderImage>) {
+pub(super) fn use_image_activations(on_image: Callback<ReaderImageActivation>) {
     let bridge = use_listener_cleanup();
     use_future(move || {
         let bridge = Rc::clone(&bridge);
         async move {
             let mut eval = document::eval(include_str!("image_events.js"));
             bridge.set(Some(eval));
-            while let Ok(image) = eval.recv::<ReaderImage>().await {
+            while let Ok(image) = eval.recv::<ReaderImageActivation>().await {
                 on_image.call(image);
             }
         }

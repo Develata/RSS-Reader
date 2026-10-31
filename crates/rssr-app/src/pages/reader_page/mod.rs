@@ -25,17 +25,19 @@ pub(crate) use self::session::ReaderPageSession;
 use self::facade::ReaderPageFacade;
 use self::session::dispatch_reader_page_intent;
 use self::shortcuts::use_reader_shortcuts;
+use self::state::ReaderFlag;
 
 #[component]
 pub fn ReaderPage(entry_id: i64) -> Element {
-    let mut viewer = image_viewer::use_reader_image_viewer(entry_id);
+    let state = use_signal(state::ReaderPageState::new);
+    let mut viewer = image_viewer::use_reader_image_viewer(entry_id, state);
     use_mobile_back_navigation_with_dismiss(Some(AppRoute::EntriesPage {}), move || {
         let mut viewer = viewer;
         viewer.write().close()
     });
 
     let navigator = use_navigator();
-    let facade = use_reader_page_workspace(entry_id);
+    let facade = use_reader_page_workspace(entry_id, state);
     let previous_facade = facade.clone();
     let read_facade = facade.clone();
     let starred_facade = facade.clone();
@@ -46,6 +48,7 @@ pub fn ReaderPage(entry_id: i64) -> Element {
             class: "reader-page",
             "data-page": "reader",
             "data-position-key": "reader:{entry_id}",
+            "data-reader-generation": "{facade.load_generation()}",
             "data-position-ready": if facade.positions_ready(entry_id) { "true" } else { "false" },
             "data-layout": "reader-page",
             "data-state": facade.load_state(entry_id),
@@ -143,7 +146,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 button {
                     class: "reader-bottom-bar__button",
-                    disabled: !facade.flags_known(entry_id),
+                    disabled: !facade.can_write_flag(entry_id, ReaderFlag::Read),
+                    aria_busy: facade.flag_write_pending(ReaderFlag::Read),
                     "data-state": "{facade.read_state()}",
                     "data-action": "mark-read",
                     onclick: move |_| {
@@ -157,7 +161,8 @@ pub fn ReaderPage(entry_id: i64) -> Element {
                 }
                 button {
                     class: "reader-bottom-bar__button",
-                    disabled: !facade.flags_known(entry_id),
+                    disabled: !facade.can_write_flag(entry_id, ReaderFlag::Starred),
+                    aria_busy: facade.flag_write_pending(ReaderFlag::Starred),
                     "data-state": "{facade.starred_state()}",
                     "data-action": "toggle-starred",
                     aria_pressed: facade.is_starred(),
@@ -195,8 +200,10 @@ pub fn ReaderPage(entry_id: i64) -> Element {
     }
 }
 
-fn use_reader_page_workspace(entry_id: i64) -> ReaderPageFacade {
-    let state = use_signal(state::ReaderPageState::new);
+fn use_reader_page_workspace(
+    entry_id: i64,
+    state: Signal<state::ReaderPageState>,
+) -> ReaderPageFacade {
     let session = ReaderPageSession::new(entry_id, state);
     use_reader_shortcuts(session);
     use_reactive_task(entry_id, move |_| {

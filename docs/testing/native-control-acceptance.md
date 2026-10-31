@@ -27,6 +27,8 @@ Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library
 
 Reader 正式 Web 运行器直接复用 `server_harness.mjs`，使用上述产物环境变量及 `target/` 下全新 `ARTIFACT_DIR`。它只在新夹具库加入本机图片，不访问线上来源。监听探针记录真实回调/AbortSignal 与 observer，不替换应用回调或业务状态；退出 Reader 时排除随后新建的 Entries 监听。浮层期间离页由受控路由动作触发，不是物理点击穿透 inert。滚动比较以 dialog 挂载时保存的位置为准，同时记录按键前和激活时位置；脚本化鼠标/按键不证明物理输入设备。完整基线/候选与采样修订见[Reader 宿主回执](../handoffs/2026-10-30-reader-host-boundary.md)。
 
+Reader 并发回归在共用宿主场景中加入图片激活后立即切文：同一 DOM 事件轮次调用原图片与导航按钮，检查迟到消息不在新文章打开浮层。应用异步桥接与导航照常执行；这是受控时序，不代表物理双击/手势验收。正式 Web 另用 `reader_write_scenarios.cjs` 扣留已在真实服务器执行成功的标记响应，验证按钮与快捷键共用门禁、另一种标记仍可操作、完成后 UI 与存储一致且正文节点保留。两个视口现共 6 项；Windows 8 项、Android 4 项包含图片新场景，但原生宿主未做 HTTP 慢响应注入。实际结果与修复前失败见[并发修复交接](../handoffs/2026-10-30-reader-race-fixes.md)。
+
 快捷键场景打开列表第四篇，每个视口检查 70 个排除/阶段边界与 10 个有效键值，再检查离页后输入。它包装原 `Element.querySelectorAll` 观察正文位置扫描，记录目标节点事件到达前的扫描数和 `dispatchEvent` 返回时的 `defaultPrevented`；应用测量和回调仍执行原实现。有效按键实际导航并返回恢复位置，或等待标记状态改变再恢复；重复、组字、修饰键、可编辑祖先、通用 dialog、预先阻止与目标停止传播均为受控事实。用当前包同路径重跑基线/候选，不把合成 `KeyboardEvent` 写成系统键盘或 IME 实测，见[快捷键回执](../handoffs/2026-10-30-reader-shortcut-definition.md)。
 
 表单与可编辑目标用未预先取消的按键验证排除，并断言宿主没有 `preventDefault`；不能让预先取消的门禁掩盖编辑目标过滤失效。`contenteditable="false"` 是允许捕获的对照，单独预先取消它以检查捕获阶段且不触发实际切文。已用移除 M/F 编辑目标过滤的受控故障确认：旧测试漏报，修正后的输入框 M 用例会失败；该故障注入不进入产品代码。

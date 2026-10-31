@@ -1,6 +1,9 @@
 use crate::bootstrap::ReaderNavigation;
 
-use super::{session::ReaderPageSession, state::ReaderPageState};
+use super::{
+    session::ReaderPageSession,
+    state::{ReaderFlag, ReaderPageState},
+};
 
 #[derive(Clone)]
 pub(crate) struct ReaderPageFacade {
@@ -16,13 +19,20 @@ impl ReaderPageFacade {
     pub(crate) fn load_state(&self, entry_id: i64) -> &'static str {
         self.snapshot.load_state(entry_id)
     }
+
+    pub(super) fn load_generation(&self) -> u64 {
+        self.snapshot.load_generation
+    }
     pub(crate) fn new(session: ReaderPageSession, snapshot: ReaderPageState) -> Self {
         Self { session, snapshot }
     }
 
-    /// 已读、收藏按钮可用：屏幕上的标记就是这篇文章存储里的值。
-    pub(crate) fn flags_known(&self, entry_id: i64) -> bool {
-        self.snapshot.flags_known(entry_id)
+    pub(crate) fn can_write_flag(&self, entry_id: i64, flag: ReaderFlag) -> bool {
+        self.snapshot.can_write_flag(entry_id, flag)
+    }
+
+    pub(crate) fn flag_write_pending(&self, flag: ReaderFlag) -> bool {
+        self.snapshot.flag_write_pending(flag)
     }
 
     pub(crate) fn title(&self) -> &str {

@@ -45,6 +45,8 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             state.status = failure.message();
             state.status_tone = failure.tone().to_string();
         }
+        ReaderPageIntent::FlagWriteStarted(flag) => state.set_flag_write_pending(flag, true),
+        ReaderPageIntent::FlagWriteFinished(flag) => state.set_flag_write_pending(flag, false),
         ReaderPageIntent::PatchEntryFlags { entry_id, is_read, is_starred } => {
             // 与 ApplyLoadedContent / SetError 同样的归属校验：快速翻页时先发出的切换请求
             // 可能在换文章之后才落地，那时这条结果属于上一篇，必须丢弃。
@@ -86,6 +88,41 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
 mod tests {
     use super::{ReaderPageIntent, ReaderPageState, reduce_reader_page_intent};
     use crate::pages::reader_page::state::ReaderPageLoadedContent;
+
+    #[test]
+    fn flag_write_gates_are_independent_and_preserve_the_loaded_body() {
+        use super::super::state::ReaderFlag::{Read, Starred};
+        let mut state = ReaderPageState::new();
+        assert!(!state.can_write_flag(7, Read));
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+        reduce_reader_page_intent(
+            &mut state,
+            ReaderPageIntent::ApplyLoadedContent { entry_id: 7, content: loaded_content("Story") },
+        );
+        let body = state.body_text.clone();
+        let generation = state.load_generation;
+        for flag in [Read, Starred] {
+            assert!(state.can_write_flag(7, flag));
+            assert!(!state.can_write_flag(8, flag));
+        }
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::FlagWriteStarted(Read));
+        assert!(!state.can_write_flag(7, Read));
+        assert!(state.can_write_flag(7, Starred));
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::FlagWriteStarted(Starred));
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::FlagWriteFinished(Read));
+        assert!(state.can_write_flag(7, Read));
+        assert!(!state.can_write_flag(7, Starred));
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::FlagWriteFinished(Starred));
+        assert!(state.can_write_flag(7, Starred));
+        assert!(std::sync::Arc::ptr_eq(&body, &state.body_text));
+        assert_eq!(state.load_generation, generation);
+
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::FlagWriteStarted(Read));
+        reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 8 });
+        assert!(!state.flag_write_pending(Read));
+        assert!(!state.flag_write_pending(Starred));
+        assert!(!state.can_write_flag(8, Read));
+    }
 
     fn loaded_content(title: &str) -> ReaderPageLoadedContent {
         ReaderPageLoadedContent {

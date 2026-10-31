@@ -1,17 +1,30 @@
 use super::{
-    image_viewer_state::{ImageViewerState, ReaderImage},
+    image_viewer_state::{ImageViewerState, ReaderImage, ReaderImageActivation},
+    state::ReaderPageState,
     webview,
 };
 use dioxus::prelude::*;
 
-pub(super) fn use_reader_image_viewer(entry_id: i64) -> Signal<ImageViewerState> {
+pub(super) fn use_reader_image_viewer(
+    entry_id: i64,
+    reader: Signal<ReaderPageState>,
+) -> Signal<ImageViewerState> {
     let mut state = use_signal(ImageViewerState::default);
     crate::ui::use_reactive_side_effect(entry_id, move |_| {
         if matches!(*state.peek(), ImageViewerState::Open(_)) {
             state.write().close();
         }
     });
-    let on_image = use_callback(move |image| state.write().open(image));
+    let on_image = use_callback(move |activation: ReaderImageActivation| {
+        let image = reader.with_peek(|reader| {
+            (reader.load_state(entry_id) == "loaded")
+                .then(|| activation.into_current_image(reader.load_generation))
+                .flatten()
+        });
+        if let Some(image) = image {
+            state.write().open(image);
+        }
+    });
     webview::use_image_activations(on_image);
     state
 }
