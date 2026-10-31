@@ -1,0 +1,243 @@
+{
+  "base": "ff628ed03a96e57392b94ad3655cc4cb62be736a",
+  "productCommit": "9e0eb45baed04355af3ffabe478b62940ad23d5b",
+  "rust": {
+    "appPassed": 418,
+    "appIgnored": 1,
+    "standaloneSameProductionTestsPassed": 23
+  },
+  "fmt": "passed",
+  "clippy": "passed",
+  "wasmCheck": "passed",
+  "webBuild": "passed dx 0.7.9 release --debug-symbols false",
+  "androidBuild": {
+    "base": "ff628ed03a96e57392b94ad3655cc4cb62be736a",
+    "productManifestSha256": "fbc3b32b0beca8ddce2e30a794f28e55fbe86c7ac687aeec98f2f5280e1e8df0",
+    "productInputsVerified": 461,
+    "buildId": "reader-host-ff628ed0-e65954551bac",
+    "apkSha256": "54ca6d4644020b3c2a830bb90aef5d0a840cc073bf736dd1830ef13fc3e7fbd6",
+    "librarySha256": "64ecc2c6ed543fccdabcd503fa58bd02538a8fc017a0dd3d992358d3eb5ed6b5",
+    "dxVersion": "0.7.9",
+    "generatedActivityMatches": true,
+    "dependencySourceMatches": true
+  },
+  "hosts": {
+    "windows": {
+      "baseline": {
+        "path": "target/reader-host-boundary-20261030/windows-baseline-03/acceptance/acceptance.json",
+        "sha256": "0c44b8e03eb45732c8f380ebaf50a507554e7dce44340d0f4121408bd947f507",
+        "checks": 6,
+        "host": "156.0.4314.50",
+        "artifactSha256": "b13817f72ffc6f0a1242adae8f64c8a0beae226dd55240091396a817b53a3fd7"
+      },
+      "candidate": {
+        "path": "target/reader-host-boundary-20261030/windows-candidate-02/acceptance/acceptance.json",
+        "sha256": "cfa8b317aa60c5413a6a2b0dd67a67ee960624f0066e08ab36a88c8b264c3505",
+        "checks": 6,
+        "host": "156.0.4314.50",
+        "artifactSha256": "5e3c5e46bd9f45290049890debcbb76e7b605d8d0b43c76d8245d194cc3e96d3"
+      }
+    },
+    "android": {
+      "baseline": {
+        "path": "target/reader-host-boundary-20261030/android-host-baseline-02/acceptance/acceptance.json",
+        "sha256": "c24fd7187c786f69659e0c948a91f27bdc691e4ae65e5b045cffa5af70fc5c14",
+        "checks": 3,
+        "host": "156.0.8078.47",
+        "artifactSha256": "2c8e245d519dc8d8644daa3c36b711c83440cad54ed4947c051862196c4c5856"
+      },
+      "candidate": {
+        "path": "target/reader-host-boundary-20261030/android-host-candidate-01/acceptance/acceptance.json",
+        "sha256": "ead6b514c74533df87e8af6ac3a4a57043dbbb3eb29e4a4270a78db998c37be8",
+        "checks": 3,
+        "host": "156.0.8078.47",
+        "artifactSha256": "54ca6d4644020b3c2a830bb90aef5d0a840cc073bf736dd1830ef13fc3e7fbd6"
+      }
+    },
+    "web": {
+      "baseline": {
+        "path": "target/reader-host-boundary-20261030/web-baseline-02/acceptance.json",
+        "sha256": "ec069a453a5c8f9239475a8e7ee8f06673f46d1576e88d17641867153385dd06",
+        "checks": 2,
+        "host": "155.0.8059.40"
+      },
+      "candidate": {
+        "path": "target/reader-host-boundary-20261030/web-candidate-02/acceptance.json",
+        "sha256": "029d8f899f33678812ebf833861313a368fc9fc650c3865eb55d394cfc939eea",
+        "checks": 2,
+        "host": "155.0.8059.40"
+      }
+    }
+  },
+  "visual": [
+    {
+      "host": "windows",
+      "name": "1280-entries.png",
+      "sameBytes": true,
+      "baselineSha256": "4b4ce686aeeb5491bb782448a5690ba0ffafd88ce9d795fa985317b13524d8a9",
+      "candidateSha256": "4b4ce686aeeb5491bb782448a5690ba0ffafd88ce9d795fa985317b13524d8a9"
+    },
+    {
+      "host": "windows",
+      "name": "1280-image.png",
+      "sameBytes": true,
+      "baselineSha256": "a8f2062c0108beb927ff6d731561bc2c1af9fc906acd1b54478efc4117d8d341",
+      "candidateSha256": "a8f2062c0108beb927ff6d731561bc2c1af9fc906acd1b54478efc4117d8d341"
+    },
+    {
+      "host": "windows",
+      "name": "1280-reader-after-shortcuts.png",
+      "sameBytes": false,
+      "baselineSha256": "7c80e125cd2774f219650a118dd7f9dc109d9cc26b5dbd62f19d5a531508185b",
+      "candidateSha256": "20190b7e6401a4d17d8e1f8b2b4c5a5b0311f876fb52c0349574dfb25f2eb081"
+    },
+    {
+      "host": "windows",
+      "name": "1280-reader-host-cleanup.png",
+      "sameBytes": true,
+      "baselineSha256": "991bbdae71276047575e23cdac4808ce8f9f20672a98c8ca5c8d27f8230a8048",
+      "candidateSha256": "991bbdae71276047575e23cdac4808ce8f9f20672a98c8ca5c8d27f8230a8048"
+    },
+    {
+      "host": "windows",
+      "name": "1280-reader.png",
+      "sameBytes": true,
+      "baselineSha256": "a676cf9d8e30c62bbae220ab3c19962967ba1e6dc0d8ec0f0aef5e39fe5c37db",
+      "candidateSha256": "a676cf9d8e30c62bbae220ab3c19962967ba1e6dc0d8ec0f0aef5e39fe5c37db"
+    },
+    {
+      "host": "windows",
+      "name": "390-entries.png",
+      "sameBytes": true,
+      "baselineSha256": "ab0195bee5a275836cf6f0a29f1b85549146f4b4fcf5374fa6e4aeb55032d2b2",
+      "candidateSha256": "ab0195bee5a275836cf6f0a29f1b85549146f4b4fcf5374fa6e4aeb55032d2b2"
+    },
+    {
+      "host": "windows",
+      "name": "390-image.png",
+      "sameBytes": true,
+      "baselineSha256": "1fc681916832876282ff54ff049266c7234cdf800ec38d2b78b44f1b8f738fc1",
+      "candidateSha256": "1fc681916832876282ff54ff049266c7234cdf800ec38d2b78b44f1b8f738fc1"
+    },
+    {
+      "host": "windows",
+      "name": "390-reader-after-shortcuts.png",
+      "sameBytes": true,
+      "baselineSha256": "e818ce0169e5615b7c3143429f3ad3ccb3c3245e0361a1992da3fe7630585f19",
+      "candidateSha256": "e818ce0169e5615b7c3143429f3ad3ccb3c3245e0361a1992da3fe7630585f19"
+    },
+    {
+      "host": "windows",
+      "name": "390-reader-host-cleanup.png",
+      "sameBytes": true,
+      "baselineSha256": "eeba5e5ca14854ae098fbac2209ef29ee1ded206d70f7e0367163b1d0acffffc",
+      "candidateSha256": "eeba5e5ca14854ae098fbac2209ef29ee1ded206d70f7e0367163b1d0acffffc"
+    },
+    {
+      "host": "windows",
+      "name": "390-reader.png",
+      "sameBytes": true,
+      "baselineSha256": "8c83ad178a8733babea13beef0b3e10c318a75a522d36204545da7dd368ab4c5",
+      "candidateSha256": "8c83ad178a8733babea13beef0b3e10c318a75a522d36204545da7dd368ab4c5"
+    },
+    {
+      "host": "android",
+      "name": "392-entries.png",
+      "sameBytes": true,
+      "baselineSha256": "1e7d064e7c6f2055da5fd82039c7bdc75e2e0386b291eb2f76caf75d86f493a3",
+      "candidateSha256": "1e7d064e7c6f2055da5fd82039c7bdc75e2e0386b291eb2f76caf75d86f493a3"
+    },
+    {
+      "host": "android",
+      "name": "392-image.png",
+      "sameBytes": true,
+      "baselineSha256": "300248f511376bcd2ebba241740fe02b775d0c1f0fafd6ab3b528134dc18fe22",
+      "candidateSha256": "300248f511376bcd2ebba241740fe02b775d0c1f0fafd6ab3b528134dc18fe22"
+    },
+    {
+      "host": "android",
+      "name": "392-reader-after-shortcuts.png",
+      "sameBytes": true,
+      "baselineSha256": "3f9e23fbe3013b9263ec6e51acb7539d7be1323a1566078048742c0324a4c7e3",
+      "candidateSha256": "3f9e23fbe3013b9263ec6e51acb7539d7be1323a1566078048742c0324a4c7e3"
+    },
+    {
+      "host": "android",
+      "name": "392-reader-host-cleanup.png",
+      "sameBytes": true,
+      "baselineSha256": "6d629136231be78d0f54c00322d27538c03e9dcdd8eb7dc062537bf6b4767b20",
+      "candidateSha256": "6d629136231be78d0f54c00322d27538c03e9dcdd8eb7dc062537bf6b4767b20"
+    },
+    {
+      "host": "android",
+      "name": "392-reader.png",
+      "sameBytes": true,
+      "baselineSha256": "645aa96dd8c5e7c7eb4769d2719f41733fe513d314c0d498df3933d4ae9f6ae6",
+      "candidateSha256": "645aa96dd8c5e7c7eb4769d2719f41733fe513d314c0d498df3933d4ae9f6ae6"
+    },
+    {
+      "host": "web",
+      "name": "1280-cleanup.png",
+      "sameBytes": true,
+      "baselineSha256": "75e74cc45a8c54c8f33a86daf863d7669bdcd883e0b60c617e7dd748b06ab0d0",
+      "candidateSha256": "75e74cc45a8c54c8f33a86daf863d7669bdcd883e0b60c617e7dd748b06ab0d0"
+    },
+    {
+      "host": "web",
+      "name": "390-cleanup.png",
+      "sameBytes": true,
+      "baselineSha256": "3b03543f8b474653aebfa26ff28d7afd040f88f920b58bdf466e6701c72542c8",
+      "candidateSha256": "3b03543f8b474653aebfa26ff28d7afd040f88f920b58bdf466e6701c72542c8"
+    }
+  ],
+  "scriptsUnchangedAfterRelocation": [
+    "reader_shortcuts.js",
+    "image_events.js",
+    "image_dialog.js"
+  ],
+  "hostScenarioSha256": "e4db0ab2a54ef9030876a5bb5871c0d845544d8759feb8661dc81fcc74472642",
+  "preservation": {
+    "primaryHead": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "primaryPaths": 41,
+    "primaryIndexAndStatusUnchanged": true,
+    "originalAndroidFiles": 6,
+    "dailyApkUnchanged": true,
+    "adbMappingsUnchanged": true
+  },
+  "limits": [
+    "Dioxus/WebView adapter remains framework dependent",
+    "controlled route departure during modal",
+    "no physical keyboard or system IME acceptance",
+    "no assistive technology or alternative renderer acceptance"
+  ],
+  "visualDifference": {
+    "height": 844,
+    "width": 1280,
+    "image": "1280-reader-after-shortcuts.png",
+    "changedPixels": 47,
+    "boundingBox": [
+      160,
+      26,
+      180,
+      36
+    ],
+    "review": "Both original images viewed; difference restricted to return arrow; root cause not established."
+  },
+  "main": "4cef074c54d7df54808e7892f950f56a7a750232",
+  "branch": "codex/reader-host-boundary",
+  "adapterScope": "Reader-owned Dioxus/WebView implementation; same task lifetimes and stop messages; no general host abstraction",
+  "scripts": {
+    "scripts/browser/reader_host_scenarios.cjs": "e4db0ab2a54ef9030876a5bb5871c0d845544d8759feb8661dc81fcc74472642",
+    "scripts/browser/rssr_reader_host_acceptance.cjs": "dab2c4c7a6309ced0eaad815b8a22704031ad45e79d4d5ee3ef8884c80fbe8c4",
+    "scripts/browser/rssr_back_navigation_acceptance.cjs": "1dc1c12409fd69f668cf2d6389563ad03f0e3c947fdabc256f7f100cf6b10de5"
+  },
+  "webBaseline": "17 previous public files verified by hash; unchanged server source rebuilt with explicit baseline build ID; not the original server binary",
+  "ci": "See exact final-head PR Checks and final remote receipt in target/reader-host-boundary-20261030; Pages excluded because base is not main",
+  "pullRequest": "https://github.com/Develata/RSS-Reader/pull/51",
+  "documentation": {
+    "markdownFiles": 330,
+    "localLinks": 1553,
+    "introducedErrors": 0,
+    "changedDocumentErrors": 0
+  }
+}

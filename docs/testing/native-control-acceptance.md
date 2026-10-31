@@ -16,6 +16,7 @@
 | 原生字符串表 | rssr_native_transport_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> | 实际 Windows EXE/WebView2、单库与传输；不操作 OS 选择器 |
 | 原生返回专项 | rssr_back_navigation_acceptance.cjs --process-file <run>/process.json --artifact-dir <evidence> --fixture-dir <fixture> | Windows 实际 WebView2；Android 独立测试包的系统返回、保存门禁、采集失败/超时/取消、首页提示与恢复前台 |
 | Reader 宿主专项 | 上行命令加 --reader-only true | 只运行图片关闭/回焦/位置恢复、M/F 写入保留正文、输入排除、J/方向键切文与工具栏返回；Android 图片关闭使用实际系统返回。repeat/composing 为受控事件，不证明物理键盘/系统 IME；不需要保存锁工具 |
+| Reader 宿主生命周期 | 上行 Reader 命令另加 --reader-host true；正式 Web 用 node scripts/browser/rssr_reader_host_acceptance.cjs | 共用 reader_host_scenarios.cjs；三次进入分别由按钮、Esc/Android 实际系统返回、带浮层离页结束，检查焦点/滚动/body 样式和 Reader 监听/observer 清理。正式 Web 为真实服务器与隔离 SQLite，进入 reading-workspace CI |
 | 主题选择宿主专项 | rssr_theme_selector_windows.mjs / rssr_theme_selector_android.mjs | Windows 实际 EXE + UIA + CDP；Android 真机系统列表、adb 选择/返回、预览及显式保存。不是新增 OS 控件或完整辅助技术验收 |
 | Android 主题文件导入 | rssr_theme_import_android.mjs | 实际 DocumentsUI + ContentResolver + JNI；测试包专属提供器控制文件、读取错误和延迟；与真实云端提供器、正式包权限验收区分 |
 | Android 编译 | cargo check -p rssr-app --target aarch64-linux-android --locked 及 PR android-smoke | 仅编译/CI smoke，不能替代上行真机检查；选择器、IME 和辅助技术另验 |
@@ -23,6 +24,8 @@
 Web 脚本复用 directory_fixture.cjs 的真实同源服务器与隔离 library.sqlite3，须同时准备本次源码的 rssr-web、browser_fixture_library 和 Web 包。用 RSSR_WEB_BIN、RSSR_FIXTURE_BIN、PUBLIC_DIR 指定产物，ARTIFACT_DIR 指定证据；Playwright 使用 CHROME_BIN 或 Chrome channel。运行器控制 HTTP 响应和 FileReader 的完成时机，不能把这些延迟注入宣称为真实网络故障。
 
 新增 Settings 脚本进入 CI 的 reading-workspace 作业，失败保留 JSON、日志、截图；正常 PR 检查必须基于冲突解决后的新 head，旧分支 workflow_dispatch 成功不能代替。
+
+Reader 正式 Web 运行器直接复用 `server_harness.mjs`，使用上述产物环境变量及 `target/` 下全新 `ARTIFACT_DIR`。它只在新夹具库加入本机图片，不访问线上来源。监听探针记录真实回调/AbortSignal 与 observer，不替换应用回调或业务状态；退出 Reader 时排除随后新建的 Entries 监听。浮层期间离页由受控路由动作触发，不是物理点击穿透 inert。滚动比较以 dialog 挂载时保存的位置为准，同时记录按键前和激活时位置；脚本化鼠标/按键不证明物理输入设备。完整基线/候选与采样修订见[Reader 宿主回执](../handoffs/2026-10-30-reader-host-boundary.md)。
 
 ## 验收约束
 

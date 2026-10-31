@@ -1,6 +1,7 @@
-use std::{cell::Cell, rc::Rc};
-
-use super::image_viewer_state::{ImageViewerState, ReaderImage};
+use super::{
+    image_viewer_state::{ImageViewerState, ReaderImage},
+    webview,
+};
 use dioxus::prelude::*;
 
 pub(super) fn use_reader_image_viewer(entry_id: i64) -> Signal<ImageViewerState> {
@@ -10,46 +11,18 @@ pub(super) fn use_reader_image_viewer(entry_id: i64) -> Signal<ImageViewerState>
             state.write().close();
         }
     });
-    let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
-    let cleanup = Rc::clone(&bridge);
-    use_drop(move || {
-        if let Some(eval) = cleanup.get() {
-            let _ = eval.send(());
-        }
-    });
-    use_future(move || {
-        let bridge = Rc::clone(&bridge);
-        async move {
-            let mut eval = document::eval(include_str!("image_events.js"));
-            bridge.set(Some(eval));
-            while let Ok(image) = eval.recv::<ReaderImage>().await {
-                state.write().open(image);
-            }
-        }
-    });
+    let on_image = use_callback(move |image| state.write().open(image));
+    webview::use_image_activations(on_image);
     state
 }
 
 #[component]
 pub(super) fn ReaderImageViewer(image: ReaderImage, on_close: EventHandler<()>) -> Element {
-    let bridge = use_hook(|| Rc::new(Cell::new(None::<document::Eval>)));
-    let cleanup = Rc::clone(&bridge);
-    use_drop(move || {
-        if let Some(eval) = cleanup.get() {
-            let _ = eval.send(());
-        }
-    });
+    let on_mounted = webview::use_image_dialog(on_close);
     rsx! {
         dialog {
             "data-layout": "reader-image-viewer", aria_label: "图片查看器",
-            onmounted: move |_| {
-                let mut eval = document::eval(include_str!("image_dialog.js"));
-                bridge.set(Some(eval));
-                spawn(async move {
-                    // Native dialog cancel/backdrop events request the Rust close transition.
-                    if eval.recv::<()>().await.is_ok() { on_close.call(()); }
-                });
-            },
+            onmounted: move |_| on_mounted.call(()),
             button {
                 class: "icon-link-button", "data-action": "close-reader-image", r#type: "button",
                 aria_label: "关闭图片", title: "关闭图片", onclick: move |_| on_close.call(()),

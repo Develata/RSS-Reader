@@ -50,7 +50,7 @@ const onClick = event => {
     emit('capture', selected);
 };
 const onKeyNavigation = event => {
-    // 与 hooks/reader_shortcuts.js 的切文边界一致。搜索框里的光标移动、系统组合键和
+    // 与 pages/reader_page/webview/reader_shortcuts.js 的切文边界一致。搜索框里的光标移动、系统组合键和
     // 图片查看器里的按键不会切文，也不应为它们扫描整篇正文。
     const target = event.target;
     if (!['arrowleft','arrowright','j','k'].includes(String(event.key).toLowerCase())

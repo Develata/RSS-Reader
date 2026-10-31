@@ -17,6 +17,7 @@ const action = value => `[data-action="${value}"]`;
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 assert.ok(options['reader-only'] === undefined || options['reader-only'] === 'true');
 const readerOnly = options['reader-only'] === 'true';
+assert.ok(options['reader-host'] === undefined || (options['reader-host'] === 'true' && readerOnly));
 
 (async () => {
   for (const key of ['process-file', 'artifact-dir', 'fixture-dir']) assert.ok(options[key], key);
@@ -228,6 +229,16 @@ const readerOnly = options['reader-only'] === 'true';
         await screenshot(width + '-reader-after-shortcuts');
         await page.evaluate(() => { delete window.__readerRuleBody; });
         await click('[data-nav="back"]'); await entries(); await settle();
+      });
+      if (options['reader-host'] === 'true') await check('reader-host-lifetime-' + width, async () => {
+        const { readerHostLifetime } = require('./reader_host_scenarios.cjs');
+        const facts = await readerHostLifetime({page,
+          openReader:async()=>{await click('[data-slot="entry-card-title"]');await reader();await settle();},
+          ready:reader, entries:async()=>{await entries();await settle();},
+          systemBack:android ? systemBack : undefined,
+          screenshot:()=>screenshot(width+'-reader-host-cleanup'),
+        });
+        (report.hostLifetimes ??= []).push({width,facts});
       });
       if (!readerOnly) await check('source-directory-and-edit-dismiss-' + width, async () => {
         await click(action('open-source-filter')); await page.locator('#source-filter-dialog').waitFor();
