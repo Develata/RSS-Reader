@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| main 补充测试与 Windows 实际宿主 | [1149 项 Rust 回归、Web/Windows 实测及测试输入隔离](./2026-10-31-main-regression.md) |
 | PR #56 合并与取消完成判定 | [主线验收与工作区保全](./2026-10-31-workspace-cancel-merge.md)、[提前取消假阳性的复现、修复与回归](./2026-10-31-workspace-response-cancel-review.md) |
 | PR #55 合并与偏好测试修正 | [main 验收与工作区保全](./2026-10-31-workspace-response-merge.md)、[完成门禁的复现与修复](./2026-10-31-workspace-response-fix.md)、[前期诊断](./2026-10-31-workspace-response-completion.md) |
 | Reader 正文选择模块与 PR #54 | [私有模块归属、行为保持与 PR 核验](./2026-10-31-reader-body-boundary.md) |
@@ -38,6 +39,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-31 | [当前 main 补充回归与 Windows 实际宿主检查](./2026-10-31-main-regression.md) |
 | 2026-10-31 | [PR #56 合并与取消门禁主线验收](./2026-10-31-workspace-cancel-merge.md) |
 | 2026-10-31 | [正文边界复核与响应取消门禁修正](./2026-10-31-workspace-response-cancel-review.md) |
 | 2026-10-31 | [PR #55 合并与主线验收](./2026-10-31-workspace-response-merge.md)、[偏好完成门禁修复](./2026-10-31-workspace-response-fix.md)、[前期响应诊断](./2026-10-31-workspace-response-completion.md) |

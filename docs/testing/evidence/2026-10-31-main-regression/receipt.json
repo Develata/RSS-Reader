@@ -1,0 +1,158 @@
+{
+  "date": "2026-10-31",
+  "source": "60b4c6f175fc3a0cc166818307dd213c9c67c852",
+  "branch": "codex/main-regression-20261031",
+  "productChanges": false,
+  "confirmedProductDefects": [],
+  "environment": {
+    "host": "Windows",
+    "rustc": "1.99.1",
+    "cargo": "1.99.1",
+    "node": "24.22.1",
+    "chrome": "155.0.8059.40",
+    "webview2": "156.0.4314.50"
+  },
+  "verification": {
+    "workspaceRust": {
+      "passed": 1149,
+      "failed": 0,
+      "ignored": 4,
+      "resultGroups": 64
+    },
+    "nodeTools": {
+      "passed": 16
+    },
+    "responseProbe": {
+      "passed": 13,
+      "earlyCancellationRejected": true,
+      "lateCancellationAccepted": true
+    },
+    "workspaceWeb": {
+      "passed": 18,
+      "pageErrors": 0,
+      "scenarios": [
+        "selection",
+        "sources",
+        "editing",
+        "responsive",
+        "editEdges",
+        "queryStability",
+        "importNames",
+        "sourceIdentity",
+        "pendingWrites",
+        "preferenceOrdering",
+        "shortSourceDialog",
+        "dialogComposition",
+        "preferencesSurviveNavigation",
+        "reopeningDuringSourceEdit",
+        "articleWritesSurviveNavigation",
+        "preferencesRecoveredAfterArticleWrites",
+        "readerWritesSurviveNavigation",
+        "toolbarThemes"
+      ]
+    },
+    "readerWeb": {
+      "passed": 6,
+      "report": "reader-baseline/acceptance.json",
+      "sha256": "9825b5306525ad694ce10a2ed7e42d21b4e8b55b520e6e037e56d17fcefe70b7",
+      "pageErrors": 0,
+      "consoleErrors": 0,
+      "browser": "155.0.8059.40",
+      "serverBuild": "dev-801f6337e81f-dirty-8f2160d303f9"
+    },
+    "settingsWeb": {
+      "passed": 8,
+      "report": "settings-web/acceptance.json",
+      "sha256": "da6b90bf8716e4e086c3a7514a4e67df215a45cc9c2a9560c8ff6042fc9924a7",
+      "pageErrors": 0,
+      "consoleErrors": 0
+    },
+    "windows": {
+      "passed": 8,
+      "report": "windows-current-01/acceptance/acceptance.json",
+      "sha256": "09b149d85966a32105cb47f966261fa58359fc76ef1a9897c140b63ae393dbe6",
+      "pageErrors": 0,
+      "consoleErrors": 0,
+      "webViewVersion": "156.0.4314.50"
+    }
+  },
+  "inputs": {
+    "webProductSource": "97d75438c8ba54045f28c559cb01b2bc0de4f8a1",
+    "sameProductAsTestedMain": true,
+    "webBuild": "dev-801f6337e81f-dirty-8f2160d303f9",
+    "reusedWebArtifacts": true,
+    "webServerSha256": "356e10d015aff2a4e5d044a3b862a13c19d111a08bcf5874aecd2b839947913d",
+    "readerInitialFixtureSha256": "28e99cfe46a304034872be15cb591061bea4d711d31e25074b27c68fb233e069",
+    "isolatedFixtureSha256": "e3738217961d8d62ac634740c93809bc03265f83d7451336947c67d87b395ebd",
+    "publicFilesVerified": 29,
+    "publicManifestSha256": "c55bc08a35cfabb53d33cab5e9c6160855b631c3369fc50fc02e042744a61919",
+    "windowsBuiltThisRun": true,
+    "windowsSource": "60b4c6f175fc3a0cc166818307dd213c9c67c852",
+    "windowsExeSha256": "9bc2a9f6331ab462e6f34e40025cdb0203f0e963efb245abf674e2d4f7219ca0",
+    "windowsFixtureEntries": 100,
+    "windowsFixtureSha256": "73c9ecf136add10888089de4c275ef5e2942540c9c0836d58f22b6e482d45559"
+  },
+  "testInfrastructureInterruption": {
+    "error": "spawn EBUSY",
+    "operation": "launch browser_fixture_library.exe during a fixture reseed",
+    "evidence": "Cargo workspace tests rebuilt the shared fixture EXE during the browser suite; its mtime and hash changed.",
+    "resolution": "Copy server, fixture and verified Web assets into this run inputs directory; fresh isolated run passed.",
+    "productFixRequired": false
+  },
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "logs": [
+    {
+      "path": "app-tests.log",
+      "sha256": "07f4eb841706b398ef7b1c2b7ba55ea5e764c5fc15064220799e553dd425a586"
+    },
+    {
+      "path": "workspace-tests.log",
+      "sha256": "782be7dc3885f2c9f1230c966253947316775e0a63f072a0345fd43cbc9285da"
+    },
+    {
+      "path": "tool-tests.log",
+      "sha256": "42497024e2cd955412b6a6f76d99173c6518b4d2cf168cf34acece45d5df47e1"
+    },
+    {
+      "path": "reader-baseline.log",
+      "sha256": "e4bb8b4cc08bb278cf3b25ed90e9b15f356cebef8165f48a039076427950809f"
+    },
+    {
+      "path": "workspace-baseline.log",
+      "sha256": "5bfc600884bf040a667e8b9809647a7c60077570c478638208f1fb35458cc797"
+    },
+    {
+      "path": "workspace-isolated.log",
+      "sha256": "ca612f5f6ae94e4a11eb68dd7ca5dc3c641cedea350599f2e931a072f766f7d9"
+    },
+    {
+      "path": "settings-web.log",
+      "sha256": "85fbdfc2e207d2f997b10623367e9a6fed56b83c93a0113a518c7eba47827ebd"
+    },
+    {
+      "path": "response-probe.log",
+      "sha256": "4ee44c887ba20cf1e1ed24564599e400575238d5891806469ebf191fde7c2909"
+    },
+    {
+      "path": "windows-build.log",
+      "sha256": "0a98add8440b3ad946315e817ec83f3219ac476817e7b2b0eee452de8e383590"
+    },
+    {
+      "path": "windows-current.log",
+      "sha256": "75612d9c7b0717c9a5f42a890d1be1b3eed5eabc9a1496640b11868d3960de17"
+    }
+  ],
+  "notCovered": [
+    "Android actual host was connected but not operated in this run",
+    "macOS/Linux GUI",
+    "physical IME and assistive technology",
+    "formal signed upgrade and real-user data migration",
+    "four existing ignored measurement/corpus/timing tests"
+  ],
+  "evidenceRoot": "target/main-regression-20261031"
+}
