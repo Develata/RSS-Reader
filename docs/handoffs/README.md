@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| PR #53 合并与 main 核验 | [合并身份、主线 CI 与工作区保全](./2026-10-31-reader-race-merge.md) |
 | Reader 并发问题测试与修复 | [旧图片消息、标记写入乱序的复现及三端回归](./2026-10-30-reader-race-fixes.md) |
 | Reader 三批整合与正文渲染边界 | [PR #50–#52 合并、主线核验与兼容契约](./2026-10-30-reader-integration.md) |
 | Reader 快捷键模块归属 | [共享规则、页面私有装配与依赖方向复核](./2026-10-30-reader-shortcut-cohesion.md) |
@@ -34,6 +35,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-31 | [PR #53 合并、main CI 与交接更新](./2026-10-31-reader-race-merge.md) |
 | 2026-10-30 | [Reader 并发问题复现、修复与三端验收](./2026-10-30-reader-race-fixes.md) |
 | 2026-10-30 | [Reader 三批整合与正文、资源、锚点边界](./2026-10-30-reader-integration.md) |
 | 2026-10-30 | [Reader 快捷键模块归属与依赖方向整理](./2026-10-30-reader-shortcut-cohesion.md) |

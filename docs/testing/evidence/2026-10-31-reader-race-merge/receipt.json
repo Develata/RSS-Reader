@@ -1,0 +1,262 @@
+{
+  "date": "2026-10-31",
+  "phase": "merge",
+  "head": "ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+  "pr": 53,
+  "prHead": "21f3468a2bd6e0233f9bc1d985ad83a4cb86631f",
+  "mergedMain": "ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+  "mergeTree": "1b7fda4c6abfec4035be6d4b9c7e5171cee5a5cd",
+  "mergeTreeMatchesPr": true,
+  "postMergeChangedPaths": [],
+  "runs": {
+    "ci": {
+      "id": 41184569359,
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41184569359",
+      "head": "ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+      "conclusion": "success",
+      "success": 36,
+      "skipped": 0,
+      "jobs": [
+        {
+          "name": "web-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-ui-runner (ubuntu-latest)",
+          "conclusion": "success"
+        },
+        {
+          "name": "format",
+          "conclusion": "success"
+        },
+        {
+          "name": "release-ui-runner (windows-latest)",
+          "conclusion": "success"
+        },
+        {
+          "name": "test-tools",
+          "conclusion": "success"
+        },
+        {
+          "name": "android-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-contract-build",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-application)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-app)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-infra)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-api)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-domain)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-cli)",
+          "conclusion": "success"
+        },
+        {
+          "name": "native-module (rssr-web)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_refresh_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_entry_state_and_search)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_config_exchange_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_subscription_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_persistence_atomicity)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_contracts)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_settings_repository)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_opml_interop)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (wasm_memory_store)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_application_refresh_store_adapter)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_queries)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_unicode_title_search)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (test_library_refresh_tickets)",
+          "conclusion": "success"
+        },
+        {
+          "name": "wasm-browser-contract (wasm_reader_html_contract_harness)",
+          "conclusion": "success"
+        },
+        {
+          "name": "reading-workspace",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (amethyst-glass)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (default)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (midnight-ledger)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (atlas-sidebar)",
+          "conclusion": "success"
+        },
+        {
+          "name": "web-ui (newsprint)",
+          "conclusion": "success"
+        },
+        {
+          "name": "lint-and-test",
+          "conclusion": "success"
+        }
+      ],
+      "jobsSha256": "3cf693a97c51e19f04d887cc804e444d0fe9853c767f494b8f1fff68214cda5a"
+    },
+    "docker": {
+      "id": 41184569498,
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41184569498",
+      "head": "ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+      "conclusion": "success",
+      "success": 4,
+      "skipped": 1,
+      "jobs": [
+        {
+          "name": "build-package / source",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / page",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / linux",
+          "conclusion": "success"
+        },
+        {
+          "name": "build-package / native",
+          "conclusion": "skipped"
+        },
+        {
+          "name": "image",
+          "conclusion": "success"
+        }
+      ],
+      "jobsSha256": "2239ecca53c8e279f3144de3c910339e427c1f177fe7384191315c2bfd5e3498"
+    },
+    "pages": {
+      "id": 41184569454,
+      "url": "https://github.com/Develata/RSS-Reader/actions/runs/41184569454",
+      "head": "ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+      "conclusion": "success",
+      "success": 2,
+      "skipped": 0,
+      "jobs": [
+        {
+          "name": "build",
+          "conclusion": "success"
+        },
+        {
+          "name": "deploy",
+          "conclusion": "success"
+        }
+      ],
+      "jobsSha256": "144aa710433689bb2059bceb58752ea9d3eb8457a54a0bebd199431cf3b54e57"
+    }
+  },
+  "reports": {
+    "reader": {
+      "checksPassed": 6,
+      "build": "dev-ed0714d3ca11",
+      "browser": "156.0.8078.80",
+      "artifactId": 13036057184,
+      "archiveSha256": "62fa125f60e2714c17a7615bde56b2d9464e344ceaa5b56f77f339f08630d4e9",
+      "report": "target/reader-race-merge-20261031/merge-reader-report.json",
+      "reportSha256": "88f187e5d89f6eb8d184d7a0afe588a2f937849e343098a0f840bdcb72f2f0be"
+    },
+    "linux": {
+      "checksPassed": 6,
+      "build": "git-ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+      "artifactId": 13036557253,
+      "archiveSha256": "664fa3b60ee5b51a46983b59db148e3af41c3387c792329887a33a051c2ab328",
+      "report": "target/reader-race-merge-20261031/merge-linux-report.json",
+      "reportSha256": "31939813b08b6d1c13280a5eda76a78ebe5188cc2011b63d06496d33bb4fba6c"
+    },
+    "container": {
+      "checksPassed": 9,
+      "build": "git-ed0714d3ca11365d34ed41ea174284d4eb86ee83",
+      "artifactId": 13036126874,
+      "archiveSha256": "c7fa67acaa355e71dcda50a70c5b2eff386a763cf13dd8828115fa8bdd48f09b",
+      "report": "target/reader-race-merge-20261031/merge-container-report.json",
+      "reportSha256": "bd958f96fbb3d7bf7e123453114363488f8e97c47975de3486518ecf4df7daa8"
+    },
+    "pages": {
+      "status": "pass",
+      "storage": "memory-sqlite",
+      "reloadResets": true,
+      "artifactId": 13036955170,
+      "archiveSha256": "2adba03220c8f584b472ce96f06b005de46d81bd882e7c926654d6214db45eae",
+      "report": "target/reader-race-merge-20261031/merge-pages-report.json",
+      "reportSha256": "4b72a8e5d91e73ceae9bce639411dae6cc8eff5d3a628e8cc1a122fa142d4def"
+    }
+  },
+  "registryImagePublished": false,
+  "nativeWindowsAndroidRerun": false,
+  "primaryPreservation": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  }
+}

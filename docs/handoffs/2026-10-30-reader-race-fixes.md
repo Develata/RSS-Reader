@@ -4,9 +4,10 @@
 - 作者 / Agent：Codex
 - 分支：`codex/reader-race-fixes`
 - 开工 HEAD：`0c5e31a6cca607c5ba6f8783b2fc3923c0eb1160`（当时 main）
-- 相关 commit：本记录所在提交；提交前为 `pending`
+- 相关 commit：`21f3468a2bd6e0233f9bc1d985ad83a4cb86631f`
 - 相关 tag / release：无；不发布
 - 状态：`validated`（本地候选及所列实际宿主；合并状态另见 PR）
+- 2026-10-31 更新：PR #53 已合入 main `ed0714d3`，合并后 CI、工作区保全及文档提交见[合并交接](./2026-10-31-reader-race-merge.md)；下文保留修复批次的原始验收范围。
 
 ## 工作摘要
 

@@ -1,20 +1,20 @@
 # 维护状态
 
-核对日期：2026-10-30。近期目标是让 WebView 成为可替换的界面实现，让未来 Rust 原生界面复用同一交互规则；JS 行数仅作辅助指标。返回、App 设置读取和 Android 系统主题文件导入已进入 main。Reader 的规则独立性、宿主入口、快捷键定义及模块归属通过 PR #50–#52 合入 main `dbbaf390`；界面仍使用 Dioxus / WebView。正文、资源与锚点的[兼容边界](./design/reader-rendering-boundary.md)已核实，尚未替换渲染器。
+核对日期：2026-10-31。近期目标是让 WebView 成为可替换的界面实现，让未来 Rust 原生界面复用同一交互规则；JS 行数仅作辅助指标。返回、App 设置读取和 Android 系统主题文件导入已进入 main。Reader 的规则独立性、宿主入口、快捷键定义及模块归属通过 PR #50–#52 合入 main `dbbaf390`，并发修复通过 PR #53 合入 `ed0714d3`；界面仍使用 Dioxus / WebView。正文、资源与锚点的[兼容边界](./design/reader-rendering-boundary.md)已核实，尚未替换渲染器。
 
 列表密度选项和紧凑样式、仓库 `.agents/` 的 9 份旧 skill 已经由 PR #48 合入 main；旧密度参数仅暂留 0.2.x 兼容，0.3.x 破坏性删除已批准但不在本批实施。Android 导入验收发现的开头 BOM 呈现缺陷已在旧包复现后独立修复，见[当前交接](./handoffs/2026-10-30-android-theme-import.md)。
 
 本页只汇总当前事实；具体规则见[设计索引](./design/README.md)，未完成工作见[当前待办](./maintenance-backlog.md)，每次验证的版本和环境见[交接入口](./handoffs/README.md)。
 
-本轮测试在 main `0c5e31a6` 复现两类 Reader 并发问题：切文后迟到的图片激活打开旧图片，以及同种标记写入的旧响应覆盖新状态。修复位于 `codex/reader-race-fixes`，本地 app 428 项、独立规则 27 项、正式 Web 6 项、Windows WebView2 8 项及 Android 真机 4 项已通过；尚未合入 main。复现方式、产物身份和未覆盖范围见[修复交接](./handoffs/2026-10-30-reader-race-fixes.md)。
+此前在 main `0c5e31a6` 复现的两类 Reader 并发问题已修复并合入：切文后迟到的图片激活打开旧图片，以及同种标记写入的旧响应覆盖新状态。合并树与已验收的 `21f3468a` 完全相同；候选的本地 app 428 项、独立规则 27 项、正式 Web 6 项、Windows WebView2 8 项及 Android 真机 4 项结果见[修复交接](./handoffs/2026-10-30-reader-race-fixes.md)。合并提交的新 main CI 36/36、Reader Web 6/6、Docker 容器 9 项及 Linux 包 6 项、Pages 构建/部署均通过，证据单列于[合并交接](./handoffs/2026-10-31-reader-race-merge.md)；不将合并前真机结果写成重新验收。
 
 ## 三个不同的版本状态
 
 | 范围 | 当前事实 | 证据与边界 |
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
-| main 的产品整合基线 | `dbbaf390`，包含 PR #38–#52；E 盘接续工作树已快进到 main | #50 → #51 → #52 的合并树分别与已验证的 head 相同。合并后本地 app 420 通过 / 1 忽略、独立规则 24 通过，Docker 容器 9 项、Linux 包 6 项及 Pages 构建/部署通过；主线 CI 与精确版本见[整合回执](./handoffs/2026-10-30-reader-integration.md) |
-| 当前修复候选 | 基于 main 文档 head `0c5e31a6` 的 `codex/reader-race-fixes`；包含图片访问隔离与同种标记写入门禁 | 候选重新构建并执行三端回归，逐文件输入和 APK/EXE 身份见[当前回执](./testing/evidence/2026-10-30-reader-race-fixes/receipt.json)。修复前全 workspace 1129 项通过仍未发现这些受控并发问题，不能代替新增回归 |
+| main 的产品整合基线 | `ed0714d3`，包含 PR #38–#53；E 盘接续工作树已快进到 main | PR #53 合并树等于 `21f3468a`；合并后检查见[主线回执](./handoffs/2026-10-31-reader-race-merge.md)。此前 `dbbaf390` 的三批整合结果仍作为[历史证据](./handoffs/2026-10-30-reader-integration.md)保留 |
+| 本轮后续提交 | main 上的合并交接、维护状态及证据文档；没有后续产品代码变化 | 产品继续对应 `21f3468a`，本地三端产物身份见[修复回执](./testing/evidence/2026-10-30-reader-race-fixes/receipt.json)。后续文档 head 的 CI 按其精确 SHA 单独核对 |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -26,19 +26,20 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 - PR #46 已合入返回导航/退出提示策略及此前授权的文档与维护资料整合；Windows / Android 返回专项仍以[其实际宿主回执](./handoffs/2026-10-30-native-back-validation.md)的包和场景为准。
 - PR #47 已合入 App 设置读取生命周期；其原始 Rust/Web/Windows 验证见[实现交接](./handoffs/2026-10-30-shell-settings-lifecycle.md)。本轮另补 Android 主题选择专项，不能扩大为该批全部 Android 生命周期验收。
 - PR #50–#52 已按顺序合并：规则独立性 `7edb118d`、宿主入口 `5d51025a`、快捷键定义与模块归属 `dbbaf390`。分支保留用于溯源，当前无这三批的待合并实现；正文兼容要求见[专门契约](./design/reader-rendering-boundary.md)。
+- PR #53 已合入图片访问隔离和同种标记写入门禁，合并提交 `ed0714d3`。没有新增全局浮层状态、跨页写入队列或后台业务语义分叉；复现与新增回归见[修复交接](./handoffs/2026-10-30-reader-race-fixes.md)。
 - 阅读位置、目录控制器与窗口、下拉刷新、快捷键、图片查看器已有 Rust 规则；继续复用这些模块，不建立全局浮层状态副本或通用页面框架。模块边界见[原生界面前置说明](./design/native-ui-preparation.md)。
 
 ## 现在还要做什么
 
 1. **保留已收口的规则边界。** App 设置读取已经审查、CI 和合并；不再列为候选。主题选择的现有行为已完成专项，不继续扩大 Shell 提取或重复实现系统弹窗。
-2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留当前候选与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布。
-3. **先收口已复现的问题，再处理下一条依赖。** 当前 Reader 修复候选先完成审查与合并。后续实现仍聚焦命令装配对页面 `support.rs` 的正文选择引用，保留候选顺序与清洗政策，并独立验证同一生产函数。实际原生正文渲染器仍需验证主题、选择复制、IME 和无障碍；没有第二种实现前不新增通用框架、crate 或全局宿主接口。见[下一批范围](./design/reader-rendering-boundary.md#下一批建议)。
+2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留接续工作树与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布新版本。
+3. **处理下一条具体依赖。** Reader 并发修复已合并；后续实现仍聚焦命令装配对页面 `support.rs` 的正文选择引用，保留候选顺序与清洗政策，并独立验证同一生产函数。实际原生正文渲染器仍需验证主题、选择复制、IME 和无障碍；没有第二种实现前不新增通用框架、crate 或全局宿主接口。见[下一批范围](./design/reader-rendering-boundary.md#下一批建议)。
 
 ## 分支与工作树快照
 
-本批提交前核对：**9 个本地分支、2 个工作树、7 个真实远端分支**。接续工作树现为新建的 `codex/reader-race-fixes`；推送该分支后远端增加一个。核对时远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import、codex/reader-rule-boundary、codex/reader-host-boundary、codex/reader-shortcut-definition。本批不删除分支或工作树，不把 `origin/HEAD` 算作分支。
+合并后核对：**9 个本地分支、2 个工作树、8 个真实远端分支**。接续工作树现为 main；远端为 main、codex/native-back-policy、codex/shell-settings-lifecycle、codex/android-theme-import、codex/reader-rule-boundary、codex/reader-host-boundary、codex/reader-shortcut-definition、codex/reader-race-fixes。本批不删除分支或工作树，不把 `origin/HEAD` 算作分支。
 
-本地保留 main、上述六个已合并的 codex 分支、当前修复分支和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径已逐项核对未变；另一任务的 JavaScript 审计文档不纳入提交。历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
+本地保留 main、上述七个已合并的 codex 分支和主 checkout 的 `feat/reading-workspace-20261024`。主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径已逐项核对未变；另一任务的 JavaScript 审计文档不纳入提交。历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
 
 ## 验证结论的边界
 
