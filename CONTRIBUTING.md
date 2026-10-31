@@ -78,6 +78,13 @@ cargo test --locked --workspace
 - 活跃功能的 `spec / plan / tasks / quickstart` 随实现同步；已关闭的历史计划保留原始版本、日期和验收状态，通过当前文档或交接记录说明后续演进
 - 新的贡献约束或产品边界变化，要优先落回 [功能设计哲学](./docs/design/functional-design-philosophy.md)
 
+## 文档媒体
+
+- 构建应用所需的小型源素材可以纳入 Git；README 截图和演示视频通常使用 GitHub Attachments，较大的发布二进制放在 GitHub Releases，不为 README 媒体引入 Git LFS。
+- 复用 [README 媒体索引 Issue #58](https://github.com/Develata/RSS-Reader/issues/58)，通过本地 `gh issue comment --attach` 上传。先检查已有附件以免重复上传，回读并验证实际附件 URL 后再更新 Markdown。
+- 界面发生实质变化后，从当前源码运行真实应用、使用非敏感示例数据重新截图；注明源码版本和采集方式，避免让旧截图误导读者。
+- 在 Git 跟踪范围外保留重要媒体的原图、示例数据、采集记录和校验值；不要把重复媒体或大型生成二进制重新提交进历史。
+
 ## 风格建议
 
 - 优先做小而完整、能直接改善阅读体验的改动
