@@ -6,7 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
-| Settings 草稿、逐字段保存与异步回填 | [复审、Web 补验与整合](./2026-10-31-settings-review-merge.md)、[规则独立编译与装配保持](./2026-10-31-settings-rule-boundary.md) |
+| Settings 规则边界与 PR #60 | [复审、Web 补验与主线核验](./2026-10-31-settings-review-merge.md)、[规则独立编译与装配保持](./2026-10-31-settings-rule-boundary.md) |
 | README 当前界面与 PR #59 | [真实 Web 截图、附件、GC 与主线核验](./2026-10-31-readme-media.md) |
 | Reader 读取恢复提示修复与 PR #57 | [主线核验与工作区保全](./2026-10-31-reader-recovery-merge.md)、[旧错误残留的复现、修复与故障回归](./2026-10-31-reader-reread-recovery.md) |
 | main 补充测试与 Windows 实际宿主 | [1149 项 Rust 回归、Web/Windows 实测及测试输入隔离](./2026-10-31-main-regression.md) |

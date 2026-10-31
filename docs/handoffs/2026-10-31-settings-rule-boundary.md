@@ -6,7 +6,7 @@
 - 实现 HEAD：`ec4a605b`；本批基线 `8dcf710c21ebfd191c3662790c9354184f436138`（开始时与 `origin/main` 一致，已含 PR #59）
 - 相关 commit：`ec4a605b`（实现、测试与契约）；后续仅补本记录的提交回执，不改产品源码
 - 相关 tag / release：N/A
-- 状态：`validated`（本地候选，未推送）
+- 状态：`validated`（原批本地验收；后续已通过 PR #60 合并，见[复审与整合记录](./2026-10-31-settings-review-merge.md)）
 
 ## 工作摘要
 
@@ -66,7 +66,7 @@
 
 ## 结果
 
-- 本地实现、review 与相称验证完成，可进入 PR review；未 push、创建 PR、合并或发布，不将历史 main CI 计入本批结果。
+- 原批本地实现、review 与相称验证完成，当时尚未推送；后续正式 Web 补验与 PR #60 合并单列于[复审与整合记录](./2026-10-31-settings-review-merge.md)，不把后续结果改写为原批验收。
 - 主 checkout `E:/gitclone/RSS-Reader` 的 `feat/reading-workspace-20261024` / `020f9d40`、index、状态及 41 个已有改动/缺失路径已在提交前后逐项核对保持不变，回执为 `primary-before.json`、`primary-preservation.json`。
 - 0.2.x 的 `list_density` 兼容参数未动；已批准的 0.3.x 破坏性移除继续单列。
 

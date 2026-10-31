@@ -13,8 +13,8 @@
 | 范围 | 当前事实 | 证据与边界 |
 | --- | --- | --- |
 | 已发布版本 | v0.2.1，tag 固定在 `dbfbf896` | [正式发布记录](./handoffs/2026-10-28-v0.2.1-release.md)：14 个附件身份、Windows 正式包与 Android 模拟器升级等当时验收；不能替代后续源码验收 |
-| main 的整合基线 | `8dcf710c`，包含 PR #57 修复与 PR #59 README 媒体更新及交接 | PR #59 合并后和最终 main CI 均为 36/36；构建、Pages 与附件核验边界见[README 交接](./handoffs/2026-10-31-readme-media.md)，不替代后续产品改动验收 |
-| 当前接续工作树 | E 盘既有工作树，`codex/settings-rule-boundary` 基于 `8dcf710c`；Settings 草稿、逐字段保存和回填规则已通过本地复审 | 普通 Rust、装配与实际 Windows 结果见[实现交接](./handoffs/2026-10-31-settings-rule-boundary.md)，新正式 Web 补验及远端整合进度见[复审记录](./handoffs/2026-10-31-settings-review-merge.md) |
+| main 的整合基线 | `2571f56a`，已合并 Settings 规则边界 PR #60；含此前 PR #57 修复与 PR #59 媒体更新 | PR 与新 main CI 均 36/36；main 正式 Web 26 个短场景、容器 9 项、Linux 包 6 项及 Pages 均通过，长场景和宿主边界见[整合回执](./handoffs/2026-10-31-settings-review-merge.md) |
+| 当前接续工作树 | E 盘既有工作树已切回 main 并快进；后续提交仅更新整合记录 | 普通 Rust、装配与实际 Windows 结果见[实现交接](./handoffs/2026-10-31-settings-rule-boundary.md)，本轮正式 Web 补验与合并核对见[复审记录](./handoffs/2026-10-31-settings-review-merge.md) |
 
 main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Linux 包 6 项成功，是上一轮已留存的历史验收；[E 盘交接](./handoffs/2026-10-29-pr40-worktree-handoff.md)记录了报告身份和复制核验。这些结果不作为 `62113c4f` 返回策略通过原生验收的证明。
 
@@ -36,7 +36,7 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 1. **保留已收口的规则边界。** App 设置读取已经审查、CI 和合并；不再列为候选。主题选择的现有行为已完成专项，不继续扩大 Shell 提取或重复实现系统弹窗。
 2. **维持已完成的分支与资料收口。** 历史验收资料和 Claude 配置已在工作树外备份并校验，5 个旧工作树及 3 个分支已退役，见[清理与恢复记录](./handoffs/2026-10-30-branch-consolidation.md)。保留接续工作树与主 checkout 的既有改动，不向已合并的 PR #40 追加实现，不发布新版本。
-3. **按具体复用阻碍安排下一批。** PR #54–#57 均已整合；Settings 草稿、逐字段保存和异步回填规则已完成本地独立性整理，先 review 并整合，再核对主题导入/预览的宿主边界。没有确认新的 Settings 运行缺陷。原生正文渲染器仍须验证主题、选择复制、IME 和无障碍，见[后续边界](./design/reader-rendering-boundary.md#下一批建议)。
+3. **按具体复用阻碍安排下一批。** PR #54–#57 均已整合；Settings 草稿、逐字段保存和异步回填规则已通过 PR #60 合并。下一候选是核对主题导入/预览的宿主边界，尚未实施。没有确认新的 Settings 运行缺陷。原生正文渲染器仍须验证主题、选择复制、IME 和无障碍，见[后续边界](./design/reader-rendering-boundary.md#下一批建议)。
 
 ## 分支与工作树快照
 
