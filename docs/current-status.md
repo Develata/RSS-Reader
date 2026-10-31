@@ -40,9 +40,9 @@ main `4101520c` 的 CI 36/36、Docker 构建和容器验收、容器 9 项及 Li
 
 ## 分支与工作树快照
 
-PR #57 合并后核对：**13 个本地分支、2 个工作树、12 个真实远端分支**。接续工作树为 main；本地为 main、11 个已合并的 codex 分支和主 checkout 的 `feat/reading-workspace-20261024`，远端为 main 和这 11 个 codex 分支。相较 PR #56 多出的分支是 `codex/main-regression-20261031`；不把 `origin/HEAD` 算作分支。
+2026-10-31 按用户确认删除 13 个已合并的本地旧分支后：**2 个本地分支、2 个工作树、14 个真实远端分支**。本地仅保留 `main` 与主 checkout 的 `feat/reading-workspace-20261024`；远端仍为 main 和 13 个 codex 分支，不把 `origin/HEAD` 算作分支。删除前每个 tip 都完整包含于 main `95863274`，没有独有提交或工作树占用。
 
-本批没有清理分支、工作树或证据。主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径由本轮独立快照核对；另一任务的 JavaScript 审计文档不纳入提交。分支快照保存在本轮 `target/reader-recovery-merge-20261031/branches.json`；历史备份与恢复方式见[清理及恢复清单](./handoffs/2026-10-30-branch-consolidation.md)。
+本次仅使用 `git branch -d` 清理上述本地引用；主 checkout 的 HEAD、状态、index 与 41 个文件/缺失路径保持不变，两个工作树、远端引用和历史验收资料均保留。结果及恢复方法见[本地清理回执](./handoffs/2026-10-31-local-branch-cleanup.md)；原始快照位于 `target/local-branch-cleanup-20261031/`。较早的工作树退役与历史备份仍见[10 月 30 日清理记录](./handoffs/2026-10-30-branch-consolidation.md)。本次记录仅本地提交，未推送。
 
 ## 验证结论的边界
 

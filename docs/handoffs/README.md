@@ -22,7 +22,7 @@
 | Reader 规则独立性与 PR #49 整合 | [无 Dioxus 编译、读取归属及宿主回归](./2026-10-30-reader-rule-boundary.md) |
 | Android 主题文件导入与 PR #48 整合 | [实现和实际系统选择器验收](./2026-10-30-android-theme-import.md)、[首 BOM 呈现问题的独立复现与修复](./2026-10-30-css-leading-bom-render.md) |
 | 列表密度退役、0.3.x 参数删除与 `.agents/` 清理 | [实现、兼容与实际宿主验收](./2026-10-30-density-retirement.md) |
-| 当前阶段、分支与文档收口 | [全部分支审计与清理](./2026-10-30-branch-consolidation.md)、[前一轮文档整合](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
+| 当前阶段、分支与文档收口 | [13 个已合并本地分支清理](./2026-10-31-local-branch-cleanup.md)、[此前分支与工作树清理](./2026-10-30-branch-consolidation.md)、[前一轮文档整合](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
 | 当前原生控件评估与 PR #47 整合 | [主题选择实际宿主评估](./2026-10-30-native-theme-selector-assessment.md)、[App 设置读取生命周期与 PR #46](./2026-10-30-shell-settings-lifecycle.md) |
 | 原生返回策略 | [Windows / Android 实际宿主验收](./2026-10-30-native-back-validation.md)、[返回导航与退出提示提取](./2026-10-29-native-back-policy.md)、[E 盘接续与背景交接](./2026-10-29-pr40-worktree-handoff.md)、[本批范围评估](./2026-10-29-native-preparation-next-batch.md) |
 | PR #40 主线整合 | [main CI 与 Docker 核验](./2026-10-29-pr40-main-ci-docker.md)、[最终审查与合并回执](./2026-10-29-pr40-final-review-merge.md)、[逐字段保存、原生适配与验收](./2026-10-29-pr40-main-integration.md)、[最新主线与原生复验](./2026-10-29-pr40-directory-order-integration.md)、[CI 等待边界](./2026-10-29-pr40-ci-wait-boundaries.md) |
@@ -42,6 +42,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-31 | [13 个已合并本地分支清理与保全核对](./2026-10-31-local-branch-cleanup.md) |
 | 2026-10-31 | [Settings 规则边界复审与整合](./2026-10-31-settings-review-merge.md) |
 | 2026-10-31 | [Settings 草稿与回填规则边界](./2026-10-31-settings-rule-boundary.md) |
 | 2026-10-31 | [README 截图、附件核验与 PR #59 合并](./2026-10-31-readme-media.md) |

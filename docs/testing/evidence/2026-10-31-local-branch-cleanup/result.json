@@ -1,0 +1,121 @@
+{
+  "date": "2026-10-31",
+  "scope": "only the 13 explicitly approved merged local branch refs",
+  "baseMain": "958632740f53c51290337e2062ea85ae2910306a",
+  "command": "git branch -d -- <13 approved names>",
+  "deleted": [
+    {
+      "branch": "codex/android-theme-import",
+      "tip": "b03ebc4ef0827f79f9babf7c403d95d91656e3f3",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/main-regression-20261031",
+      "tip": "6a39570e079a1b6cd687ed6b2286e62797bbae4a",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/native-back-policy",
+      "tip": "a3da94d0dc053f543a5c97cde03943aa154a4f49",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/reader-body-boundary",
+      "tip": "b4253a82c6a6d7d6d4d67d92752363f751336687",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/reader-host-boundary",
+      "tip": "6a5b91b460a112543bd5154e9b86705b83421748",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/reader-race-fixes",
+      "tip": "21f3468a2bd6e0233f9bc1d985ad83a4cb86631f",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/reader-rule-boundary",
+      "tip": "ff628ed03a96e57392b94ad3655cc4cb62be736a",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/reader-shortcut-definition",
+      "tip": "4d0aab02271fbc12bd424da91dd779d1d4394f88",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/readme-media-20261031",
+      "tip": "0c4f9e00f2984e831beb0414dc819f26b864be04",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/settings-rule-boundary",
+      "tip": "950c9665db8b43b6b968e3c5b1fd75dc0eb9b6a9",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/shell-settings-lifecycle",
+      "tip": "8ace1781d222ca03009711adda33dc0a823cde34",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/workspace-response-cancel",
+      "tip": "ac15b77b4e1c8783544e2674b1ff6a061981e4a6",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    },
+    {
+      "branch": "codex/workspace-response-completion",
+      "tip": "bf42dc325cf5c19053a51dae2bebc4373d5b67f4",
+      "uniqueCommits": 0,
+      "ancestorOfMain": true,
+      "worktreeOwner": null
+    }
+  ],
+  "localBranchesBefore": 15,
+  "localBranchesAfter": 2,
+  "retained": [
+    "main",
+    "feat/reading-workspace-20261024"
+  ],
+  "remoteHeadsUnchanged": 14,
+  "remoteTrackingRefsUnchanged": true,
+  "tagsUnchanged": true,
+  "worktreesUnchanged": 2,
+  "mainHeadAndWorktreeFilesUnchangedDuringDeletion": true,
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "forceDeletion": false,
+  "worktreeRemoval": false,
+  "filesystemCleanup": false,
+  "push": false,
+  "evidence": "target/local-branch-cleanup-20261031/"
+}
