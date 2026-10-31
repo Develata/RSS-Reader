@@ -1,0 +1,184 @@
+{
+  "date": "2026-10-31",
+  "base": "c2f8cca3802a695690d41aca97fd135b0eb94623",
+  "branch": "codex/workspace-response-cancel",
+  "finding": {
+    "priority": "P2",
+    "scope": "test-only response completion observer",
+    "before": {
+      "baseline": "c2f8cca3802a695690d41aca97fd135b0eb94623",
+      "expected": false,
+      "browser": "149.0.7827.55",
+      "outcome": {
+        "declaredBytes": "20",
+        "receivedBytes": 4,
+        "pendingReadDone": true
+      },
+      "records": [
+        {
+          "id": 1,
+          "chunks": [
+            {
+              "done": false,
+              "bytes": 4,
+              "text": "true"
+            },
+            {
+              "done": true,
+              "bytes": 0,
+              "text": ""
+            }
+          ],
+          "done": true,
+          "requestBody": "{\"read_filter\":\"all\",\"grouping_mode\":\"time\"}",
+          "status": 200
+        }
+      ],
+      "observed": true
+    },
+    "chrome155Before": {
+      "browser": "155.0.8059.40",
+      "status": "failed",
+      "error": "AssertionError [ERR_ASSERTION]: reader-cancel\n\ntrue !== false\n"
+    }
+  },
+  "productAndWorkflowsUnchanged": true,
+  "sourceSha256Lf": {
+    "scripts/browser/workspace_response_probe.cjs": "6ebe7148a20c741207d854627e155861916e01eab1b2f92b147a7fe7b03af111",
+    "scripts/browser/workspace_response_probe.test.cjs": "3a05c698438d6524d73060933ea429a7d5a1247970c52b52a2a1b2dc78c375b4",
+    "scripts/browser/workspace_response_probe.browser.cjs": "41ef005bbcfe167ef653d07d1fbe3645aecbc394d25f3072ddd45a5aa44c5cdc"
+  },
+  "checks": {
+    "nodeTools": {
+      "passed": 16,
+      "failed": 0
+    },
+    "readerRules": {
+      "passed": 35,
+      "failed": 0
+    },
+    "browserAdapter": {
+      "browser": "155.0.8059.40",
+      "passed": 13,
+      "pageErrors": [],
+      "cases": [
+        {
+          "kind": "never-issued",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "headers-only",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "without-eof",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "cut",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "http-error",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "invalid-json",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "bom-body",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "late-abort",
+          "completed": true,
+          "passed": true
+        },
+        {
+          "kind": "different-payload",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "duplicate",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "reader-cancel",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "stream-cancel",
+          "completed": false,
+          "passed": true
+        },
+        {
+          "kind": "late-cancel",
+          "completed": true,
+          "passed": true
+        }
+      ]
+    },
+    "workspace": {
+      "passed": 18,
+      "pageErrors": 0
+    }
+  },
+  "readerSourceEquivalence": {
+    "base": "801f6337e81f498be16a3dab9ea7db3733dbbb82",
+    "previousPath": "crates/rssr-app/src/pages/reader_page/support.rs",
+    "currentPath": "crates/rssr-app/src/ui/runtime/reader/body.rs",
+    "selectionFunctionUnchanged": true,
+    "selectionFunctionSha256Lf": "7ca437e072bed9af8742ef57225a7e7ac5f05702bea804e6c5e25c6a2bda3b96",
+    "runtimeExecutionUnchanged": true,
+    "pageSupportModuleRemoved": true,
+    "visibility": "private child module, pub(super) exports",
+    "productionImports": [
+      "rssr_infra::html",
+      "url::Url"
+    ]
+  },
+  "localBuildInputs": {
+    "productBaseline": "97d75438c8ba54045f28c559cb01b2bc0de4f8a1",
+    "sameProductAsMain": "c2f8cca3802a695690d41aca97fd135b0eb94623",
+    "serverSha256": "356e10d015aff2a4e5d044a3b862a13c19d111a08bcf5874aecd2b839947913d",
+    "fixtureSha256": "28e99cfe46a304034872be15cb591061bea4d711d31e25074b27c68fb233e069",
+    "publicFilesVerified": 29,
+    "publicManifestSha256": "c55bc08a35cfabb53d33cab5e9c6160855b631c3369fc50fc02e042744a61919"
+  },
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "rawEvidenceDirectory": "target/postmerge-review-20261031/",
+  "evidenceSha256": {
+    "cancel-before.json": "4c33d7d1d423ad0195bdf7ce53922d66d698fc14b48adad3c2a8e075375dcc91",
+    "cancel-before.log": "ae3bbdb96224c88db17eeb75a195c6d1247a0161efc6f48b9760e701298c10fe",
+    "cancel-unit-before.log": "af2371b374366884dde4e2b81eeec40d979c34a037a8df759793fb7a6fd1ba8d",
+    "cancel-adapter-before.log": "c1bbf97208991ef93efa4c5a956a0d06af3c59ea951d5a747fda74d3746c7fc4",
+    "adapter-before/response-probe.json": "f7c4b8270b2b02f00e9d412cae5a816248e500aae7bf06fad141a39de3f94920",
+    "node-after.log": "83c91042b486021c36c99b32bbf97c6f764228c8b5257d132cd3ad4c28565fcf",
+    "reader-rules.log": "942e4219bbb12820bec89628d7d6fc190d83a8033cb61b2867eacb493917b745",
+    "adapter-after/response-probe.json": "bee0ebcf4c34a564ad5c83377e2b3ee14d5701fef0cad7efcf3b618fdaa41df5",
+    "workspace/run.log": "ca612f5f6ae94e4a11eb68dd7ca5dc3c641cedea350599f2e931a072f766f7d9"
+  },
+  "notRerun": [
+    "Windows WebView2 host",
+    "Android actual host",
+    "physical IME",
+    "accessibility",
+    "candidate native renderer"
+  ]
+}

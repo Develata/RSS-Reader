@@ -6,6 +6,8 @@ function installWorkspaceResponseProbe() {
   const originalFetch = window.fetch;
   const originalGetReader = ReadableStream.prototype.getReader;
   const originalRead = ReadableStreamDefaultReader.prototype.read;
+  const originalStreamCancel = ReadableStream.prototype.cancel;
+  const originalReaderCancel = ReadableStreamDefaultReader.prototype.cancel;
   const fetch = function(input, init) {
     const url = typeof input === 'string' ? input : input.url;
     const watched = new URL(url, location.href).pathname === '/api/v1/workspace'
@@ -58,13 +60,31 @@ function installWorkspaceResponseProbe() {
     }, error => { record.readError = String(error); });
     return result;
   };
+  // cancel() can resolve a pending read with done=true without receiving EOF.
+  // Record the request synchronously, before that read settles, and keep an
+  // early cancellation latched even if cancel() is called again after closure.
+  const recordCancellation = record => {
+    if (record && !record.done) record.cancelledBeforeEof = true;
+  };
+  const streamCancel = function() {
+    recordCancellation(streams.get(this));
+    return originalStreamCancel.apply(this, arguments);
+  };
+  const readerCancel = function() {
+    recordCancellation(readers.get(this));
+    return originalReaderCancel.apply(this, arguments);
+  };
   window.fetch = fetch;
   ReadableStream.prototype.getReader = getReader;
   ReadableStreamDefaultReader.prototype.read = read;
+  ReadableStream.prototype.cancel = streamCancel;
+  ReadableStreamDefaultReader.prototype.cancel = readerCancel;
   window.__workspaceResponseProbe = { records, dispose() {
     if (window.fetch === fetch) window.fetch = originalFetch;
     if (ReadableStream.prototype.getReader === getReader) ReadableStream.prototype.getReader = originalGetReader;
     if (ReadableStreamDefaultReader.prototype.read === read) ReadableStreamDefaultReader.prototype.read = originalRead;
+    if (ReadableStream.prototype.cancel === streamCancel) ReadableStream.prototype.cancel = originalStreamCancel;
+    if (ReadableStreamDefaultReader.prototype.cancel === readerCancel) ReadableStreamDefaultReader.prototype.cancel = originalReaderCancel;
     delete window.__workspaceResponseProbe;
   } };
 }
@@ -77,7 +97,7 @@ function workspaceResponseCompleted(records, requestBody) {
   if (matches.length !== 1) return false;
   const record = matches[0];
   if (!(record.status >= 200 && record.status < 300) || record.done !== true
-      || record.fetchError || record.readError || record.requestBodyError || record.truncated
+      || record.fetchError || record.readError || record.requestBodyError || record.truncated || record.cancelledBeforeEof
       || (record.aborted && record.doneWhenAborted !== true)) return false;
   try { return typeof JSON.parse(record.chunks.map(chunk => chunk.text).join('')) === 'boolean'; }
   catch { return false; }

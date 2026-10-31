@@ -21,6 +21,11 @@ const { installWorkspaceResponseProbe, workspaceResponseCompleted } = require('.
         if (kind === 'cut') {
           response.setHeader('Content-Length', '20');
           response.write('tr'); held.set(kind, response);
+        } else if (kind === 'reader-cancel' || kind === 'stream-cancel') {
+          // A valid JSON prefix is not a complete response. Cancellation closes
+          // the reader with done=true while these remaining bytes were never sent.
+          response.setHeader('Content-Length', '20');
+          response.write('true'); held.set(kind, response);
         } else {
           if (kind === 'http-error') response.statusCode = 503;
           response.end(kind === 'invalid-json' ? 'tr' : kind === 'bom-body' ? '\ufefftrue' : 'true');
@@ -41,6 +46,7 @@ const { installWorkspaceResponseProbe, workspaceResponseCompleted } = require('.
       ['never-issued', false], ['headers-only', false], ['without-eof', false],
       ['cut', false], ['http-error', false], ['invalid-json', false], ['bom-body', false],
       ['late-abort', true], ['different-payload', false], ['duplicate', false],
+      ['reader-cancel', false], ['stream-cancel', false], ['late-cancel', true],
     ]) {
       await page.evaluate(installWorkspaceResponseProbe);
       const payload = JSON.stringify({ read_filter: 'all', grouping_mode: 'time', kind });
@@ -67,7 +73,21 @@ const { installWorkspaceResponseProbe, workspaceResponseCompleted } = require('.
                 text += new TextDecoder().decode(chunk.value);
                 if (kind === 'without-eof') return { text };
                 if (kind === 'cut') await (await fetch('/break')).text();
+                if (kind === 'reader-cancel') {
+                  const pending = reader.read();
+                  await reader.cancel('stop before EOF');
+                  const cancelledRead = await pending;
+                  await reader.cancel('repeat after the pending read closed');
+                  return { text, declaredBytes: response.headers.get('content-length'), done: cancelledRead.done };
+                }
+                if (kind === 'stream-cancel') {
+                  reader.releaseLock();
+                  await response.body.cancel('stop before EOF');
+                  reader = response.body.getReader();
+                  return { text, declaredBytes: response.headers.get('content-length'), done: (await reader.read()).done };
+                }
               }
+              if (kind === 'late-cancel') await reader.cancel('already consumed');
               reader.releaseLock();
               if (kind === 'late-abort') controller.abort();
             }
@@ -82,6 +102,12 @@ const { installWorkspaceResponseProbe, workspaceResponseCompleted } = require('.
           assert.ok(records[0].readError, 'cut after the first chunk must reach the actual reader');
         }
         if (kind === 'late-abort') assert.equal(records[0].doneWhenAborted, true);
+        if (kind === 'reader-cancel' || kind === 'stream-cancel') {
+          assert.equal(outcome.text, 'true');
+          assert.equal(outcome.declaredBytes, '20');
+          assert.equal(outcome.done, true, 'cancelled reads can close without response EOF');
+          assert.equal(records[0].cancelledBeforeEof, true);
+        }
         report.cases.push({ kind, passed: true, completed, outcome, records });
       } finally {
         await page.evaluate(() => {
