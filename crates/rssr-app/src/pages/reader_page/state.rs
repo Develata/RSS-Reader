@@ -51,6 +51,8 @@ pub(crate) struct ReaderPageState {
     pub(crate) asset_localization_requested: bool,
     pub(crate) status: String,
     pub(crate) status_tone: String,
+    /// Only read feedback expires on a successful reread; write outcomes must remain visible.
+    pub(super) status_from_reread: bool,
     pub(crate) error: Option<String>,
     /// The tone `error` is shown with: a missing entry or a failure is an error, an unknown
     /// outcome is not (review C4B-A-R5-01).
@@ -92,6 +94,7 @@ impl ReaderPageState {
             asset_localization_requested: false,
             status: String::new(),
             status_tone: "info".to_string(),
+            status_from_reread: false,
             error: None,
             error_tone: "error",
         }
@@ -121,6 +124,14 @@ impl ReaderPageState {
         }
     }
 
+    pub(super) fn clear_reread_status(&mut self) {
+        if self.status_from_reread {
+            self.status.clear();
+            self.status_tone = "info".to_string();
+            self.status_from_reread = false;
+        }
+    }
+
     /// 开始加载 `entry_id`。
     ///
     /// 同一篇的显式重载保留提示，切换文章时清空提示。
@@ -134,6 +145,7 @@ impl ReaderPageState {
         if switched_entry {
             self.status.clear();
             self.status_tone = "info".to_string();
+            self.status_from_reread = false;
         }
         self.title = "正在加载…".to_string();
         self.body_text = Arc::from("");

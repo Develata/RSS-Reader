@@ -561,6 +561,35 @@ mod tests {
         (dom, session)
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_recovered_reread_clears_its_obsolete_failure() {
+        use crate::ui::runtime::{backend::test_host, fake_backend::Scripted};
+
+        let backend = Scripted::over_new_library();
+        backend.fail(
+            "load_reader_entry",
+            rssr_api::BackendError::new(rssr_api::ErrorCode::Unavailable, "temporary read failure"),
+        );
+        let _host = test_host::install(backend);
+        let (mut dom, session) = opened();
+        let body = session.snapshot().body_text;
+        dom.in_scope(ScopeId::APP, || session.reread());
+        until_write(&mut dom, || session.snapshot().status.contains("temporary read failure"))
+            .await;
+
+        dom.in_scope(ScopeId::APP, || {
+            session.spawn_reread(async { reread_answer(true, Some(5)) });
+        });
+        until_write(&mut dom, || session.snapshot().is_read).await;
+        let state = session.snapshot();
+        assert!(
+            state.status.is_empty(),
+            "a successful reread must retire its earlier read failure"
+        );
+        assert!(std::sync::Arc::ptr_eq(&body, &state.body_text));
+        assert_eq!(state.navigation_state.next_unread_entry_id, Some(5));
+    }
+
     /// The read-only refresh takes the flags and the neighbours; the body, the title, the image
     /// localization asked for and the load stay (C4b item 2).
     #[test]

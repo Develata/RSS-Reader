@@ -1,0 +1,163 @@
+{
+  "date": "2026-10-31",
+  "branch": "codex/main-regression-20261031",
+  "baseHead": "1acef61a94a007f9c7a8fc9cd934778200723642",
+  "mainAtStart": "60b4c6f175fc3a0cc166818307dd213c9c67c852",
+  "buildId": "reader-recovery-1acef61a-dad9c82fa837",
+  "productFiles": 463,
+  "productManifestSha256": "dad9c82fa8377beb1f05c622abdb1037b094357dc8b391af7400b8cd7d89de82",
+  "sourceIdentity": "baseHead plus source.patch, checked against all product file bytes",
+  "defects": [
+    {
+      "severity": "P2",
+      "name": "successful Reader reread leaves obsolete read failure visible",
+      "before": {
+        "stored": true,
+        "shown": "read",
+        "status": "重新读取文章失败：intentional reread refusal",
+        "tone": "error"
+      },
+      "after": {
+        "stored": true,
+        "shown": "read",
+        "status": "",
+        "tone": "info"
+      },
+      "rustAndBrowserRegressionFailedBeforeFix": true
+    }
+  ],
+  "verification": {
+    "appRust": {
+      "passed": 445,
+      "failed": 0,
+      "ignored": 1,
+      "resultGroups": [
+        [
+          403,
+          0,
+          1
+        ],
+        [
+          37,
+          0,
+          0
+        ],
+        [
+          2,
+          0,
+          0
+        ],
+        [
+          3,
+          0,
+          0
+        ]
+      ]
+    },
+    "independentRules": {
+      "passed": 37,
+      "frameworkFree": true,
+      "overlapsAppTests": true
+    },
+    "clippyAppAllTargetsWarningsDenied": "passed",
+    "optimizedWebBuild": {
+      "status": "passed",
+      "dx": "0.7.9",
+      "release": true,
+      "debugSymbols": false,
+      "initialBuild": "missing debug-symbols false caused known Windows wasm-opt crash; replaced by optimized build"
+    },
+    "readerWeb": {
+      "passed": 8,
+      "widths": [
+        1280,
+        390
+      ],
+      "browser": "155.0.8059.40",
+      "pageErrors": 0,
+      "unexpectedConsoleErrors": 0,
+      "injected503ConsoleErrors": 2
+    },
+    "webFaults": {
+      "passed": 7,
+      "scenarios": [
+        "load-failure-and-online-recovery",
+        "reread-failure-retains-body-and-recovers",
+        "read-refusal-releases-gate-and-explicit-retry",
+        "read-committed-response-loss-rereads-without-write-retry",
+        "starred-refusal-releases-gate-and-explicit-retry",
+        "starred-committed-response-loss-rereads-without-write-retry",
+        "stale-reread-cannot-revert-completed-write"
+      ],
+      "pageErrors": 0,
+      "unexpectedConsoleErrors": 0,
+      "injected503ConsoleErrors": 4,
+      "injectedResetConsoleErrors": 2
+    },
+    "windowsActualHost": {
+      "passed": 8,
+      "webViewVersion": "156.0.4314.50",
+      "pageErrors": 0,
+      "consoleErrors": 0,
+      "fixtureEntries": 100,
+      "fixtureInitialSha256": "73c9ecf136add10888089de4c275ef5e2942540c9c0836d58f22b6e482d45559",
+      "ownedProcessStopped": true,
+      "scope": "existing Reader host, position, image and shortcut scenarios; no native transport fault injection"
+    },
+    "android": {
+      "target": "aarch64-linux-android",
+      "compileCheck": "passed",
+      "actualHost": "not run",
+      "existingWarning": "unused LOCAL_DATA_DIR_NAME in rssr-infra/src/store/local.rs:31"
+    }
+  },
+  "artifacts": {
+    "nativeSha256": "58a7a7ed50cdcd6f4ac65c2aa8f9fdc49fea1960985d77039c1367f2e97e3f15",
+    "webServerSha256": "7a89ceb34ea210f4f10ad19fd2ebc6ac801e3b49ec005e1c64af68684976b340",
+    "webStaticFiles": 33,
+    "publicManifestSha256": "d7d4b3711c92fecb84fa03945c87734dc77abfe87c0e81290e91e831bb0f2721",
+    "fixtureExecutableSha256": "e3738217961d8d62ac634740c93809bc03265f83d7451336947c67d87b395ebd",
+    "baselineWebStaticFiles": 29,
+    "baselineMatchesProductBase": true
+  },
+  "primaryCheckout": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "evidenceRoot": "target/reader-recovery-review-20261031",
+  "evidenceSha256": {
+    "product-files.json": "dad9c82fa8377beb1f05c622abdb1037b094357dc8b391af7400b8cd7d89de82",
+    "source.patch": "3ea45c3b87b75285981f8c29121e12cffb89aec4d9e62bec84899f726a7a4548",
+    "public-sha256.json": "d7d4b3711c92fecb84fa03945c87734dc77abfe87c0e81290e91e831bb0f2721",
+    "probe.cjs": "2302128e2bcc1f4f9c29dbc80e3a13f20f62be3e13a232cb03b603e75fe822c2",
+    "run-windows.ps1": "84e25604fb0a66cd8fbb37ee4100593354045b816fa4ea7c5c5be6977824ac29",
+    "baseline-status-02/acceptance.json": "d789e6d0ce12f66b8dc24388184787305655ae909f4a643817f6cec0bd807bd2",
+    "regression-before/acceptance.json": "7d5651d7a80bc9eb649945249aa571c06e543b082670e10ebaf28f895ee0d941",
+    "rust-before.log": "3ba6350fa6db6ebf4296ddce70b1c7b7c0d4a76ce7cd7a6cea34f1d2423ab8e2",
+    "app-after.log": "3c24f4810263ed8e994f8f1dd3fc0755354a3b2760effc4a8a505ac9d1fbbe89",
+    "reader-rule-boundary.json": "49ff499b031728608778bfb12f5e0acf33f414858c2fadcb28bf68223e801fc7",
+    "clippy.log": "99440a9920174b45242cde534a772658783222a1737bad570b8bfd338ff254b1",
+    "android-check.log": "dc4a59d702243e8c9c78d4e8847dceced0c9ac74f6468a90e338db95a40e6024",
+    "candidate-build.log": "5fbecb9b5293e33ef6ed0e1735b418b61faea22bb7d7690cac1f9ff1e2e1d789",
+    "web-build.log": "55894db562aef6ae6c4545af21af19f6c33129682d8d2caf670a2e39d265af95",
+    "web-optimized-build.log": "000bc9c6d7f78cc93b6b8d6bb74b94ac315ca24101f13d5044e76d90fbde24ac",
+    "web-optimized-detail.log": "1e1a6fafba12656e7f4a85d3170c8e60cd3ff924b63f88b93b372b3d78294f27",
+    "regression-final/acceptance.json": "338259ebe3502e05198f43ec971ffe269267d89586708d30aa627cb912649894",
+    "faults-final/acceptance.json": "636690eb7da8aa5b089719d242099140b2bd58e1d196f359f7f6b7eac079ad37",
+    "windows-candidate-01/acceptance/acceptance.json": "48f773f2c4fe90cfa03b60173171d1671f567ac86ae96c29098993eb9ad07943",
+    "windows-candidate-01/process.json": "f17b5219942eab504a615741ca355b2f3c88017fe318d35ed00e76fc2f2cbafc",
+    "primary-preservation.json": "f1002cbf458aa0043b46e84f37fe55135a33ae225e30d83ca45f5257450dc132",
+    "process-stopped.json": "eb3132f4feca0302d67882bcc1243019525745848f201f9762e84cafe5feef02",
+    "collect-receipt.py": "d9ff5ca8a51ef372655e66d754d1a7eff338b6c003eb8e49465c891ea19077fc"
+  },
+  "notCovered": [
+    "Android host interaction",
+    "macOS/Linux GUI",
+    "physical IME and assistive technology",
+    "signed upgrades and real user data migration",
+    "new remote CI, Docker or Pages run"
+  ],
+  "historicalEvidence": "previous workspace 1149-pass result is not this candidate verification"
+}

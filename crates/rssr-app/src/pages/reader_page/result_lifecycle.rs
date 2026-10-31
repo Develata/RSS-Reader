@@ -305,8 +305,13 @@ mod tests {
         assert!(Arc::ptr_eq(&state.body_text, &body));
         assert!(state.asset_localization_requested);
         let expected = state.clone();
-        let reply = old
-            .complete(&state, [ReaderPageIntent::Failed(crate::ui::failure::plain("old refresh"))]);
+        let reply = old.complete(
+            &state,
+            [ReaderPageIntent::RereadFailed {
+                entry_id: 1,
+                failure: crate::ui::failure::plain("old refresh"),
+            }],
+        );
         apply(&mut state, reply);
         assert_eq!(state, expected, "an obsolete error must not replace current feedback");
     }

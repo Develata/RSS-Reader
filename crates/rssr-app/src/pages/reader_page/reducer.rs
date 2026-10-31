@@ -19,6 +19,7 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             state.is_read = content.is_read;
             state.is_starred = content.is_starred;
             state.error = None;
+            state.clear_reread_status();
         }
         ReaderPageIntent::SetAssetLocalizationRequested => {
             state.asset_localization_requested = true;
@@ -26,6 +27,7 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
         ReaderPageIntent::SetStatus { message, tone } => {
             state.status = message;
             state.status_tone = tone;
+            state.status_from_reread = false;
         }
         ReaderPageIntent::SetError { entry_id, error } => {
             if entry_id != state.current_entry_id {
@@ -44,6 +46,15 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
         ReaderPageIntent::Failed(failure) => {
             state.status = failure.message();
             state.status_tone = failure.tone().to_string();
+            state.status_from_reread = false;
+        }
+        ReaderPageIntent::RereadFailed { entry_id, failure } => {
+            if entry_id != state.current_entry_id {
+                return;
+            }
+            state.status = failure.message();
+            state.status_tone = failure.tone().to_string();
+            state.status_from_reread = true;
         }
         ReaderPageIntent::FlagWriteStarted(flag) => state.set_flag_write_pending(flag, true),
         ReaderPageIntent::FlagWriteFinished(flag) => state.set_flag_write_pending(flag, false),
@@ -68,6 +79,7 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             state.is_read = is_read;
             state.is_starred = is_starred;
             state.navigation_state = navigation_state;
+            state.clear_reread_status();
         }
         ReaderPageIntent::RereadWanted(wanted) => state.reread_wanted = wanted,
         ReaderPageIntent::RereadIssued => {
@@ -80,6 +92,7 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
             state.status =
                 "这篇文章已不在资料库中（可能已被清理或订阅已删除），正文仍可阅读。".into();
             state.status_tone = "error".into();
+            state.status_from_reread = true;
         }
     }
 }
@@ -88,6 +101,89 @@ pub(crate) fn reduce_reader_page_intent(state: &mut ReaderPageState, intent: Rea
 mod tests {
     use super::{ReaderPageIntent, ReaderPageState, reduce_reader_page_intent};
     use crate::pages::reader_page::state::ReaderPageLoadedContent;
+
+    #[test]
+    fn reread_recovery_clears_only_read_feedback_and_preserves_the_body() {
+        use crate::ui::failure::UiFailure;
+        for failure in [
+            ReaderPageIntent::RereadFailed {
+                entry_id: 7,
+                failure: UiFailure::new(
+                    "重新读取文章",
+                    rssr_api::BackendError::new(rssr_api::ErrorCode::Unavailable, "offline"),
+                ),
+            },
+            ReaderPageIntent::RereadMissing { entry_id: 7 },
+        ] {
+            let mut state = ReaderPageState::new();
+            reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+            reduce_reader_page_intent(
+                &mut state,
+                ReaderPageIntent::ApplyLoadedContent {
+                    entry_id: 7,
+                    content: loaded_content("Story"),
+                },
+            );
+            let body = state.body_text.clone();
+            let generation = state.load_generation;
+            reduce_reader_page_intent(&mut state, failure);
+            assert!(!state.status.is_empty());
+            assert_eq!(state.status_tone, "error");
+            reduce_reader_page_intent(
+                &mut state,
+                ReaderPageIntent::ApplyReread {
+                    entry_id: 7,
+                    is_read: true,
+                    is_starred: true,
+                    navigation_state: Default::default(),
+                },
+            );
+            assert!(state.status.is_empty());
+            assert_eq!(state.status_tone, "info");
+            assert!(state.is_read && state.is_starred);
+            assert_eq!(state.load_generation, generation);
+            assert!(std::sync::Arc::ptr_eq(&body, &state.body_text));
+        }
+    }
+
+    #[test]
+    fn reread_recovery_does_not_clear_a_later_write_outcome() {
+        use crate::ui::failure::UiFailure;
+        let failure = |code| {
+            ReaderPageIntent::Failed(UiFailure::new(
+                "更改收藏状态",
+                rssr_api::BackendError::new(code, "write outcome"),
+            ))
+        };
+        for outcome in [
+            failure(rssr_api::ErrorCode::Unavailable),
+            failure(rssr_api::ErrorCode::OutcomeUnknown),
+            ReaderPageIntent::SetStatus { message: "saved".into(), tone: "info".into() },
+        ] {
+            let mut state = ReaderPageState::new();
+            reduce_reader_page_intent(&mut state, ReaderPageIntent::BeginLoading { entry_id: 7 });
+            reduce_reader_page_intent(
+                &mut state,
+                ReaderPageIntent::ApplyLoadedContent {
+                    entry_id: 7,
+                    content: loaded_content("Story"),
+                },
+            );
+            reduce_reader_page_intent(&mut state, ReaderPageIntent::RereadMissing { entry_id: 7 });
+            reduce_reader_page_intent(&mut state, outcome);
+            let before = (state.status.clone(), state.status_tone.clone());
+            reduce_reader_page_intent(
+                &mut state,
+                ReaderPageIntent::ApplyReread {
+                    entry_id: 7,
+                    is_read: true,
+                    is_starred: true,
+                    navigation_state: Default::default(),
+                },
+            );
+            assert_eq!((state.status, state.status_tone), before);
+        }
+    }
 
     #[test]
     fn flag_write_gates_are_independent_and_preserve_the_loaded_body() {

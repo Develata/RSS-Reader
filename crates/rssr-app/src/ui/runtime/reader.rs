@@ -75,7 +75,10 @@ pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {
                     },
                     None => ReaderPageIntent::RereadMissing { entry_id },
                 }]),
-                Err(error) => vec![UiIntent::Failed(UiFailure::new("重新读取文章", error))],
+                Err(error) => reader_intents(vec![ReaderPageIntent::RereadFailed {
+                    entry_id,
+                    failure: UiFailure::new("重新读取文章", error),
+                }]),
             }
         }
         ReaderCommand::LocalizeEntryAssets { entry_id } => {

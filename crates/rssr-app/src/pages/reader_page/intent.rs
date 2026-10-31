@@ -28,6 +28,11 @@ pub(crate) enum ReaderPageIntent {
     },
     /// A backend call failed (C4b item 1).
     Failed(UiFailure),
+    /// A read-only refresh failed; a later successful read can retire this feedback.
+    RereadFailed {
+        entry_id: i64,
+        failure: UiFailure,
+    },
     /// One in-flight write per flag in this visit; read and starred remain independent.
     FlagWriteStarted(ReaderFlag),
     FlagWriteFinished(ReaderFlag),
@@ -63,7 +68,9 @@ impl ReaderPageIntent {
     /// The backend failure this intent carries.
     pub(crate) fn failure(&self) -> Option<&UiFailure> {
         match self {
-            Self::LoadFailed { failure, .. } | Self::Failed(failure) => Some(failure),
+            Self::LoadFailed { failure, .. }
+            | Self::RereadFailed { failure, .. }
+            | Self::Failed(failure) => Some(failure),
             _ => None,
         }
     }
