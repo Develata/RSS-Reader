@@ -1,6 +1,6 @@
 //! Compile the production rules together without the app's Dioxus assembly.
 //! `scripts/check_reader_rule_boundary.py` also builds this exact harness with rustc and
-//! only rssr-api, rssr-domain and serde as extern crates; no substitute state or rules.
+//! the existing API/domain/infra, serde and url crates; no substitute state, rules or cleaner.
 #![allow(dead_code)]
 
 #[path = "../src/ui/failure.rs"]
@@ -13,6 +13,8 @@ mod ui {
 mod image_viewer_state;
 #[path = "../src/pages/reader_page/intent.rs"]
 pub(crate) mod intent;
+#[path = "../src/ui/runtime/reader/body.rs"]
+mod reader_body;
 #[path = "../src/ui/reader_shortcuts/policy.rs"]
 mod reader_shortcut_policy;
 #[path = "../src/pages/reader_page/reducer.rs"]

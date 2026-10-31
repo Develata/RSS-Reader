@@ -1,15 +1,14 @@
+mod body;
+
 use super::entry_flags::{Flag, flag_message, flag_tone};
 use crate::{
     datetime::format_datetime,
-    pages::reader_page::{
-        intent::ReaderPageIntent,
-        state::ReaderPageLoadedContent,
-        support::{ReaderBody, select_reader_body},
-    },
+    pages::reader_page::{intent::ReaderPageIntent, state::ReaderPageLoadedContent},
     ui::{
         commands::ReaderCommand, failure::UiFailure, runtime::backend::backend, snapshot::UiIntent,
     },
 };
+use body::{ReaderBody, select_reader_body};
 use rssr_application::EntryFlagOutcome;
 
 pub(super) async fn execute(command: ReaderCommand) -> Vec<UiIntent> {

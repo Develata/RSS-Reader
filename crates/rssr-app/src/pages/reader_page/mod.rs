@@ -7,7 +7,6 @@ mod result_lifecycle;
 mod session;
 mod shortcuts;
 pub(crate) mod state;
-pub(crate) mod support;
 mod webview;
 
 use dioxus::prelude::*;

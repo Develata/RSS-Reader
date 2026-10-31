@@ -26,7 +26,13 @@ Reader 快捷键定义已单独去重：普通 Rust 持有绑定与导航属性�
 
 PR #50–#52 已按顺序合入 main `dbbaf390`，合并树与各自已验证 head 相同，见[整合交接](./handoffs/2026-10-30-reader-integration.md)。正文内容、图片地址、锚点有效期、HTML/CSS、复制、IME 和无障碍的[兼容契约](./design/reader-rendering-boundary.md)已按源码核实。
 
-下一小批只处理 `ui/runtime/reader.rs → pages/reader_page/support.rs` 的正文选择依赖，归到所属正文准备模块并独立验证同一生产函数；当前 24 项无框架规则检查不含该函数。以后再用真实候选渲染器证明可替换性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
+10 月 31 日的 `codex/reader-body-boundary` 已将正文选择归入唯一调用方的私有模块，消除 runtime 对页面 `support.rs` 的引用；独立检查扩至 35 项并调用同一生产函数与真实清洗，结果及待整合状态见[正文选择交接](./handoffs/2026-10-31-reader-body-boundary.md)。后续以实际复用阻碍决定下一步，候选渲染器仍须单独证明兼容性。JS 行数、拆文件数量和测试不开窗口都不能单独作为完成标准；不新增通用 UI 框架、crate 或全局 Host trait。
+
+## 偏好保存顺序的 CI 不稳定点
+
+PR #54 的实现提交 `97d75438` 再次遇到既有 `preferenceOrdering` 超时：两笔 workspace PUT 均收到 HTTP 200，随后浏览器报告 `net::ERR_ABORTED`，最终请求没有 `requestfinished`。失败发生在 Reader 场景前，偏好实现与测试均未被本批修改。Windows Chrome 149 原场景、Chrome 155 加 150 ms 受控延迟的场景均未复现；CI 使用 Linux Chrome 156，不能据此排除平台差异或认定产品已修好。原始失败、重跑结果与证据见[PR #54 交接](./handoffs/2026-10-31-reader-body-boundary.md#pr-54-核验2026-10-31)。
+
+后续应优先在同环境观测应用实际收到的响应流、请求取消与 DevTools 完成事件，区分保存失败和验收同步信号的问题。只有取得可复现反例后再单独修正；保留最终请求身份、真实服务器持久化和刷新后状态断言，不以扩大超时、忽略取消或反复重跑代替定位。
 
 ## 0.3.x 移除旧列表密度参数
 

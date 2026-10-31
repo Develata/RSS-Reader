@@ -7,7 +7,7 @@
 | 范围 | 命令/入口 | 证明的边界 |
 | --- | --- | --- |
 | Rust 规则与 Dioxus 接线 | cargo test --workspace --locked | 保留 main 全部用例，补写入规则、编辑状态、文件归属、逐字段数值提示；不证明 OS 控件 |
-| Reader 规则独立性 | python scripts/check_reader_rule_boundary.py | 用生产模块及其测试编译独立程序，仅链接现有 API/domain/serde，拒绝框架依赖；不创建替身状态或新 Cargo package。app 集成测试继续约束任务与发布顺序 |
+| Reader 规则独立性 | python scripts/check_reader_rule_boundary.py | 用生产模块及其测试编译独立程序，链接现有 API/domain/infra/serde/url，正文选择调用真实清洗；本机依赖图拒绝 Dioxus/web-sys/Wry/Tao。不创建替身状态、清洗器或新 Cargo package；app 集成测试继续约束任务与发布顺序 |
 | 返回与退出提示 | cargo test -p rssr-app --locked use_mobile_back_navigation | 普通 Rust 事件序列、Dioxus 提示投影、捕获完成/失败/超时/取消/路由变化与旧监听清理；不证明实际 Android 返回 |
 | 静态检查 | cargo fmt --all --check；cargo clippy --workspace --all-targets --locked -- -D warnings | 编译、格式与 lint |
 | 正式 Web | dx build --platform web --package rssr-app --locked --release --debug-symbols false | 当前 HTTP Backend 包；不使用 pages-demo |

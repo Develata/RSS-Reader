@@ -1,0 +1,118 @@
+{
+  "date": "2026-10-31",
+  "branch": "codex/reader-body-boundary",
+  "baseMain": "801f6337e81f498be16a3dab9ea7db3733dbbb82",
+  "evidenceRoot": "E:\\gitclone\\RSS-Reader-worktrees\\native-back-policy\\target\\reader-body-boundary-20261031",
+  "sourceIdentity": {
+    "sourceFilesSha256Lf": {
+      ".github/workflows/ci.yml": "ad58d86861cecf73ef7c1281edc1e27b655003cef0b4f8b407590f3f09334f96",
+      "crates/rssr-app/src/pages/reader_page/mod.rs": "b0645ed183c4a1ff4b20d0ddaff389b3bf69bfc859a25200fd0003b502e52366",
+      "crates/rssr-app/src/ui/runtime/reader.rs": "0fd234d9c3109fb40eeca5dd0b84b2ce3eb63e86b0c69ddf4e43347d83177e3d",
+      "crates/rssr-app/src/ui/runtime/reader/body.rs": "5e49f0da980babcf5e87bc6f814e733ea86c3abd4c4a109db9e4e0131cb8d071",
+      "crates/rssr-app/tests/reader_rules.rs": "ee5439c74563410a049707d2ef144abbb1d0d690351423d7675be92a8b7643ef",
+      "scripts/check_reader_rule_boundary.py": "749872f37b1ecbb99071472ec7a0fa4e02c0f51a4e5273277f8aaa6c3dc9727b"
+    },
+    "removedPath": "crates/rssr-app/src/pages/reader_page/support.rs",
+    "note": "Validated working tree from baseMain; no product changes after these runs. The containing commit records the exact sources."
+  },
+  "sourceEquivalence": {
+    "base": "801f6337e81f498be16a3dab9ea7db3733dbbb82",
+    "previousPath": "crates/rssr-app/src/pages/reader_page/support.rs",
+    "currentPath": "crates/rssr-app/src/ui/runtime/reader/body.rs",
+    "selectionFunctionUnchanged": true,
+    "selectionFunctionSha256Lf": "7ca437e072bed9af8742ef57225a7e7ac5f05702bea804e6c5e25c6a2bda3b96",
+    "runtimeExecutionUnchanged": true,
+    "pageSupportModuleRemoved": true,
+    "visibility": "private child module, pub(super) exports",
+    "productionImports": [
+      "rssr_infra::html",
+      "url::Url"
+    ]
+  },
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "dioxusCli": "0.7.9",
+    "node": "v24.22.1",
+    "browser": "155.0.8059.40"
+  },
+  "tests": {
+    "bodyBeforeMove": {
+      "passed": 8,
+      "firstAttempt": "7/8; corrected an expectation about relative links, no production fix"
+    },
+    "app": {
+      "passed": 440,
+      "ignored": 1,
+      "ignoredReason": "existing manual performance measurement",
+      "runtimeTranscript": "passed"
+    },
+    "independentRules": {
+      "passed": 35,
+      "compiledTargetCount": 176,
+      "externCrates": [
+        "rssr_api",
+        "rssr_domain",
+        "rssr_infra",
+        "serde",
+        "url"
+      ],
+      "frameworkFreeNativeBuild": true
+    },
+    "clippy": "passed",
+    "fmt": "passed",
+    "wasmCheck": "passed",
+    "actionlint": "passed",
+    "web": {
+      "passed": 6,
+      "viewports": [
+        1280,
+        390
+      ],
+      "serverBuild": "dev-801f6337e81f-dirty-8f2160d303f9",
+      "pageErrors": 0,
+      "consoleErrors": 0,
+      "isolatedLibrary": true
+    }
+  },
+  "artifacts": {
+    "serverSha256": "356e10d015aff2a4e5d044a3b862a13c19d111a08bcf5874aecd2b839947913d",
+    "fixtureSha256": "28e99cfe46a304034872be15cb591061bea4d711d31e25074b27c68fb233e069",
+    "publicFiles": 29,
+    "publicManifestSha256": "c55bc08a35cfabb53d33cab5e9c6160855b631c3369fc50fc02e042744a61919"
+  },
+  "primaryPreservation": {
+    "head": "020f9d4031febc709cf1fdca2e7360698ba19f26",
+    "branch": "feat/reading-workspace-20261024",
+    "headStatusIndexAndFilesUnchanged": true,
+    "filesAndMissingPaths": 41
+  },
+  "notRun": [
+    "remote CI for this branch",
+    "Windows WebView2 host",
+    "Android build and real host",
+    "physical keyboard / IME / accessibility",
+    "candidate native renderer"
+  ],
+  "evidenceSha256": {
+    "body-baseline-attempt-01.log": "ea4c65908b8903c2e2c0d2b6df291de3742d6980aca8bddd09c728eff1f3dbd2",
+    "body-baseline.log": "4b483c751d49a65cd1223ea70faf4eda26e1d7e14e91ca245f3cb6bc016e124f",
+    "app-tests.log": "fa0eca6b93197f381ebc637b92057aa2076eb693e0e0bb1a93446b2698a74510",
+    "rules.log": "88f26a3e675ae91ebdc9afaac3bdb9b4174908ea607efba651febf4a183b4035",
+    "rules-build/reader-rule-boundary.json": "bf0f74391b38d7a8d34d771085f922072fb8a68fe20d5deb43941d9829b49ee1",
+    "clippy.log": "d39b748d2beb07e70506c8f4b45d329d34d9bfa726437850e50df356f895f2bb",
+    "fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wasm-check.log": "860a2b3e244ce12f1a8d23dda54ee008c135c58b95f14d384c5b83b3835de8d9",
+    "web-build.log": "759b19453c1ff4f203a4e4d0118c12f351eecd6c1decc4bf976c3ca2be84d132",
+    "server-build.log": "aa37743ea9adf26488c2c08cbaddf599bde4a012067e51c2b297a0352cdf0389",
+    "fixture-build.log": "8262e2cbc71eba6bc77aa322abf21be46e3e747e371e395e5c6243d1029cc6e9",
+    "web-acceptance.log": "e4bb8b4cc08bb278cf3b25ed90e9b15f356cebef8165f48a039076427950809f",
+    "web-candidate-01/acceptance.json": "9825b5306525ad694ce10a2ed7e42d21b4e8b55b520e6e037e56d17fcefe70b7",
+    "actionlint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source-equivalence.json": "359b30c09d2a958ae0b6bc9f358ec9aed2e023af58514da9983d07040b1cc089",
+    "primary-before.json": "e53fefe06502724cb780aa04fff13747ed119329a7452945f7e6bf9d392d71e0",
+    "primary-preservation.json": "f1002cbf458aa0043b46e84f37fe55135a33ae225e30d83ca45f5257450dc132",
+    "public-sha256.json": "c55bc08a35cfabb53d33cab5e9c6160855b631c3369fc50fc02e042744a61919"
+  }
+}

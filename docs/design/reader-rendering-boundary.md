@@ -1,6 +1,6 @@
 # Reader 正文、资源与渲染边界
 
-核对日期：2026-10-31，基于 PR #50–#53 整合后的 main `ed0714d3`，包含 Reader 并发修复，产品源码与已验收的 `21f3468a` 相同。合并及验证状态见[维护状态](../current-status.md)。本文件记录实现、兼容要求和下一批边界；没有引入原生正文渲染器或新的公共接口。
+核对日期：2026-10-31。本轮基于 main `801f6337`，在 `codex/reader-body-boundary` 整理正文选择归属；主线已包含 PR #50–#53，分支与验证状态见[维护状态](../current-status.md)。本文件记录实现、兼容要求和下一批边界；没有引入原生正文渲染器或新的公共接口。
 
 Reader 规则能脱离 Dioxus 编译，说明这些状态转移可复用；正文仍包含 HTML，图片地址与锚点仍由当前宿主解释。用普通 Rust 类型承载数据，不等于数据的呈现语义已脱离 WebView。
 
@@ -9,7 +9,7 @@ Reader 规则能脱离 Dioxus 编译，说明这些状态转移可复用；正�
 | 层次 | 当前入口 | 数据与职责 | 替换界面时的边界 |
 | --- | --- | --- | --- |
 | 业务读取 | [ReaderService](../../crates/rssr-application/src/reader_service.rs)、现有 Backend | 同一快照取得文章、正文、导航、来源名；不暴露仓储指纹 | 继续复用业务读取、标记写入及错误语义 |
-| 正文选择 | [support.rs](../../crates/rssr-app/src/pages/reader_page/support.rs) | 从 HTML、文本、摘要选择 `ReaderBody::Html/Text`，调用共享清洗 | 是普通 Rust 函数，但输出仍针对 HTML/文本呈现；目前由 UI runtime 反向引用页面模块 |
+| 正文选择 | [runtime/reader/body.rs](../../crates/rssr-app/src/ui/runtime/reader/body.rs) | Reader 命令的私有普通 Rust 子模块，从 HTML、文本、摘要选择 `ReaderBody::Html/Text`，调用共享清洗 | 不依赖页面、Signal 或宿主；输出仍针对 HTML/文本呈现 |
 | HTML 处理 | [infra html/reader.rs](../../crates/rssr-infra/src/html/reader.rs) | 地址与懒加载规范化、清洗、MathML 与解析预算 | 继续复用唯一处理链路；不能因更换控件绕过或复制解析政策 |
 | 命令装配与页面状态 | [runtime/reader.rs](../../crates/rssr-app/src/ui/runtime/reader.rs)、[state.rs](../../crates/rssr-app/src/pages/reader_page/state.rs) | 生成加载回执；正文进入 `Arc<str>`，状态与访问归属沿用现有规则 | runtime/session 仍是当前装配；纯 reducer 与归属规则不另建状态副本 |
 | 正文呈现 | [ReaderPage](../../crates/rssr-app/src/pages/reader_page/mod.rs) | HTML 放入 `reader-body-html`，文本放入 `pre`；布局、选区和样式由当前宿主完成 | HTML 插入、排版及主题兼容需要由候选渲染器实际证明 |
@@ -74,17 +74,17 @@ DOM 适配器从正文中的 `p/h1/h2/h3/pre/li/blockquote` 选择块，用 `blo
 
 | 兼容面 | 现有依据 | 候选实现仍须证明 |
 | --- | --- | --- |
-| 内容选择、清洗与失败回退 | `support.rs` 的 4 项规则测试；infra tokenizer/stress 与 `wasm_reader_html_contract_harness` | 同一夹具选出同样的内容；长文、表格、代码、MathML、危险 URL 和超预算降级不丢失政策 |
+| 内容选择、清洗与失败回退 | `body.rs` 的 8 项规则测试（同一源码也进入独立检查）；infra tokenizer/stress 与 `wasm_reader_html_contract_harness` | 同一夹具选出同样的内容；长文、表格、代码、MathML、危险 URL 和超预算降级不丢失政策 |
 | 正文保留与异步归属 | Reader 纯 Rust 及 Dioxus 集成测试；现有宿主标记/切文回归 | 标记、重读、缓存完成、离页旧回执不销毁当前正文、选区和焦点 |
 | 图片与位置 | `reader_host_scenarios.cjs`、`reader_shortcut_scenarios.cjs`、真实 Windows/Android/正式 Web 回执 | 地址选择、图片失败、布局变化、锚点失效、窗口变化及卸载均在真实候选宿主验证 |
 | HTML/CSS 与主题 | [主题选择器契约](./theme-author-selector-reference.md)、[前端命令契约](./frontend-command-reference.md) | 既有 HTML 语义、官方主题与自定义 CSS 的支持边界；不能默认普通原生控件可解释 CSS，也不能静默删除兼容面 |
 | 链接 | 原文 URL 只接受 HTTP(S)；[external_link](../../crates/rssr-app/src/bootstrap/external_link.rs) 区分 Web 新上下文与原生系统处理 | 原文、正文链接、修饰键以及窗口/系统处理保持语义；本批没有重新执行外部系统处理器验收 |
 | 选择复制、IME、无障碍 | 当前 DOM 的选择、图片 alt/按钮角色、具名阅读区、live region 和焦点规则 | 实际文本选择/剪贴板、系统 IME、键盘与辅助技术；合成事件和普通 Rust 测试不能替代 |
 
-上述“现有依据”是回归入口，不代表已经测试任何候选渲染器。当前 27 项无框架检查不包含 `select_reader_body` 或 HTML 准备链；下一批须直接引用同一生产函数验证独立性，不能沿用这些检查作证明。测试应分别记录纯输入规则、宿主自动化、实际原生输入与未覆盖项；整合基线见[整合交接](../handoffs/2026-10-30-reader-integration.md)，新增回归及产物见[并发修复交接](../handoffs/2026-10-30-reader-race-fixes.md)。
+上述“现有依据”是回归入口，不代表已经测试任何候选渲染器。独立检查现直接编译 `select_reader_body`，链接真实 `rssr-infra` 清洗，与既有规则共 35 项；检查的是本机依赖图无 Dioxus/web-sys/Wry/Tao，不代表整个 infra 无 I/O 或 HTML 呈现已脱离宿主。迁移前后的正文规则、当前运行结果与覆盖缺口见[正文选择交接](../handoffs/2026-10-31-reader-body-boundary.md)。历史宿主回归仍按[并发修复交接](../handoffs/2026-10-30-reader-race-fixes.md)的源码与产物归属。
 
 ## 下一批建议
 
-已核实的下一条小边界是 `ui/runtime/reader.rs → pages/reader_page/support.rs`：非页面命令装配依赖页面目录中的正文选择。下一实现可将选择/准备规则归到调用方所属的正文模块，直接复用现有 infra 清洗，使用同一生产函数验证候选顺序与回退；完成标准是去掉这条反向依赖并可独立调用，而不是增加文件数量。
+命令装配对页面 `support.rs` 的正文选择引用已在本轮分支消除：唯一调用方持有私有 `reader/body.rs`，函数体与主线保持一致。runtime 仍使用页面 intent 和加载结果类型装配回执；本轮没有声称全部 runtime 已脱离页面或 Dioxus。
 
-这一步继续保持当前 HTML 输出、页面状态、选择复制、主题和资源本地化时机。完整原生正文渲染器的选型、通用 Host 接口或内容模型迁移，要等具体候选及上述兼容证据再作决策。
+下一步先 review 并整合这个有界样本；后续提取应由实际复用阻碍驱动，不继续按文件数量拆分。保持当前 HTML 输出、页面状态、选择复制、主题和资源本地化时机；完整原生正文渲染器的选型、通用 Host 接口或内容模型迁移，要等具体候选及上述兼容证据再作决策。

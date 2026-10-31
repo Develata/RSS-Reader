@@ -1,6 +1,6 @@
 # 原生界面前置模块边界
 
-核对日期：2026-10-30。页面生命周期等模块已通过 PR #40 进入 main；返回导航与提示策略已通过 PR #46 合入 `6a75fb83`；App 设置读取通过 PR #47 合入 `663ef4ee`。版本与验证状态统一见[维护状态](../current-status.md)。本文件不代表已替换 WebView，也不改变七个 crate 的职责。
+核对日期：2026-10-31。页面生命周期等模块已通过 PR #40 进入 main；返回导航与提示策略已通过 PR #46 合入 `6a75fb83`；App 设置读取通过 PR #47 合入 `663ef4ee`。版本与验证状态统一见[维护状态](../current-status.md)。本文件不代表已替换 WebView，也不改变七个 crate 的职责。
 
 ## 近期目标与推进顺序
 
@@ -19,7 +19,7 @@
 - 同一访问内，已读与收藏各自有同步 pending gate。按钮与快捷键共用 session 准入，同种写入完成前忽略重复输入，另一种标记仍可操作；成功或失败都释放原访问的门禁，旧访问回执不能释放新访问门禁。门禁只存于现有 `ReaderPageState`，不建立跨页写入队列。此行为修复及回归见[Reader 并发问题交接](../handoffs/2026-10-30-reader-race-fixes.md)。
 - 图片开关状态只接收资源引用与替代文本。当前宿主继续解释 rendered source、图片点击/键盘激活、dialog 焦点、滚动锁定、关闭后的恢复和卸载；快捷键与切文前位置捕获仍由宿主同步执行。
 - 图片激活消息携带已有的 `load_generation` 文本值；普通 Rust 检查访问身份，hook 再确认当前正文已就绪后才打开。换文章及重新访问同一文章时，迟到消息均不能打开旧图片。图片状态仍只保存资源引用与替代文本，不复制 Reader 状态或新增访问计数器。
-- `scripts/check_reader_rule_boundary.py` 用同一生产源码和既有测试编译独立测试程序，仅显式链接 `rssr-api`、`rssr-domain`、serde；依赖构建不得出现 Dioxus/web-sys/Wry/Tao。不创建 Cargo package，也不使用替身状态。CI 在 `rssr-api` job 执行此检查；完整 app 测试继续验证装配。具体证据见[本批交接](../handoffs/2026-10-30-reader-rule-boundary.md)。
+- `scripts/check_reader_rule_boundary.py` 用同一生产源码和既有测试编译独立测试程序，显式链接 `rssr-api`、`rssr-domain`、`rssr-infra`、serde 和 url；本机依赖构建不得出现 Dioxus/web-sys/Wry/Tao。正文选择加入后使用真实 infra 清洗，不创建 Cargo package 或替身状态/清洗器。CI 的现有检查步骤移到 `rssr-infra` job 复用依赖缓存；完整 app 测试继续验证装配。原批证据见[规则交接](../handoffs/2026-10-30-reader-rule-boundary.md)，扩充后的 35 项见[正文选择交接](../handoffs/2026-10-31-reader-body-boundary.md)。
 
 ## Reader 宿主入口（2026-10-30）
 
@@ -55,7 +55,7 @@ flowchart TD
 
 共享的是规则和脚本文本；页面和 App 继续各自持有监听生命周期，原回调及状态归属不变。此次移动的等价核对和三端基线/候选结果见[模块归属交接](../handoffs/2026-10-30-reader-shortcut-cohesion.md)。
 
-PR #50–#52 已按依赖顺序合入 main `dbbaf390`，合并树与各 head 相同，见[整合交接](../handoffs/2026-10-30-reader-integration.md)。正文内容、图片资源、阅读锚点及兼容要求现有[专门契约](./reader-rendering-boundary.md)；下一条有界依赖是命令装配对页面 `support.rs` 的正文选择引用。候选渲染器另行实测，不从本批推断整页已可直接迁移。
+PR #50–#52 已按依赖顺序合入 main `dbbaf390`，合并树与各 head 相同，见[整合交接](../handoffs/2026-10-30-reader-integration.md)。正文内容、图片资源、阅读锚点及兼容要求现有[专门契约](./reader-rendering-boundary.md)。10 月 31 日分支 `codex/reader-body-boundary` 将正文选择归入唯一调用方的私有 `ui/runtime/reader/body.rs`，去除对页面 `support.rs` 的引用，保持函数体与 infra 清洗原样；runtime 的页面回执装配仍在原处。候选渲染器另行实测，不从本批推断整页已可直接迁移。
 
 ## 已有可独立测试的 Rust 规则
 

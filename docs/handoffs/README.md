@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| Reader 正文选择模块与 PR #54 | [私有模块归属、行为保持与 PR 核验](./2026-10-31-reader-body-boundary.md) |
 | PR #53 合并与 main 核验 | [合并身份、主线 CI 与工作区保全](./2026-10-31-reader-race-merge.md) |
 | Reader 并发问题测试与修复 | [旧图片消息、标记写入乱序的复现及三端回归](./2026-10-30-reader-race-fixes.md) |
 | Reader 三批整合与正文渲染边界 | [PR #50–#52 合并、主线核验与兼容契约](./2026-10-30-reader-integration.md) |
@@ -35,6 +36,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-10-31 | [Reader 正文选择归属与行为保持验证](./2026-10-31-reader-body-boundary.md) |
 | 2026-10-31 | [PR #53 合并、main CI 与交接更新](./2026-10-31-reader-race-merge.md) |
 | 2026-10-30 | [Reader 并发问题复现、修复与三端验收](./2026-10-30-reader-race-fixes.md) |
 | 2026-10-30 | [Reader 三批整合与正文、资源、锚点边界](./2026-10-30-reader-integration.md) |
