@@ -75,6 +75,12 @@
 - 同一次运行中滚轮失效：本分支基于的 main 尚未包含 PR #61（Linux 滚轮与滚动卡顿修复，仍为 open），与本次改动无关
 - 服务器 Web 回归（`run_server_web_regression.sh`、acceptance）：未执行，脚本只做了语法检查
 
+### CI（PR #63）
+
+- 06a53afb：31 通过、1 跳过、3 失败。`web-ui (default)` 与 `web-ui (amethyst-glass)` 都在 `checkEntriesInitialization` 等不到 `entry-card-title`，`lint-and-test` 是汇总门禁随之失败。
+- 与主题改动无关：main `287256da`（仅文档）同样失败。`mobile-ui-short` 种子文章固定发布于 2026-08-01，首次读取失败后文章页用默认 3 个月归档窗口，11-01 起全部被归档。
+- 处理：原样带入 PR #61 分支的 `e27a2d86` 中对 `rssr_small_viewport_assertions.mjs` 的修改（该检查把种子文章改为前一天发布）。本机只做了 `node --check`，浏览器回归由 CI 验证。#61 合并时同一处改动相同，不冲突。
+
 ## 结果
 
 - 复审项已处理，Develata 已授权在复审无问题后开 PR 并合并。
