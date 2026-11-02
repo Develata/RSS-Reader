@@ -15,13 +15,13 @@ _Actual Web interface from main (2026-10-31), with sample subscriptions and arti
 
 RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Desktop and Android keep a library on the device. Self-hosted Web keeps one library on the server, shared by browsers and the CLI using that server data directory. JSON, OPML, and optional WebDAV exchange subscriptions and settings between separate libraries.
 
-The current release is [v0.2.1](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.1). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
+The current release is [v0.2.2](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.2). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
 
-Before upgrading from v0.2.0, close the app and back up the library. This version adds manual archiving; v0.2.0 cannot open the upgraded schema. To roll back, restore the pre-upgrade backup as well as the old executable.
+v0.2.2 does not change the library schema; built-in themes are reduced to Default and Amethyst Glass, and saved CSS of retired themes keeps applying (see the [release notes](./releases/v0.2.2.md)). Before upgrading from v0.2.0, close the app and back up the library. v0.2.1 added manual archiving; v0.2.0 cannot open the upgraded schema. To roll back, restore the pre-upgrade backup as well as the old executable.
 
 Android has no in-app full-library backup or rollback flow. Configuration exports exclude articles and read/favorite state; uninstalling clears local data, so do not uninstall and reinstall to roll back. On first launch, a supported legacy directory is copied and verified while the original is retained. Migration of real legacy Android data still needs separate acceptance.
 
-v0.2.1 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
+v0.2.2 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
 
 [Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
@@ -39,9 +39,9 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 
 Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a website homepage, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table matches the published `v0.2.1` assets. Four platform CLI packages and an Android AAB are also available. All 14 public assets match both CI files and GitHub digests. Android's APK/AAB uses the same release certificate as v0.2.0; replacement installation of the signed APK passed in an isolated emulator. Earlier physical-device checks used a test package and do not certify a signed-package upgrade of real legacy Android data. Physical macOS interaction, system IME and other-device coverage remain limited; see the [release verification record](./handoffs/2026-10-28-v0.2.1-release.md). Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
+The table lists `v0.2.2` assets; four platform CLI packages and an Android AAB are also published, 14 assets in total. For this release only the Linux assets were downloaded and checked (digests, version, build id); other platform packages were not re-tested by hand. Android certificate and emulator upgrade checks are from v0.2.1; see the [v0.2.2 release record](./handoffs/2026-11-02-v0.2.2-release.md) and the [v0.2.1 verification record](./handoffs/2026-10-28-v0.2.1-release.md). Physical macOS interaction, system IME and other-device coverage remain limited. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
 
-**Linux package:** the `v0.2.1` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
+**Linux package:** the `v0.2.2` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
 
