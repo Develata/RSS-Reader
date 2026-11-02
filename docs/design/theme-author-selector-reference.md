@@ -525,6 +525,8 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
   Amethyst Glass 是参考实现。只写 `:root` 的自定义主题会在暗色外观下
   混入默认暗色配色；只想要单一配色时，把同一组变量同时写进 `:root`、
   `.theme-dark` 与 `.theme-system`，此时设置页的「外观」不再起作用。
+- 暗色的 `--button-secondary-bg` 是中性石板色字面量，不随 `--accent` 派生；
+  自定义主题在暗色里想要带强调色的次按钮，需要自行覆写它。
 - `body` 在 `.app-shell` 之外，读不到主题类上的变量：想让视口底纹随
   亮暗切换，需要用 `body:has(.theme-dark)`（及 `.theme-system` 的媒体查询
   变体）显式声明，或只覆写 `--app-bg` / `--app-bg-dark`。
