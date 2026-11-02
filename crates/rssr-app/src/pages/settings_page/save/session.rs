@@ -165,8 +165,8 @@ mod tests {
                 draft.reader_font_scale = 1.1;
                 draft.refresh_interval_minutes = 99;
             });
-            facade.apply_builtin_theme("newsprint");
-            assert_eq!(theme.appearance().custom_css, preset_css("newsprint"));
+            facade.apply_builtin_theme("amethyst-glass");
+            assert_eq!(theme.appearance().custom_css, preset_css("amethyst-glass"));
             assert_eq!(theme.appearance().theme, ThemeMode::Dark);
             assert_eq!(theme.appearance().reader_font_scale, 1.1);
             assert_eq!(*theme.settings.peek(), stored);
@@ -176,7 +176,7 @@ mod tests {
             facade.set_custom_css(imported.clone());
             assert_eq!(
                 theme.appearance().custom_css,
-                preset_css("newsprint"),
+                preset_css("amethyst-glass"),
                 "typing is not a preview"
             );
             facade.preview_custom_css(imported.clone(), "已载入 CSS。");
@@ -405,7 +405,7 @@ mod tests {
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             session.page.edit(|draft| draft.theme = ThemeMode::Light);
-            session.page.preset_choice().set("newsprint".into());
+            session.page.preset_choice().set("amethyst-glass".into());
             let called = Rc::new(Cell::new(false));
             let check = Rc::clone(&called);
             session.save_with("second save".into(), move |_| {
@@ -420,7 +420,7 @@ mod tests {
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(theme.settings.peek().theme, ThemeMode::Dark);
             assert_eq!(session.page.draft().theme, ThemeMode::Light);
-            assert_eq!(session.page.preset_choice().peek().as_str(), "newsprint");
+            assert_eq!(session.page.preset_choice().peek().as_str(), "amethyst-glass");
             assert!(session.page.status().contains("尚未保存"));
             assert!(!session.snapshot().pending_save);
         });
@@ -518,14 +518,14 @@ mod tests {
         });
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
-            session.page.preset_choice().set("atlas-sidebar".into());
+            session.page.preset_choice().set("amethyst-glass".into());
         });
         sender.send(true).expect("persist normalized value");
         dom.render_immediate_to_vec();
         dom.in_scope(ScopeId::APP, || {
             assert_eq!(session.page.draft().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
             assert_eq!(theme.settings.peek().entries_page_size, DEFAULT_ENTRIES_PAGE_SIZE);
-            assert_eq!(session.page.preset_choice().peek().as_str(), "atlas-sidebar");
+            assert_eq!(session.page.preset_choice().peek().as_str(), "amethyst-glass");
             assert!(!session.page.status().contains("尚未保存"));
         });
     }

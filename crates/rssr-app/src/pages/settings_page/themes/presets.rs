@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 
 use crate::pages::settings_page::facade::SettingsPageFacade;
 
-use super::theme_preset::builtin_theme_presets;
+use super::theme_preset::{RETIRED_PRESET_KEY, builtin_theme_presets};
 
 #[component]
 pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
@@ -24,13 +24,18 @@ pub(super) fn ThemePresetSections(facade: SettingsPageFacade) -> Element {
             if facade.preset_choice() == "custom" {
                 p { "data-slot": "page-intro", "当前草稿使用自定义 CSS，可在高级设置中编辑。" }
             }
+            if facade.preset_choice() == RETIRED_PRESET_KEY {
+                p { "data-slot": "page-intro",
+                    "当前使用已下线的内置主题，外观设置可能不起作用。选择下方主题并保存即可更换。"
+                }
+            }
             div { "data-layout": "theme-gallery",
                 article {
                     "data-layout": "theme-card",
                     "data-state": default_state,
                     "data-theme-preset": "none",
                     h4 { "data-slot": "theme-card-title", "默认主题" }
-                    p { "data-slot": "page-intro", "使用上方选择的浅色、深色或系统外观。" }
+                    p { "data-slot": "page-intro", "暖纸浅色与墨青深色，随上方外观切换。" }
                     button {
                         class: "button",
                         "data-variant": default_variant,

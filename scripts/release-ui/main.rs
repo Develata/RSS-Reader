@@ -125,7 +125,7 @@ impl Report {
                 stage.detail.replace(['\n', '\r', '|'], " ")
             ));
         }
-        summary.push_str("\n## 日志与产物\n\n- rssr-web 服务日志：rssr-web.log\n- 固定 smoke 目录：server-web-theme-matrix / server-web-regression / server-web-feed-smoke\n\n## 结果记录补充\n\n- 执行环境：\n- env-limited 项：\n- host / sqlite contract harness：\n- wasm / browser contract harness：\n- /entries：\n- /feeds：\n- /settings：\n- /reader/{entry_id}：\n- reader seed smoke：\n- 默认主题：\n- Atlas Sidebar：\n- Newsprint：\n- Amethyst Glass：\n- Midnight Ledger：\n- 是否允许发布（需手工结论）：\n");
+        summary.push_str("\n## 日志与产物\n\n- rssr-web 服务日志：rssr-web.log\n- 固定 smoke 目录：server-web-theme-matrix / server-web-regression / server-web-feed-smoke\n\n## 结果记录补充\n\n- 执行环境：\n- env-limited 项：\n- host / sqlite contract harness：\n- wasm / browser contract harness：\n- /entries：\n- /feeds：\n- /settings：\n- /reader/{entry_id}：\n- reader seed smoke：\n- 默认主题（浅色 / 深色）：\n- Amethyst Glass（浅色 / 深色）：\n- 是否允许发布（需手工结论）：\n");
         fs::write(self.log_dir.join("summary.md"), summary)
     }
 }

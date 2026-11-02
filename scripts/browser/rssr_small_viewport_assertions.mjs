@@ -1423,25 +1423,6 @@ async function checkNativeReader(client) {
   await captureArtifact(client, 'native-reader');
 }
 
-async function checkNarrowSidebarSearch(client) {
-  await setViewport(client, 1280, 800, false, 1);
-  for (const themePreset of ['atlas-sidebar', 'atlas-sidebar-v1']) {
-    await seedAndNavigate(client, 'home-reader', '/entries', '[data-page="entries"]', themePreset);
-    await clickSelector(client, '[data-action="toggle-search"]');
-    const entriesInput = await searchInputEvidence(client);
-    assertThat(`${themePreset} narrow sidebar gives search its own row without page overflow`,
-      entriesInput.width >= 140 && await evaluate(client,
-        `document.documentElement.scrollWidth <= innerWidth + 1 && getComputedStyle(document.querySelector('[data-layout="app-nav-topline"]')).flexWrap === 'wrap'`),
-      entriesInput);
-    if (themePreset.endsWith('-v1')) await captureArtifact(client, 'legacy-atlas-search-entries');
-    await navigate(client, `${base}/entries/2`);
-    await selectorExists(client, '[data-slot="reader-body-html"]');
-    await clickSelector(client, '[data-action="toggle-search"]');
-    await searchInputEvidence(client);
-    if (themePreset.endsWith('-v1')) await captureArtifact(client, 'legacy-atlas-search-reader');
-  }
-}
-
 // --- Formerly the Playwright acceptances (nav collapse, reading position, reader metadata and
 // time); seeds that used to be edited in browser storage are now edited before the library is
 // built (`useSeed`'s `edit`).
@@ -1476,7 +1457,7 @@ async function checkNavCollapse(client) {
     assertThat(`${label}: toggle is a touch target at the right edge`, target.width >= 44 && target.height >= 44 &&
       target.x >= expanded.x + expanded.width - target.width - 20, {expanded, target});
     assertThat(`${label}: expanded navigation fits`, await fits());
-    if (['none', 'atlas-sidebar'].includes(theme)) await captureArtifact(client, `nav-${theme}-${navWidth}-expanded`);
+    if (['none', 'amethyst-glass'].includes(theme)) await captureArtifact(client, `nav-${theme}-${navWidth}-expanded`);
     await clickSelector(client, '[data-action="toggle-search"]');
     await selectorExists(client, '[data-field="entry-search"]');
     assertThat(`${label}: search stays usable beside the collapse control`, (await rect('[data-field="entry-search"]')).width >= 140);
@@ -1496,7 +1477,7 @@ async function checkNavCollapse(client) {
     assertThat(`${label}: collapsed header is small and collapses toward the left`,
       collapsed.width <= 45 && collapsed.height <= 45 && collapsed.x <= expanded.x + 1, {expanded, collapsed});
     assertThat(`${label}: collapsed navigation fits`, await fits());
-    if (['none', 'atlas-sidebar'].includes(theme)) await captureArtifact(client, `nav-${theme}-${navWidth}-collapsed`);
+    if (['none', 'amethyst-glass'].includes(theme)) await captureArtifact(client, `nav-${theme}-${navWidth}-collapsed`);
     await key(client, 'Enter', 'Enter');
     await waitFor(client, `document.querySelector('[data-layout="app-nav-shell"]').dataset.state === 'normal'`);
     await clickSelector(client, '[data-action="toggle-search"]');
@@ -1816,10 +1797,7 @@ async function checkOpenOriginal(client) {
 const THEME_MATRIX = [
   // [preset, the theme's mark in the page (its accent colour)]
   ['', ''],
-  ['atlas-sidebar', '#b24c3d'],
-  ['newsprint', '#8f3f2b'],
   ['amethyst-glass', '#8b5cf6'],
-  ['midnight-ledger', '#53c0bb'],
 ];
 
 async function checkReaderThemeMatrix(client) {
@@ -1949,10 +1927,9 @@ async function run() {
       await checkReadingPreferencesAndFeedInput(client);
       await checkShortDirectory(client);
       await checkDesktop(client);
-      await checkNarrowSidebarSearch(client);
       await checkNavCollapse(client);
       // The default CI theme runs the deeper behavioral contracts once; the
-      // existing five-theme layout coverage remains in the shared smoke above.
+      // existing two-theme layout coverage remains in the shared smoke above.
       if (!preset) {
         await checkReadingPosition(client);
         await checkReaderMetadataAndTime(client);

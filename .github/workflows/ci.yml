@@ -285,7 +285,7 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        preset: [default, atlas-sidebar, newsprint, amethyst-glass, midnight-ledger]
+        preset: [default, amethyst-glass]
     env:
       PRESET: ${{ matrix.preset }}
       ACCEPTANCE_LONG: ${{ inputs.acceptance_long && 'true' || 'false' }}

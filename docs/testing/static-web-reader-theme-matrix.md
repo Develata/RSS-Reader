@@ -7,7 +7,7 @@ bash scripts/run_server_web_regression.sh --suite theme-matrix
 bash scripts/run_server_web_regression.sh --suite theme-matrix --release --port 8103
 ```
 
-默认依次检查默认主题、Atlas Sidebar、Newsprint、Amethyst Glass、Midnight Ledger 的真实 `/entries/2` 阅读页，保存 HTML、PNG、`assertions.json` 与 `summary.md`，以及构建、服务器与浏览器日志。默认产物位于 `target/server-web-regression/theme-matrix/<timestamp>/`。
+默认依次检查默认主题与 Amethyst Glass 的真实 `/entries/2` 阅读页，保存 HTML、PNG、`assertions.json` 与 `summary.md`，以及构建、服务器与浏览器日志。默认产物位于 `target/server-web-regression/theme-matrix/<timestamp>/`。
 
 `--skip-build` 只复用已有页面；服务器与夹具工具仍会构建。三者应来自同一源码版本，页面请求标识必须与服务器完整相等；换 commit 或 feature 后重建页面。
 

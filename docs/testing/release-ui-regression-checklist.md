@@ -68,7 +68,7 @@ bash scripts/run_release_ui_regression.sh --debug --port 8091 --with-rssr-web --
 bash scripts/run_release_ui_regression.sh --debug --port 8091 --full
 ```
 
-脚本内部会串行执行下面这组自动化检查。`--full` 包含五主题 Reader 截图和默认主题小视口断言，不等于 CI 的五主题全页面矩阵。与 CI 对齐时还需分别对四套内置主题运行 small viewport smoke（`--preset <key>`），以及本次变更涉及的手工/实机项。
+脚本内部会串行执行下面这组自动化检查。`--full` 包含两主题 Reader 截图和默认主题小视口断言，不等于 CI 的两主题全页面矩阵。与 CI 对齐时还需对内置主题运行 small viewport smoke（`--preset <key>`），以及本次变更涉及的手工/实机项。
 
 至少先通过：
 
@@ -125,11 +125,8 @@ bash scripts/run_server_web_regression.sh --suite acceptance --long
 
 主题至少覆盖：
 
-- 默认主题
-- `Atlas Sidebar`
-- `Newsprint`
-- `Amethyst Glass`
-- `Midnight Ledger`
+- 默认主题（浅色、深色、跟随系统）
+- `Amethyst Glass`（浅色、深色、跟随系统）
 
 如果要把多主题阅读页 回归固定化，直接用：
 

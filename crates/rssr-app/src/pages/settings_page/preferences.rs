@@ -27,7 +27,7 @@ pub(crate) fn ReadingPreferencesSection(facade: SettingsPageFacade) -> Element {
             }
             div { "data-layout": "settings-form-grid",
                 div { "data-slot": "settings-form-grid-item",
-                    label { class: "field-label", r#for: "settings-theme-mode", "主题" }
+                    label { class: "field-label", r#for: "settings-theme-mode", "外观" }
                     select {
                         id: "settings-theme-mode",
                         name: "theme_mode",

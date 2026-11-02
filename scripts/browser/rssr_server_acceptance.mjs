@@ -642,20 +642,20 @@ define('settings-preview-explicit-save', {}, async (s) => {
   const preview = main.traffic.mark();
   s.check('advanced CSS is folded initially; there is one set of five theme cards',
     !(await shown(main, '[data-field="custom-css"]'))
-    && await evaluate(main.client, `document.querySelectorAll('[data-layout="theme-gallery"] [data-layout="theme-card"]').length === 5
-      && document.querySelectorAll('button[data-action="apply-theme-preset"]').length === 4
+    && await evaluate(main.client, `document.querySelectorAll('[data-layout="theme-gallery"] [data-layout="theme-card"]').length === 2
+      && document.querySelectorAll('button[data-action="apply-theme-preset"]').length === 1
       && !document.querySelector('[data-field="preset-theme-select"]')`));
 
   await choose(main, 'theme-mode', 'dark');
   await choose(main, 'startup-view', 'last_feed');
   await fillField(main.client, '[data-field="refresh-interval"]', '75');
-  await pointerClick(main.client, 'button[data-action="apply-theme-preset"][data-theme-preset="newsprint"]');
-  await waitFor(main.client, `document.querySelector('#user-custom-css')?.textContent.includes('Newsprint')
+  await pointerClick(main.client, 'button[data-action="apply-theme-preset"][data-theme-preset="amethyst-glass"]');
+  await waitFor(main.client, `document.querySelector('#user-custom-css')?.textContent.includes('Amethyst Glass')
     && document.querySelector('.app-shell')?.classList.contains('theme-dark')
     && document.querySelector('.app-shell')?.dataset.density === 'comfortable'
     && !document.querySelector('[data-field="list-density"]')`);
   s.check('the chosen card exposes selected state and includes its visible label in its accessible name',
-    await evaluate(main.client, `(() => { const button = document.querySelector('button[data-theme-preset="newsprint"]');
+    await evaluate(main.client, `(() => { const button = document.querySelector('button[data-theme-preset="amethyst-glass"]');
       return button?.getAttribute('aria-pressed') === 'true'
         && button.getAttribute('aria-label').includes(button.textContent.trim()); })()`));
   await pointerClick(main.client, '[data-action="clear-custom-css"]');
