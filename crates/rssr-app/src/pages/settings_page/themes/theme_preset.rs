@@ -35,6 +35,7 @@ const RETIRED_PRESET_CSS: &[&str] = &[
     include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v1.css"),
     include_str!("../../../../../../assets/themes/legacy/newsprint-v2.css"),
     include_str!("../../../../../../assets/themes/legacy/newsprint-v1.css"),
+    include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v4.css"),
     include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v3.css"),
     include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v2.css"),
     include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v1.css"),

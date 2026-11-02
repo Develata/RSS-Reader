@@ -81,6 +81,13 @@
 - 与主题改动无关：main `287256da`（仅文档）同样失败。`mobile-ui-short` 种子文章固定发布于 2026-08-01，首次读取失败后文章页用默认 3 个月归档窗口，11-01 起全部被归档。
 - 处理：原样带入 PR #61 分支的 `e27a2d86` 中对 `rssr_small_viewport_assertions.mjs` 的修改（该检查把种子文章改为前一天发布）。本机只做了 `node --check`，浏览器回归由 CI 验证。#61 合并时同一处改动相同，不冲突。
 
+### 与 PR #61 合并（main 7b406560）
+
+- 合并 #63 前 main 已合入 #61（Linux 滚轮与滚动卡顿）。冲突两处：`theme_preset.rs`、`docs/handoffs/README.md`。
+- #61 把 Midnight Ledger 的两层全页光晕改为角落固定区域（`500px` / `460px`，`no-repeat`），因为未合成的 WebKitGTK 滚动每帧重绘整个视口。本分支的默认深色 `--app-bg-dark` 抄的是旧 Midnight 的全页光晕，合并时按同样写法改为角落区域，否则默认深色会让卡顿复现。
+- #61 改版后的 Midnight 文本冻结为 `legacy/midnight-ledger-v4.css`，列入下线列表；`legacy/midnight-ledger-v3.css` 保持 #61 之前的文本（与 #61 冻结的 v3 一致）。
+- #61 的 `checkEntriesInitialization` 修复与本分支带入的 `e27a2d86` 相同，自动合并无冲突。
+
 ## 结果
 
 - 复审项已处理，Develata 已授权在复审无问题后开 PR 并合并。

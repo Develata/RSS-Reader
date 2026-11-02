@@ -17,6 +17,21 @@ document.addEventListener("DOMContentLoaded", () => {
 }, { once: true });
 "#;
 
+/// WebKitGTK restarts its smooth-scroll animation on every wheel event, so a fast wheel
+/// (hundreds of events a second) moves the page only a few pixels per frame. Let wheel steps
+/// scroll directly; WebView2 and WKWebView keep their own scrolling.
+#[cfg(target_os = "linux")]
+pub(crate) fn use_direct_wheel_scrolling() {
+    use dioxus::desktop::wry::WebViewExtUnix;
+    use webkit2gtk::{SettingsExt, WebViewExt};
+
+    dioxus::prelude::use_hook(|| {
+        if let Some(settings) = dioxus::desktop::window().webview.webview().settings() {
+            settings.set_enable_smooth_scrolling(false);
+        }
+    });
+}
+
 pub(crate) fn head() -> String {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
 

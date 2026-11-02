@@ -34,7 +34,7 @@ bash scripts/run_server_web_regression.sh --suite acceptance --long --debug --sk
 
 默认从当前源码构建页面、服务器与夹具工具。`--skip-build` 只跳过页面；Cargo 仍构建服务器和夹具工具。提交、修改源码或切换 feature 后应重建页面。用已有产物时同时传 `--server-bin`、`--fixture-bin`、`--static-dir`，并记录各产物来源。每次载入夹具后，驱动要求页面请求的完整构建标识与服务器启动标识一致；显式 `RSSR_BUILD_ID` 必须同时交给两端。
 
-每个种子使用新资料库，服务器启动刷新结束后才开始交互；固定 feed 由独立服务提供，无需登录。测试出站规则只放行 `127.0.0.1`，拒绝其他 IPv4 与全部 IPv6，不代表部署时的出站策略。不要用日常资料库作为夹具目录。
+每个种子使用新资料库，服务器启动刷新结束后才开始交互；固定 feed 由独立服务提供，无需登录。测试出站规则只放行 `127.0.0.1`，拒绝其他 IPv4 与全部 IPv6，不代表部署时的出站策略。不要用日常资料库作为夹具目录。页面时钟固定从 `2026-10-15T12:00:00Z` 起走（`scripts/browser/cdp_session.mjs` 的 `PINNED_PAGE_TIME`，经 `ServerPage.start()` 注入）；种子日期固定，归档窗口和日期分组因此不随运行当天变化。改种子日期时一并核对这个时刻；服务器、Cookie 过期仍用真实时间。
 
 HTTP 默认端口 8091，CDP 为该端口加 10000；预先拒绝端口占用，不借用已有服务。用 `--port`、`--chrome-bin` / `CHROME_BIN`、`NODE_BIN`、`--log-dir` 指定本机环境。默认 regression 视口 360×800 @ DPR 3，部分检查切到桌面；acceptance 固定 1280×800 @ DPR 1。`--preset`、`--directory-only` 仅用于 regression，`--long` 仅用于 acceptance。
 

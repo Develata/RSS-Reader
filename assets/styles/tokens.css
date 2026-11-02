@@ -39,9 +39,13 @@
 
   /* ---- 第 2 层：应用底色 ---- */
   --app-bg: #f4efe6;
+  /* 光晕只铺在角落的固定区域：未合成的 WebKitGTK 滚动时每帧重绘整个视口，
+   * 铺满全页的径向渐变会把帧时间拖到约 30ms。 */
   --app-bg-dark:
-    radial-gradient(circle at top left, rgba(83, 192, 187, 0.12), transparent 22%),
-    radial-gradient(circle at bottom right, rgba(89, 122, 170, 0.1), transparent 20%),
+    radial-gradient(circle at top left, rgba(83, 192, 187, 0.12), transparent 500px)
+      top left / 500px 500px no-repeat,
+    radial-gradient(circle at bottom right, rgba(89, 122, 170, 0.1), transparent 460px)
+      bottom right / 460px 460px no-repeat,
     linear-gradient(180deg, #0f1518 0%, #11181c 46%, #0f1519 100%);
 
   /* ---- 第 2 层：边线 ---- */
