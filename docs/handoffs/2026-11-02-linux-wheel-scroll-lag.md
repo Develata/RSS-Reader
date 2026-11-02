@@ -4,7 +4,7 @@
 - 作者 / Agent：Claude Code (Opus 5.5)
 - 分支：claude/linux-lag-scroll-bug-1935d4
 - 当前 HEAD：f6c4a0cd（提交前）
-- 相关 commit：pending
+- 相关 commit：0bc61f63
 - 相关 tag / release：问题在 v0.2.1 Linux 发布版复现
 - 状态：`validated`（单机验证）
 
