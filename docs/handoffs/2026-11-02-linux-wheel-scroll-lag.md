@@ -43,6 +43,13 @@ v0.2.1 Linux 桌面版在“全部文章”页鼠标滚轮完全失效，并在�
 - 验证：运行时以即时滚动替代后，用户确认快速滚动跟手。
 - 修复：Linux 下经 wry 取得 WebKitGTK `Settings`，`set_enable_smooth_scrolling(false)`（宿主层，未用 JS 劫持滚轮）。代价是慢速滚动按格跳动，用户确认可接受。
 
+### CI：Web 回归里的日期定时失效（与本修复无关）
+
+- PR #61 与 main `287256da`（仅文档）的 5 个 `web-ui` 在同一处失败：`checkEntriesInitialization` 让首次读取失败后，等不到 `entry-card-title`。main `f6c4a0cd` 在 10-31 用同一 Chrome（156.0.8078.80）全部通过。
+- 原因：首次读取（含偏好）失败时，文章页停在 `UserSettings::default()` 的 3 个月归档窗口；`mobile-ui-short` 种子文章固定发布于 2026-08-01。11-01 起分界越过该日期，全部文章被归档。
+- 修复：该检查用现有 `edit` 钩子把种子文章发布时间改为前一天，不再依赖当前日期；产品的失败回退行为不变。
+- 本机验证（release 构建，本机 Google Chrome，非 CI 的 Chrome for Testing）：`scripts/run_server_web_regression.sh` 默认 regression、`theme-matrix`、`feed-smoke`、`acceptance` 与 newsprint / atlas-sidebar / midnight-ledger / amethyst-glass 四个预设全部通过。
+
 ## 验证与验收
 
 ### 自动化验证
