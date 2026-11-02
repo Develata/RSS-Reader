@@ -21,7 +21,8 @@
   padding: 18px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, var(--surface-card), var(--surface-tint));
+  /* 表面 token 可能是渐变（背景而非颜色），只能作为底层，不能当色标。 */
+  background: linear-gradient(180deg, transparent, var(--surface-tint)), var(--surface-card);
   box-shadow: var(--shadow-card);
 }
 
@@ -112,7 +113,7 @@
   padding: 18px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, var(--surface-tint), var(--surface-veil));
+  background: linear-gradient(180deg, var(--surface-tint), transparent), var(--surface-veil);
   box-shadow: var(--inset-highlight), var(--shadow-card);
 }
 

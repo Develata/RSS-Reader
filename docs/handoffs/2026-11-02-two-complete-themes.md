@@ -3,8 +3,8 @@
 - 日期：2026-11-02
 - 作者 / Agent：Claude Code（Opus 5.5）
 - 分支：claude/css-theme-styles-41840a
-- 当前 HEAD：e56d5900
-- 相关 commit：e56d5900（未推送）
+- 当前 HEAD：见 PR 合并记录
+- 相关 commit：e56d5900（主题收敛）、本 handoff 所在的复审修复提交；已同步 main 287256da
 - 相关 tag / release：N/A
 - 状态：`draft`
 
@@ -41,7 +41,15 @@
 
 ### 契约测试
 
-- `test_builtin_theme_contracts`：默认主题的 `:root` 与跟随系统暗色必须覆盖 `.theme-dark` 的全部 token；每个内置主题的 `:root`、`.theme-dark` 也必须全覆盖，且跟随系统暗色块与 `.theme-dark` 声明集合一致。已做变异验证：删去 Amethyst 暗色 `--danger` 后测试失败并指出缺失项。
+- `test_builtin_theme_contracts`：默认主题的 `:root` 与跟随系统暗色必须覆盖 `.theme-dark` 的全部 token；每个内置主题的 `:root`、`.theme-dark` 也必须全覆盖，且跟随系统暗色块与 `.theme-dark` 声明集合一致。解析器先去掉注释，跟随系统暗色块与 `.theme-dark` 按名称→值比较。变异验证：删去或注释掉 Amethyst 暗色 `--danger`、只改跟随系统暗色的 `--danger` 值，测试都会失败。
+- `test_default_style_token_contract`：表面背景 token（`--surface-panel/reader/card/veil/chip(-hover)`）不得出现在渐变参数里；把 `workspaces.css` 改回嵌套写法后测试失败。
+
+### Codex 复审（gpt-6-astra，high，范围 f6c4a0cd..d807d561）
+
+- 结论：无 BLOCKER；2 项 SHOULD_FIX 均已核实并修复，1 项 NEEDS_VERIFICATION 记为未覆盖。
+- SHOULD_FIX 1（已修复）：新默认深色的 `--surface-card`、`--surface-veil` 是渐变，而 `workspaces.css`（添加订阅卡片、高级 CSS 面板）与 `shell.css`（订阅统计卡片）把它们当渐变色标，整条 `background` 失效。文档本就把这些 token 定义为背景，因此改的是消费方：改为「色调渐变叠在表面背景之上」的分层写法，`entries.css` 的 `--surface-chip` 同样处理；主题作者文档注明 `--surface-tint` 必须是颜色。
+- SHOULD_FIX 2（已修复）：覆盖测试会把注释掉的声明算作覆盖，且只比较名称。已按上面的契约测试修正。
+- NEEDS_VERIFICATION 3（未覆盖）：浏览器主题矩阵只循环两个主题，没有浅色 / 深色 / 跟随系统 × 主题的计算样式断言。
 
 ## 验证与验收
 
@@ -49,19 +57,20 @@
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`：通过
-- `cargo test --workspace --locked`：通过（0 失败；rssr-app 单元 409 通过 1 忽略）
+- `cargo test --workspace --locked`：通过（复审修复后 1198 通过、0 失败）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
 - `cargo check --locked`（scripts/release-ui）：通过
 - `node --check` 四个改动的浏览器脚本、`bash -n scripts/run_server_web_regression.sh`：通过
 
 ### 手工验收
 
-- 桌面端浅色 / 深色 / 跟随系统 × 默认 / Amethyst 的实际观感：未执行（本机未装 dioxus-cli，未跑浏览器回归）
+- 桌面端（Linux，`cargo run -p rssr-app`，复审修复前的 e56d5900）：Develata 目测两套主题观感可接受；复审修复后的订阅页卡片背景未再目测
+- 同一次运行中滚轮失效：本分支基于的 main 尚未包含 PR #61（Linux 滚轮与滚动卡顿修复，仍为 open），与本次改动无关
 - 服务器 Web 回归（`run_server_web_regression.sh`、acceptance）：未执行，脚本只做了语法检查
 
 ## 结果
 
-- 代码与文档已就绪，需视觉验收后再合并。
+- 复审项已处理，Develata 已授权在复审无问题后开 PR 并合并。
 - 用户影响：正在使用 Midnight Ledger 的用户（包括 Develata 本机）需在设置里点「恢复默认」并保存一次，之后由「外观」切换昼夜。
 
 ## 风险与后续事项

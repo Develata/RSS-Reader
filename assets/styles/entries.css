@@ -5,7 +5,7 @@
   padding: 16px 18px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, var(--surface-tint), var(--surface-chip));
+  background: linear-gradient(180deg, var(--surface-tint), transparent), var(--surface-chip);
   box-shadow: var(--inset-highlight), var(--shadow-card);
 }
 

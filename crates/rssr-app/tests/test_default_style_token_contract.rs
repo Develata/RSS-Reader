@@ -3,6 +3,8 @@
 //!    只能消费 token —— 这是「覆写变量即可整体换肤」承诺的回归门。
 //! 2. `tokens.css` 必须持续暴露文档化的公开 token
 //!    （见 docs/design/theme-author-selector-reference.md「可用 CSS 变量」）。
+//! 3. 表面背景 token（`BACKGROUND_TOKENS`，可以是渐变）只能作为背景层，不能放进渐变当色标；
+//!    `--surface-tint` 用作色标，必须是颜色。
 
 const TOKENS: &str = include_str!("../../../assets/styles/tokens.css");
 
@@ -136,5 +138,63 @@ fn tokens_stylesheet_exposes_documented_public_tokens() {
         missing.is_empty(),
         "tokens.css 缺少文档化公开 token（若确需改名，先同步 docs/design/theme-author-selector-reference.md）：\n{}",
         missing.join("\n")
+    );
+}
+
+/// Surface tokens a theme may set to an image (a gradient), not only a color.
+const BACKGROUND_TOKENS: &[&str] = &[
+    "var(--surface-panel)",
+    "var(--surface-reader)",
+    "var(--surface-card)",
+    "var(--surface-veil)",
+    "var(--surface-chip)",
+    "var(--surface-chip-hover)",
+];
+
+/// Each background token inside a gradient's argument list (`name:line`).
+fn surface_tokens_used_as_gradient_stops(name: &str, css: &str) -> Vec<String> {
+    let mut violations = Vec::new();
+    for (start, _) in css.match_indices("gradient(") {
+        let args_start = start + "gradient(".len();
+        let mut depth = 1;
+        let args_end = css[args_start..]
+            .char_indices()
+            .find_map(|(offset, character)| {
+                match character {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                (depth == 0).then_some(args_start + offset)
+            })
+            .unwrap_or(css.len());
+        let args = &css[args_start..args_end];
+        if BACKGROUND_TOKENS.iter().any(|token| args.contains(token)) {
+            let line = css[..start].lines().count();
+            violations.push(format!("{name}:{line}"));
+        }
+    }
+    violations
+}
+
+#[test]
+fn surface_token_guard_detects_gradient_stops() {
+    let nested = "background: linear-gradient(180deg, var(--surface-card), var(--surface-tint));";
+    assert_eq!(surface_tokens_used_as_gradient_stops("test", nested).len(), 1);
+    let layered =
+        "background: linear-gradient(180deg, transparent, var(--accent)), var(--surface-card);";
+    assert!(surface_tokens_used_as_gradient_stops("test", layered).is_empty());
+}
+
+#[test]
+fn default_styles_layer_surface_tokens_instead_of_interpolating_them() {
+    let violations: Vec<String> = TOKEN_CONSUMING_SHEETS
+        .iter()
+        .flat_map(|(name, css)| surface_tokens_used_as_gradient_stops(name, css))
+        .collect();
+    assert!(
+        violations.is_empty(),
+        "表面背景 token 可能是渐变，放进渐变当色标会使整条 background 失效：\n{}",
+        violations.join("\n")
     );
 }

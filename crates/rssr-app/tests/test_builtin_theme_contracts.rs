@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 const DEFAULT_TOKENS: &str = include_str!("../../../assets/styles/tokens.css");
 const AMETHYST_GLASS: &str = include_str!("../../../assets/themes/amethyst-glass.css");
@@ -57,19 +57,43 @@ fn builtin_themes_reference_current_semantic_interfaces() {
     }
 }
 
-/// Custom properties declared in the first rule whose prelude starts at `prelude`.
-/// Token rules hold only declarations, so the rule ends at the first `}`.
-fn declared_tokens(css: &str, prelude: &str) -> BTreeSet<String> {
+/// The CSS text without `/* ... */` comments (an unterminated comment runs to the end).
+fn without_comments(css: &str) -> String {
+    let mut text = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(start) = rest.find("/*") {
+        text.push_str(&rest[..start]);
+        rest = rest[start + 2..].split_once("*/").map_or("", |(_, after)| after);
+    }
+    text.push_str(rest);
+    text
+}
+
+/// Custom properties (name -> whitespace-normalized value) declared in the first rule whose
+/// prelude starts at `prelude`. Token rules hold only declarations, so the rule ends at the
+/// first `}`.
+fn declarations(css: &str, prelude: &str) -> BTreeMap<String, String> {
+    let css = without_comments(css);
     let start = css.find(prelude).unwrap_or_else(|| panic!("missing rule `{prelude}`"));
-    let body_start = start + css[start..].find('{').expect("rule body") + 1;
+    // The rule's own brace follows the prelude (a `@media {` inside the prelude is not it).
+    let header_end = start + prelude.trim_end_matches('{').len();
+    let body_start = header_end + css[header_end..].find('{').expect("rule body") + 1;
     let body_end = body_start + css[body_start..].find('}').expect("rule end");
     css[body_start..body_end]
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("--"))
-        .filter_map(|line| line.split_once(':'))
-        .map(|(name, _)| format!("--{name}"))
+        .split(';')
+        .filter_map(|declaration| declaration.trim().split_once(':'))
+        .filter(|(name, _)| name.starts_with("--"))
+        .map(|(name, value)| {
+            (name.trim().to_string(), value.split_whitespace().collect::<Vec<_>>().join(" "))
+        })
         .collect()
 }
+
+fn declared_tokens(css: &str, prelude: &str) -> BTreeSet<String> {
+    declarations(css, prelude).into_keys().collect()
+}
+
+const FOLLOW_SYSTEM_DARK: &str = "@media (prefers-color-scheme: dark) {\n  .theme-system";
 
 /// The tokens the default dark appearance flips. Every complete scheme must declare all of them,
 /// or it silently mixes in the default palette.
@@ -83,12 +107,20 @@ fn assert_covers(name: &str, scheme: &str, declared: &BTreeSet<String>) {
 }
 
 #[test]
+fn token_parser_ignores_commented_declarations_and_reads_values() {
+    let css = "\n.theme-dark {\n  /*\n  --danger: red;\n  */\n  --ink:\n    #fff;\n}";
+    let parsed = declarations(css, "\n.theme-dark {");
+    assert_eq!(parsed.len(), 1, "{parsed:?}");
+    assert_eq!(parsed["--ink"], "#fff");
+}
+
+#[test]
 fn default_light_and_dark_schemes_flip_the_same_tokens() {
     assert_covers("tokens.css", "light", &declared_tokens(DEFAULT_TOKENS, "\n:root {"));
     assert_eq!(
-        declared_tokens(DEFAULT_TOKENS, "@media (prefers-color-scheme: dark) {\n  .theme-system"),
-        mode_tokens(),
-        "tokens.css follow-system dark must match .theme-dark"
+        declarations(DEFAULT_TOKENS, FOLLOW_SYSTEM_DARK),
+        declarations(DEFAULT_TOKENS, "\n.theme-dark {"),
+        "tokens.css follow-system dark must declare exactly the .theme-dark values"
     );
 }
 
@@ -96,12 +128,12 @@ fn default_light_and_dark_schemes_flip_the_same_tokens() {
 fn builtin_themes_are_complete_in_both_schemes() {
     for (name, css) in THEMES {
         assert_covers(name, "light", &declared_tokens(css, "\n:root {"));
-        let dark = declared_tokens(css, "\n.theme-dark {");
-        assert_covers(name, "dark", &dark);
+        let dark = declarations(css, "\n.theme-dark {");
+        assert_covers(name, "dark", &dark.keys().cloned().collect());
         assert_eq!(
-            declared_tokens(css, "@media (prefers-color-scheme: dark) {\n  .theme-system"),
+            declarations(css, FOLLOW_SYSTEM_DARK),
             dark,
-            "{name} follow-system dark must match .theme-dark"
+            "{name} follow-system dark must declare exactly the .theme-dark values"
         );
     }
 }

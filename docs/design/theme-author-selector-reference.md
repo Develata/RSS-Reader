@@ -467,6 +467,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `--surface-tint`：冷色点缀面（搜索框、主题实验室等）
 - `--input-bg`：输入框背景
 
+`--surface-panel` / `--surface-reader` / `--surface-card` / `--surface-veil` / `--surface-chip(-hover)` 是背景，可以写渐变；默认样式只把它们当底层背景使用。`--surface-tint` 会被叠成渐变色标，必须是颜色。
+
 强调态（可被 `color-mix` 派生覆盖）：
 
 - `--accent-soft`：选中 chip / 激活态背景
