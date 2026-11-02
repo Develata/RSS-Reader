@@ -17,7 +17,7 @@ v0.2.1 Linux 桌面版在“全部文章”页鼠标滚轮完全失效，并在�
 - 模块：
   - `assets/styles/entries.css`
   - `assets/themes/midnight-ledger.css`、`assets/themes/legacy/midnight-ledger-v3.css`、`crates/rssr-app/src/pages/settings_page/themes/theme_preset.rs`
-  - `crates/rssr-app/src/bootstrap/native_document.rs`、`crates/rssr-app/src/app.rs`、`crates/rssr-app/Cargo.toml`
+  - `crates/rssr-app/src/bootstrap/native_document.rs`、`crates/rssr-app/src/bootstrap.rs`、`crates/rssr-app/src/app.rs`、`crates/rssr-app/Cargo.toml`（`App` 只调用平台无关的 `bootstrap::use_host_webview_settings()`，Linux 条件编译留在 bootstrap）
 - 平台：
   - Linux 桌面（全部三项）；Web / Windows / macOS / Android 仅受 CSS 两项影响
 - 额外影响：
