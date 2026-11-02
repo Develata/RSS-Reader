@@ -21,7 +21,7 @@ v0.2.1 Linux 桌面版在“全部文章”页鼠标滚轮完全失效，并在�
 - 平台：
   - Linux 桌面（全部三项）；Web / Windows / macOS / Android 仅受 CSS 两项影响
 - 额外影响：
-  - 已选 Midnight Ledger 的用户需在设置里重新点一次该预设，新光晕才生效（预设 CSS 文本存于用户设置，旧文本作为 legacy v3 仍被识别）
+  - 已选 Midnight Ledger 的用户需按[用户指南](../user-guide.md)重新点击该预设并保存，新光晕才生效。预设 CSS 文本存于用户设置；v0.2.1 存下的文本即 legacy v2（已核对与用户库一致），本次改动前的 main 文本冻结为 legacy v3，两者都仍识别为 Midnight Ledger
 
 ## 关键变更
 
