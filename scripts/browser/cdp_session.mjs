@@ -184,6 +184,28 @@ export async function selectorExists(client, selector, timeoutMs = 20000) {
   );
 }
 
+// The page's "now" in the server regression: seeds keep fixed dates, so the archive window and
+// date groups must not depend on the day the suite runs. Move it only together with the seeds.
+export const PINNED_PAGE_TIME = '2026-10-15T12:00:00Z';
+
+// Every later document of this page starts its clock at `at` and lets it run from there (timers
+// and elapsed-time checks keep working). Only the page's `Date`; the browser's own cookie expiry
+// and the server keep real time.
+export async function pinPageClock(client, at = PINNED_PAGE_TIME) {
+  await client.send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+    const Real = Date, offset = ${Date.parse(at)} - Real.now();
+    function Pinned(...args) {
+      if (!new.target) return new Real(Real.now() + offset).toString();
+      return args.length ? new Real(...args) : new Real(Real.now() + offset);
+    }
+    Pinned.prototype = Real.prototype;
+    Pinned.now = () => Real.now() + offset;
+    Pinned.parse = Real.parse;
+    Pinned.UTC = Real.UTC;
+    globalThis.Date = Pinned;
+  })();` });
+}
+
 export async function navigate(client, url, slowMs = defaultSlowMs) {
   const loaded = client.waitForEvent('Page.loadEventFired', 5000).catch(() => null);
   await client.send('Page.navigate', { url });

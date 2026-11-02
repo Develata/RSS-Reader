@@ -5,7 +5,9 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { evaluate, navigate, selectorExists, sleep, submitLoginForm, waitFor } from './cdp_session.mjs';
+import {
+  evaluate, navigate, pinPageClock, selectorExists, sleep, submitLoginForm, waitFor,
+} from './cdp_session.mjs';
 import { watchPageBuild } from './server_harness.mjs';
 
 /// Visible as Playwright's `waitFor` has it: a non-empty box, and not hidden by `visibility` (on
@@ -72,8 +74,10 @@ export class ServerPage {
     this.signedInThroughForm = false;
   }
 
-  /// Starts watching the build ids the page sends (CDP Network domain; call once, before seeding).
+  /// Pins the page clock and starts watching the build ids the page sends (CDP Network domain;
+  /// call once, before seeding).
   async start() {
+    await pinPageClock(this.client);
     this.build = await watchPageBuild(this.client, this.base, this.harness.server);
     return this;
   }

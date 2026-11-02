@@ -603,7 +603,11 @@
   white-space: nowrap;
   pointer-events: none;
 }
-html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y: contain; }
+/* Pull refresh is touch-only. WebKitGTK 2.54 ignores mouse wheels on a root scroller
+   with `overscroll-behavior-y: contain`, so keep the native pull suppressed for touch only. */
+@media (pointer: coarse) {
+  html:has([data-page="entries"][data-entry-scope="all"]) { overscroll-behavior-y: contain; }
+}
 [data-slot="pull-refresh"] {
   display: block;
   position: sticky;
