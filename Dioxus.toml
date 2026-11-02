@@ -8,6 +8,13 @@ android_main_activity = "../../android/MainActivity.kt"
 identifier = "io.github.develata.rssreader"
 publisher = "Develata"
 icon = ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
+short_description = "Local-first RSS and Atom reader"
+
+# Dioxus names the Linux desktop entry after the binary (`RssrApp`) and ignores
+# `application.name`; the template sets the displayed name. Read relative to the
+# directory `dx bundle` runs in (the repository root).
+[bundle.deb]
+desktop_template = "linux/rssr-app.desktop"
 
 [web.app]
 title = "RSS-Reader"

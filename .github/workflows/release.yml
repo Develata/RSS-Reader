@@ -424,6 +424,10 @@ jobs:
           dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Package | grep '^rssr-app$\|^rss-reader$\|^io.github.develata.rssreader$'
           dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep 'usr/bin/rssr-app$\|usr/bin/RSS-Reader$\|usr/bin/rss-reader$'
           dpkg-deb -c release-assets/RSS-Reader-linux-x86_64.deb | grep 'usr/share/applications/.*\.desktop$'
+          # The menu shows the product name, not the bundler's binary-derived `RssrApp`.
+          dpkg-deb --fsys-tarfile release-assets/RSS-Reader-linux-x86_64.deb \
+            | tar -xO --wildcards './usr/share/applications/*.desktop' | grep -x 'Name=RSS-Reader'
+          test "$(dpkg-deb -f release-assets/RSS-Reader-linux-x86_64.deb Description)" = 'Local-first RSS and Atom reader'
           tar -tzf release-assets/rssr-cli-linux-x86_64.tar.gz | grep '^rssr-cli$'
 
       - name: Install package and smoke-test ordinary-user startup
