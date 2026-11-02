@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| 内置主题收敛与「外观」 | [默认主题并入 Midnight 深色、Amethyst 补全、三套预设下线](./2026-11-02-two-complete-themes.md) |
 | Settings 主题导入与预览宿主入口 | [只读评估：无实际复用阻碍，未改代码](./2026-11-02-settings-theme-host-assessment.md) |
 | Settings 规则边界与 PR #60 | [复审、Web 补验与主线核验](./2026-10-31-settings-review-merge.md)、[规则独立编译与装配保持](./2026-10-31-settings-rule-boundary.md) |
 | README 当前界面与 PR #59 | [真实 Web 截图、附件、GC 与主线核验](./2026-10-31-readme-media.md) |
