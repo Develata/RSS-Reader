@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=RSS-Reader
+Comment=Local-first RSS and Atom reader
+Exec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories=Network;Feed;News;
+Keywords=RSS;Atom;Feed;News;
