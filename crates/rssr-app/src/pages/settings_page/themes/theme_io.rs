@@ -256,7 +256,7 @@ mod tests {
                 observed.set(true);
                 Ok(None)
             });
-            facade.set_preset_choice("newsprint");
+            facade.set_preset_choice("amethyst-glass");
         });
         dom.render_immediate_to_vec();
         assert!(!polled.get());

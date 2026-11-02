@@ -1,17 +1,5 @@
-fn newsprint_theme_css() -> &'static str {
-    include_str!("../../../../../../assets/themes/newsprint.css")
-}
-
-fn atlas_sidebar_theme_css() -> &'static str {
-    include_str!("../../../../../../assets/themes/atlas-sidebar.css")
-}
-
 fn amethyst_glass_theme_css() -> &'static str {
     include_str!("../../../../../../assets/themes/amethyst-glass.css")
-}
-
-fn midnight_ledger_theme_css() -> &'static str {
-    include_str!("../../../../../../assets/themes/midnight-ledger.css")
 }
 
 /// 历史版本的内置主题 CSS。用户设置里只持久化 CSS 文本本身，
@@ -19,21 +7,13 @@ fn midnight_ledger_theme_css() -> &'static str {
 /// 且当前主题的识别与已选状态不再匹配。新改版一次就在这里追加一条冻结副本。
 const LEGACY_PRESET_CSS: &[(&str, &str)] = &[
     (
-        "midnight-ledger",
-        include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v3.css"),
+        "amethyst-glass",
+        include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v4.css"),
     ),
-    ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v3.css")),
     (
         "amethyst-glass",
         include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v3.css"),
     ),
-    (
-        "midnight-ledger",
-        include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v2.css"),
-    ),
-    ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v2.css")),
-    ("atlas-sidebar", include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v1.css")),
-    ("newsprint", include_str!("../../../../../../assets/themes/legacy/newsprint-v1.css")),
     (
         "amethyst-glass",
         include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v2.css"),
@@ -43,29 +23,37 @@ const LEGACY_PRESET_CSS: &[(&str, &str)] = &[
         include_str!("../../../../../../assets/themes/legacy/amethyst-glass-v1.css"),
     ),
     ("amethyst-glass", include_str!("../../../../../../assets/themes/legacy/forest-desk-v1.css")),
-    (
-        "midnight-ledger",
-        include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v1.css"),
-    ),
 ];
+
+/// 已下线的内置主题（Atlas Sidebar、Newsprint、Midnight Ledger 的各版本）。
+/// 存下的 CSS 仍原样生效，只识别为 `RETIRED_PRESET_KEY`，让设置页提示换回现有主题；
+/// Midnight Ledger 的配色已并入默认主题的深色外观。
+const RETIRED_PRESET_CSS: &[&str] = &[
+    include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v4.css"),
+    include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v3.css"),
+    include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v2.css"),
+    include_str!("../../../../../../assets/themes/legacy/atlas-sidebar-v1.css"),
+    include_str!("../../../../../../assets/themes/legacy/newsprint-v2.css"),
+    include_str!("../../../../../../assets/themes/legacy/newsprint-v1.css"),
+    include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v4.css"),
+    include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v3.css"),
+    include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v2.css"),
+    include_str!("../../../../../../assets/themes/legacy/midnight-ledger-v1.css"),
+];
+
+pub(crate) const RETIRED_PRESET_KEY: &str = "retired";
 
 pub(crate) fn preset_css(key: &str) -> &'static str {
     match key {
-        "none" => "",
-        "atlas-sidebar" => atlas_sidebar_theme_css(),
-        "newsprint" => newsprint_theme_css(),
         "amethyst-glass" => amethyst_glass_theme_css(),
-        "midnight-ledger" => midnight_ledger_theme_css(),
         _ => "",
     }
 }
 
 pub(crate) fn preset_display_name(key: &str) -> &'static str {
     match key {
-        "atlas-sidebar" => "Atlas Sidebar",
-        "newsprint" => "Newsprint",
-        "amethyst-glass" => "Amethyst Glass（实验）",
-        "midnight-ledger" => "Midnight Ledger",
+        "amethyst-glass" => "Amethyst Glass",
+        RETIRED_PRESET_KEY => "已下线的内置主题",
         _ => "自定义主题",
     }
 }
@@ -82,15 +70,16 @@ pub(crate) fn detect_preset_key(raw: &str) -> &'static str {
     if trimmed.is_empty() {
         return "none";
     }
-    for key in ["atlas-sidebar", "newsprint", "amethyst-glass", "midnight-ledger"] {
-        if css_text_eq(trimmed, preset_css(key).trim()) {
-            return key;
-        }
+    if css_text_eq(trimmed, preset_css("amethyst-glass").trim()) {
+        return "amethyst-glass";
     }
     for (key, css) in LEGACY_PRESET_CSS {
         if css_text_eq(trimmed, css.trim()) {
             return key;
         }
+    }
+    if RETIRED_PRESET_CSS.iter().any(|css| css_text_eq(trimmed, css.trim())) {
+        return RETIRED_PRESET_KEY;
     }
     "custom"
 }
@@ -102,35 +91,19 @@ pub(super) struct BuiltinThemePreset {
     pub swatches: [&'static str; 3],
 }
 
-pub(super) fn builtin_theme_presets() -> [BuiltinThemePreset; 4] {
-    [
-        BuiltinThemePreset {
-            key: "atlas-sidebar",
-            name: "Atlas Sidebar",
-            swatches: ["#f1efe8", "#b24c3d", "#1f2430"],
-        },
-        BuiltinThemePreset {
-            key: "newsprint",
-            name: "Newsprint",
-            swatches: ["#efe6d6", "#8b3d2b", "#241d16"],
-        },
-        BuiltinThemePreset {
-            key: "amethyst-glass",
-            name: "Amethyst Glass（实验）",
-            swatches: ["#e0c3fc", "#8b5cf6", "#1f2937"],
-        },
-        BuiltinThemePreset {
-            key: "midnight-ledger",
-            name: "Midnight Ledger",
-            swatches: ["#0f1518", "#4fb7b1", "#eef5f7"],
-        },
-    ]
+pub(super) fn builtin_theme_presets() -> [BuiltinThemePreset; 1] {
+    [BuiltinThemePreset {
+        key: "amethyst-glass",
+        name: "Amethyst Glass",
+        swatches: ["#e0c3fc", "#8b5cf6", "#241b45"],
+    }]
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        LEGACY_PRESET_CSS, amethyst_glass_theme_css, detect_preset_key, newsprint_theme_css,
+        LEGACY_PRESET_CSS, RETIRED_PRESET_CSS, RETIRED_PRESET_KEY, amethyst_glass_theme_css,
+        detect_preset_key,
     };
 
     #[test]
@@ -142,7 +115,6 @@ mod tests {
     #[test]
     fn detect_preset_key_matches_builtin_presets_exactly() {
         assert_eq!(detect_preset_key(""), "none");
-        assert_eq!(detect_preset_key(newsprint_theme_css()), "newsprint");
         assert_eq!(detect_preset_key(amethyst_glass_theme_css()), "amethyst-glass");
     }
 
@@ -154,9 +126,17 @@ mod tests {
     }
 
     #[test]
+    fn detect_preset_key_recognizes_retired_presets() {
+        for retired_css in RETIRED_PRESET_CSS {
+            assert_eq!(detect_preset_key(retired_css), RETIRED_PRESET_KEY);
+            assert_eq!(detect_preset_key(&retired_css.replace('\n', "\r\n")), RETIRED_PRESET_KEY);
+        }
+    }
+
+    #[test]
     fn detect_preset_key_ignores_line_ending_differences() {
-        let current_crlf = newsprint_theme_css().replace('\n', "\r\n");
-        assert_eq!(detect_preset_key(&current_crlf), "newsprint");
+        let current_crlf = amethyst_glass_theme_css().replace('\n', "\r\n");
+        assert_eq!(detect_preset_key(&current_crlf), "amethyst-glass");
 
         for (expected_key, legacy_css) in LEGACY_PRESET_CSS {
             let legacy_crlf = legacy_css.replace('\n', "\r\n");

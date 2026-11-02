@@ -97,7 +97,7 @@ node scripts/browser/rssr_small_viewport_assertions.mjs \
 - 确认只移除了当前主题，不是异常清空别的内容
 - 点 `导出当前 CSS`，确认能导出
 - Web / 桌面 / Android 再点 `导入主题文件` 导回一份 CSS；Android 使用系统文档选择器。
-- 默认和四套内置主题分别检查浅色/深色/跟随系统，Tab 焦点、禁用状态和实际背景对比度；断点职责见主题参考。
+- 默认主题与 Amethyst Glass 分别检查浅色/深色/跟随系统，Tab 焦点、禁用状态和实际背景对比度；断点职责见主题参考。
 
 ### 6. Android 主题导出（SAF，有设备时执行）
 

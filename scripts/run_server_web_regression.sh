@@ -282,7 +282,7 @@ case "$suite" in
     artifacts="entries / feeds / settings / reader、entries-short-directory、entries-desktop、reader-desktop、reader-search、reader-image-viewer、entries-persistent-pagination、sources-full-names、nav-*、task1-* 的 HTML 与 PNG"
     ;;
   theme-matrix)
-    artifacts="default、atlas-sidebar、newsprint、amethyst-glass、midnight-ledger 的 HTML 与 PNG"
+    artifacts="default、amethyst-glass 的 HTML 与 PNG"
     ;;
   feed-smoke)
     artifacts="browser-feed-smoke 的 HTML 与 PNG"

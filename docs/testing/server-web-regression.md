@@ -21,7 +21,7 @@ GitHub `CI` 的 push / PR 使用常规验收；手动 `Run workflow` 可勾选 `
 
 ```bash
 # 默认 debug；--release 同时选择 release 页面与服务器
-bash scripts/run_server_web_regression.sh --preset atlas-sidebar --port 8131
+bash scripts/run_server_web_regression.sh --preset amethyst-glass --port 8131
 bash scripts/run_server_web_regression.sh --directory-only
 
 # 聚合三个固定套件：theme-matrix、regression、feed-smoke

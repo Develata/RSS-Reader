@@ -304,7 +304,7 @@
 }
 
 [data-layout="stats-grid"][data-layout-variant="airy"] [data-layout="stat-card"] {
-  background: linear-gradient(180deg, var(--surface-tint), var(--surface-veil));
+  background: linear-gradient(180deg, var(--surface-tint), transparent), var(--surface-veil);
   box-shadow: var(--shadow-card);
 }
 

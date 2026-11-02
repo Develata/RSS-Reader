@@ -39,7 +39,14 @@
 
   /* ---- 第 2 层：应用底色 ---- */
   --app-bg: #f4efe6;
-  --app-bg-dark: #141414;
+  /* 光晕只铺在角落的固定区域：未合成的 WebKitGTK 滚动时每帧重绘整个视口，
+   * 铺满全页的径向渐变会把帧时间拖到约 30ms。 */
+  --app-bg-dark:
+    radial-gradient(circle at top left, rgba(83, 192, 187, 0.12), transparent 500px)
+      top left / 500px 500px no-repeat,
+    radial-gradient(circle at bottom right, rgba(89, 122, 170, 0.1), transparent 460px)
+      bottom right / 460px 460px no-repeat,
+    linear-gradient(180deg, #0f1518 0%, #11181c 46%, #0f1519 100%);
 
   /* ---- 第 2 层：边线 ---- */
   --line-soft: rgba(62, 42, 27, 0.08);
@@ -115,38 +122,45 @@
   color-scheme: light;
 }
 
-/* 暗色主题：只覆写 token，不重复结构样式。
+/* 暗色主题（墨青账本配色，原 Midnight Ledger）：只覆写 token，不重复结构样式。
+ * 亮暗两套必须覆盖同一组随模式翻转的 token（test_builtin_theme_contracts 校验）。
  * 注意 :root 即亮色默认值，故不再单独声明 .theme-light，
  * 这样用户主题在亮色模式下覆写 :root 变量即可生效。 */
 .theme-dark {
-  --bg: #141414;
-  --panel: rgba(28, 28, 28, 0.9);
-  --panel-strong: #1c1c1c;
-  --ink: #f3efe8;
-  --muted: #b8aba0;
-  --line: rgba(255, 255, 255, 0.08);
-  --accent: #d27853;
-  --accent-strong: #ef9d78;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  --bg: #0e1417;
+  --panel: rgba(16, 23, 27, 0.9);
+  --panel-strong: #131b20;
+  --ink: #eef5f7;
+  --muted: #a2b8bf;
+  --line: rgba(255, 255, 255, 0.07);
+  --accent: #53c0bb;
+  --accent-strong: #83e4df;
+  --shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
 
-  --line-soft: rgba(255, 255, 255, 0.06);
-  --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
-  --surface-reader: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  --surface-card: rgba(255, 255, 255, 0.045);
-  --surface-veil: rgba(32, 30, 29, 0.72);
-  --surface-chip: rgba(255, 255, 255, 0.05);
-  --surface-chip-hover: rgba(255, 255, 255, 0.11);
-  --surface-tint: rgba(255, 255, 255, 0.06);
-  --input-bg: rgba(0, 0, 0, 0.28);
+  --line-soft: rgba(120, 170, 184, 0.08);
+  --surface-panel:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+    var(--panel);
+  --surface-reader:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--panel-strong);
+  --surface-card:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--panel-strong);
+  --surface-veil: linear-gradient(135deg, rgba(20, 29, 34, 0.96), rgba(16, 23, 27, 0.92));
+  --surface-chip: rgba(24, 34, 40, 0.78);
+  --surface-chip-hover: rgba(34, 46, 53, 0.96);
+  --surface-tint: rgba(89, 122, 170, 0.12);
+  --input-bg: rgba(20, 28, 33, 0.9);
 
-  --accent-soft: rgba(210, 120, 83, 0.16);
-  --accent-line: rgba(210, 120, 83, 0.4);
-  --accent-line-faint: rgba(210, 120, 83, 0.18);
+  --accent-soft: rgba(83, 192, 187, 0.14);
+  --accent-line: rgba(83, 192, 187, 0.28);
+  --accent-line-faint: rgba(83, 192, 187, 0.16);
   --focus-ring-color: var(--accent-strong);
-  --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
+  --focus-ring-shadow: 0 0 0 4px rgba(83, 192, 187, 0.15);
 
-  --danger: #ff9f8d;
-  --status-info-bg: rgba(255, 255, 255, 0.05);
+  --danger: #ffb4ab;
+  --status-info-bg: rgba(255, 255, 255, 0.04);
   --status-error-fg: #ffb3a3;
   --status-error-bg: rgba(122, 42, 30, 0.3);
   --status-error-border: rgba(255, 140, 115, 0.26);
@@ -154,24 +168,29 @@
   --status-success-bg: rgba(52, 94, 56, 0.28);
   --status-success-border: rgba(150, 205, 158, 0.26);
 
-  --reader-ink: #e9e2d9;
+  --reader-ink: #e7f0f2;
 
   --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.25);
   --shadow-lift: 0 8px 16px rgba(0, 0, 0, 0.3);
   --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.2);
-  --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.35);
-  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.4);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 
-  --button-bg: #ad492a;
-  --button-fg: #ffffff;
-  --button-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --button-secondary-bg: rgba(210, 120, 83, 0.16);
-  --button-secondary-fg: var(--accent-strong);
-  --button-secondary-shadow: none;
-  --button-danger-bg: #c93a2b;
-  --button-danger-outline-bg: rgba(122, 42, 30, 0.24);
-  --button-danger-outline-fg: #ffb3a3;
-  --button-danger-outline-border: rgba(255, 140, 115, 0.3);
+  --button-bg: linear-gradient(135deg, #157872 0%, #106560 100%);
+  --button-fg: #f6ffff;
+  --button-shadow:
+    0 12px 24px -12px rgba(36, 188, 179, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+  --button-secondary-bg: linear-gradient(135deg, #263743 0%, #1b2831 100%);
+  --button-secondary-fg: #eaf4f6;
+  --button-secondary-shadow:
+    0 10px 22px -16px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --button-danger-bg: linear-gradient(135deg, #a84a58 0%, #813341 100%);
+  --button-danger-outline-bg: rgba(43, 57, 67, 0.94);
+  --button-danger-outline-fg: #ffc8d1;
+  --button-danger-outline-border: rgba(168, 74, 88, 0.24);
 
   color-scheme: dark;
   background: var(--app-bg-dark);
@@ -182,34 +201,40 @@
 @media (prefers-color-scheme: dark) {
   .theme-system,
   [data-layout="web-auth-shell"] {
-    --bg: #141414;
-    --panel: rgba(28, 28, 28, 0.9);
-    --panel-strong: #1c1c1c;
-    --ink: #f3efe8;
-    --muted: #b8aba0;
-    --line: rgba(255, 255, 255, 0.08);
-    --accent: #d27853;
-    --accent-strong: #ef9d78;
-    --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    --bg: #0e1417;
+    --panel: rgba(16, 23, 27, 0.9);
+    --panel-strong: #131b20;
+    --ink: #eef5f7;
+    --muted: #a2b8bf;
+    --line: rgba(255, 255, 255, 0.07);
+    --accent: #53c0bb;
+    --accent-strong: #83e4df;
+    --shadow: 0 26px 70px rgba(0, 0, 0, 0.34);
 
-    --line-soft: rgba(255, 255, 255, 0.06);
-    --surface-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
-    --surface-reader: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-    --surface-card: rgba(255, 255, 255, 0.045);
-    --surface-veil: rgba(32, 30, 29, 0.72);
-    --surface-chip: rgba(255, 255, 255, 0.05);
-    --surface-chip-hover: rgba(255, 255, 255, 0.11);
-    --surface-tint: rgba(255, 255, 255, 0.06);
-    --input-bg: rgba(0, 0, 0, 0.28);
+    --line-soft: rgba(120, 170, 184, 0.08);
+    --surface-panel:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0)),
+      var(--panel);
+    --surface-reader:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+      var(--panel-strong);
+    --surface-card:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+      var(--panel-strong);
+    --surface-veil: linear-gradient(135deg, rgba(20, 29, 34, 0.96), rgba(16, 23, 27, 0.92));
+    --surface-chip: rgba(24, 34, 40, 0.78);
+    --surface-chip-hover: rgba(34, 46, 53, 0.96);
+    --surface-tint: rgba(89, 122, 170, 0.12);
+    --input-bg: rgba(20, 28, 33, 0.9);
 
-    --accent-soft: rgba(210, 120, 83, 0.16);
-    --accent-line: rgba(210, 120, 83, 0.4);
-    --accent-line-faint: rgba(210, 120, 83, 0.18);
+    --accent-soft: rgba(83, 192, 187, 0.14);
+    --accent-line: rgba(83, 192, 187, 0.28);
+    --accent-line-faint: rgba(83, 192, 187, 0.16);
     --focus-ring-color: var(--accent-strong);
-    --focus-ring-shadow: 0 0 0 4px rgba(210, 120, 83, 0.16);
+    --focus-ring-shadow: 0 0 0 4px rgba(83, 192, 187, 0.15);
 
-    --danger: #ff9f8d;
-    --status-info-bg: rgba(255, 255, 255, 0.05);
+    --danger: #ffb4ab;
+    --status-info-bg: rgba(255, 255, 255, 0.04);
     --status-error-fg: #ffb3a3;
     --status-error-bg: rgba(122, 42, 30, 0.3);
     --status-error-border: rgba(255, 140, 115, 0.26);
@@ -217,24 +242,29 @@
     --status-success-bg: rgba(52, 94, 56, 0.28);
     --status-success-border: rgba(150, 205, 158, 0.26);
 
-    --reader-ink: #e9e2d9;
+    --reader-ink: #e7f0f2;
 
     --shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.25);
     --shadow-lift: 0 8px 16px rgba(0, 0, 0, 0.3);
     --shadow-card: 0 10px 24px rgba(0, 0, 0, 0.2);
-    --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.35);
-    --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    --shadow-float: 0 18px 36px rgba(0, 0, 0, 0.4);
+    --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 
-    --button-bg: #ad492a;
-    --button-fg: #ffffff;
-    --button-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
-    --button-secondary-bg: rgba(210, 120, 83, 0.16);
-    --button-secondary-fg: var(--accent-strong);
-    --button-secondary-shadow: none;
-    --button-danger-bg: #c93a2b;
-    --button-danger-outline-bg: rgba(122, 42, 30, 0.24);
-    --button-danger-outline-fg: #ffb3a3;
-    --button-danger-outline-border: rgba(255, 140, 115, 0.3);
+    --button-bg: linear-gradient(135deg, #157872 0%, #106560 100%);
+    --button-fg: #f6ffff;
+    --button-shadow:
+      0 12px 24px -12px rgba(36, 188, 179, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+    --button-secondary-bg: linear-gradient(135deg, #263743 0%, #1b2831 100%);
+    --button-secondary-fg: #eaf4f6;
+    --button-secondary-shadow:
+      0 10px 22px -16px rgba(0, 0, 0, 0.42),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --button-danger-bg: linear-gradient(135deg, #a84a58 0%, #813341 100%);
+    --button-danger-outline-bg: rgba(43, 57, 67, 0.94);
+    --button-danger-outline-fg: #ffc8d1;
+    --button-danger-outline-border: rgba(168, 74, 88, 0.24);
 
     color-scheme: dark;
     background: var(--app-bg-dark);
@@ -253,6 +283,10 @@
     --accent-line-faint: color-mix(in srgb, var(--accent) 15%, transparent);
     --focus-ring-color: var(--accent-strong);
     --focus-ring-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+
+  /* 暗色次按钮是中性石板色，不随强调色着色，只在亮色派生。 */
+  :root {
     --button-secondary-bg: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 }

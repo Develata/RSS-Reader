@@ -381,11 +381,7 @@ function editedSeed(seedsDir, seed, dir, edit) {
 }
 
 const THEME_FILES = {
-  'atlas-sidebar': 'atlas-sidebar.css',
-  'atlas-sidebar-v1': 'legacy/atlas-sidebar-v1.css',
-  newsprint: 'newsprint.css',
   'amethyst-glass': 'amethyst-glass.css',
-  'midnight-ledger': 'midnight-ledger.css',
 };
 
 function themeFile(themesDir, preset) {

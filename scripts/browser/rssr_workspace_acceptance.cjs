@@ -180,7 +180,7 @@ async function responsive(page) {
 }
 
 async function toolbarThemes(page) {
-  for (const preset of [null, 'atlas-sidebar', 'newsprint', 'amethyst-glass', 'midnight-ledger']) {
+  for (const preset of [null, 'amethyst-glass']) {
     await page.goto('about:blank');
     const session = await fixture.get(page).server.useSeed('directory-contract', {preset});
     const split = session.cookie.indexOf('=');

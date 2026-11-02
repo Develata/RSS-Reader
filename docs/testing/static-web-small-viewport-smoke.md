@@ -26,7 +26,7 @@ bash scripts/run_server_web_regression.sh
 ```bash
 bash scripts/run_server_web_regression.sh --skip-build
 bash scripts/run_server_web_regression.sh --viewport 430,932
-bash scripts/run_server_web_regression.sh --preset newsprint
+bash scripts/run_server_web_regression.sh --preset amethyst-glass
 bash scripts/run_server_web_regression.sh --release
 ```
 

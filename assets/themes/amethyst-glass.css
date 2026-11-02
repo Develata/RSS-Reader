@@ -1,5 +1,7 @@
 /* Amethyst Glass —— 玻璃拟态：紫渐变底、毛玻璃面板、胶囊按钮、悬停浮起。
  * 配色与控件通过 token 覆写；毛玻璃与动效是本主题的个性，保留具体规则。
+ * 完整主题：亮色（:root）与暗色（.theme-dark / 跟随系统）各自覆盖默认样式里
+ * 全部随模式翻转的 token，不回落到默认配色（test_builtin_theme_contracts 校验）。
  * 性能约定：视口渐变放在 body::before 固定合成层（不用 background-attachment:
  * fixed，避免破坏滚动快速路径）；模糊半径控制在 12px 以内且不叠加大面积区域。
  * 暗色模式（.theme-dark / 跟随系统）为深紫夜玻璃；随模式翻转的结构色一律经
@@ -19,7 +21,8 @@
   --font-display: "Inter", "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-ui: "Inter", "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
 
-  /* 视口底色（body 不在 .app-shell 内，只能从 :root 取值） */
+  /* 视口底色（body 不在 .app-shell 内，只能从 :root 取值；渐变画在 body::before） */
+  --app-bg: #cfc0f2;
   --app-bg-dark: linear-gradient(135deg, #241b45 0%, #101b33 100%);
 
   /* 表面与边线 */
@@ -42,11 +45,22 @@
   --focus-ring-color: var(--accent-strong);
   --focus-ring-shadow: 0 0 0 4px rgba(147, 102, 247, 0.18);
 
+  /* 状态与语义色 */
+  --danger: #b4234a;
+  --status-info-bg: rgba(255, 255, 255, 0.62);
+  --status-error-fg: #9a2744;
+  --status-error-bg: rgba(255, 236, 242, 0.86);
+  --status-error-border: rgba(154, 39, 68, 0.18);
+  --status-success-fg: #22663f;
+  --status-success-bg: rgba(232, 248, 239, 0.86);
+  --status-success-border: rgba(34, 102, 63, 0.18);
+
   /* 阴影 */
   --shadow-soft: 0 4px 24px rgba(31, 38, 135, 0.06);
   --shadow-lift: 0 6px 16px rgba(139, 92, 246, 0.14);
   --shadow-card: 0 4px 14px rgba(31, 38, 135, 0.05);
   --shadow-float: 0 18px 36px rgba(31, 38, 135, 0.16);
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 
   /* 圆角 */
   --radius-panel: 24px;
@@ -63,6 +77,7 @@
     0 6px 12px -8px rgba(109, 40, 217, 0.6),
     inset 0 1px 1px rgba(255, 255, 255, 0.25);
   --button-secondary-bg: rgba(255, 255, 255, 0.62);
+  --button-secondary-fg: #243247;
   --button-secondary-shadow:
     0 8px 18px -10px rgba(31, 38, 135, 0.18),
     inset 0 1px 1px rgba(255, 255, 255, 0.42);
@@ -115,6 +130,15 @@
   --focus-ring-color: rgba(196, 181, 253, 0.6);
   --focus-ring-shadow: 0 0 0 4px rgba(167, 139, 250, 0.22);
 
+  --danger: #ffb3c1;
+  --status-info-bg: rgba(196, 181, 253, 0.08);
+  --status-error-fg: #ffb3c1;
+  --status-error-bg: rgba(110, 26, 52, 0.34);
+  --status-error-border: rgba(255, 179, 193, 0.26);
+  --status-success-fg: #b6e6c8;
+  --status-success-bg: rgba(38, 92, 64, 0.32);
+  --status-success-border: rgba(150, 215, 175, 0.26);
+
   --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.3);
   --shadow-lift: 0 6px 16px rgba(0, 0, 0, 0.35);
   --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -128,6 +152,7 @@
     0 6px 12px -8px rgba(0, 0, 0, 0.55),
     inset 0 1px 1px rgba(255, 255, 255, 0.2);
   --button-secondary-bg: rgba(196, 181, 253, 0.14);
+  --button-secondary-fg: #e9e4fb;
   --button-secondary-shadow:
     0 8px 18px -10px rgba(0, 0, 0, 0.4),
     inset 0 1px 1px rgba(255, 255, 255, 0.08);
@@ -176,6 +201,15 @@
     --focus-ring-color: rgba(196, 181, 253, 0.6);
     --focus-ring-shadow: 0 0 0 4px rgba(167, 139, 250, 0.22);
 
+    --danger: #ffb3c1;
+    --status-info-bg: rgba(196, 181, 253, 0.08);
+    --status-error-fg: #ffb3c1;
+    --status-error-bg: rgba(110, 26, 52, 0.34);
+    --status-error-border: rgba(255, 179, 193, 0.26);
+    --status-success-fg: #b6e6c8;
+    --status-success-bg: rgba(38, 92, 64, 0.32);
+    --status-success-border: rgba(150, 215, 175, 0.26);
+
     --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.3);
     --shadow-lift: 0 6px 16px rgba(0, 0, 0, 0.35);
     --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -189,6 +223,7 @@
       0 6px 12px -8px rgba(0, 0, 0, 0.55),
       inset 0 1px 1px rgba(255, 255, 255, 0.2);
     --button-secondary-bg: rgba(196, 181, 253, 0.14);
+    --button-secondary-fg: #e9e4fb;
     --button-secondary-shadow:
       0 8px 18px -10px rgba(0, 0, 0, 0.4),
       inset 0 1px 1px rgba(255, 255, 255, 0.08);

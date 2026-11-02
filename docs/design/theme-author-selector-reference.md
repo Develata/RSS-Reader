@@ -26,15 +26,15 @@ Reader 元信息的整体留白与分隔线应施加在 `reader-meta-block`，`r
 
 Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状态提供可见反馈；错误状态仍显示。主题不得把这一隐藏状态条改为占用正文空间的面板。
 
-内置 Atlas Sidebar 保留桌面侧栏，但为共用的五图标 Reader 行预留 280px；移动端顶栏仍保持 sticky。目录名称和计数按行换行，避免极端来源名挤掉计数。
+目录名称和计数按行换行，避免极端来源名挤掉计数。
 
 文章列表目录的行为约束见[目录跟随设计](./entries-directory-follow.md)。目录内所有组按钮（含活动组）均可展开/收起，`data-active` 仅表示主列表当前位置，不能据此用 CSS 禁止点击或强制展开。`data-open` / `aria-expanded` 由 Rust 的当前交互状态决定；保留的 `data-open-base` 与实际展开值一致，不再表示旧的“活动覆盖前偏好”。`data-directory-epoch` / `data-directory-revision` 是内部提交同步标记，不是主题 API。
 
-导航的箭头固定在导航容器右上侧，不依赖链接数量。收起时内容由 Rust 移除，主题不得保留不可见的导航占位；新版 Atlas Sidebar 同时将侧栏列缩至 44px。旧版 CSS 仍可识别为该主题，旧自定义侧栏布局需自行适配列宽。导航无尺寸过渡动画，避免收起时逐帧重排正文。
+导航的箭头固定在导航容器右上侧，不依赖链接数量。收起时内容由 Rust 移除，主题不得保留不可见的导航占位；自定义侧栏布局需自行适配收起后的列宽。导航无尺寸过渡动画，避免收起时逐帧重排正文。
 
 ## 使用原则
 
-订阅与设置页采用与文章工作区相同的两层布局：`app-nav-shell` 与 `page-main` 是 `data-page` 下的同级区域，外层页面不再绘制包住导航的大卡片。`page-main` 承载标题、状态信息和内容，默认使用 `surface-reader`、`radius-panel` 及 16px 内边距（600px 以下 12px）；页面外侧留白和导航的吸顶／收起行为保持共享。主题应通过 `data-page` 与 `page-main` 限定内容区域，不依赖内容是页面直属子节点。Atlas 的侧栏仍使用第一列、主面板使用第二列。
+订阅与设置页采用与文章工作区相同的两层布局：`app-nav-shell` 与 `page-main` 是 `data-page` 下的同级区域，外层页面不再绘制包住导航的大卡片。`page-main` 承载标题、状态信息和内容，默认使用 `surface-reader`、`radius-panel` 及 16px 内边距（600px 以下 12px）；页面外侧留白和导航的吸顶／收起行为保持共享。主题应通过 `data-page` 与 `page-main` 限定内容区域，不依赖内容是页面直属子节点。
 
 订阅页的 `refresh-all` 位于 `exchange-header[data-section="saved-feeds"]`，新增订阅的 `feed-form` 只包含地址和添加操作。`feed-card-actions[data-state="idle"]` 的编辑、刷新、删除保持同一行和各自 44px 点击区域；`confirm`／`busy` 可扩展或换行。确认删除使用 `.button[data-variant="danger"]`，旁边为 `cancel-remove-feed`；提交后取消消失，删除按钮以原生 `disabled` 和 `aria-busy` 表示正在处理。主题不得把确认态压回只有图标的固定宽度，也不能用样式恢复禁用按钮的点击或悬停反馈。
 
@@ -467,6 +467,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `--surface-tint`：冷色点缀面（搜索框、主题实验室等）
 - `--input-bg`：输入框背景
 
+`--surface-panel` / `--surface-reader` / `--surface-card` / `--surface-veil` / `--surface-chip(-hover)` 是背景，可以写渐变；默认样式只把它们当底层背景使用。`--surface-tint` 会被叠成渐变色标，必须是颜色。
+
 强调态（可被 `color-mix` 派生覆盖）：
 
 - `--accent-soft`：选中 chip / 激活态背景
@@ -519,8 +521,14 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 - 换肤优先覆写第 1 层；需要精修再动第 2 层。
 - 亮色模式在 `:root` 覆写即可生效；如需同时定制暗色模式，在
   `.theme-dark`（以及 `@media (prefers-color-scheme: dark)` 下的
-  `.theme-system`）中覆写同名变量。内置的 Atlas Sidebar / Newsprint /
-  Amethyst Glass 均按此模式提供了完整暗色变体，可作参考实现。
+  `.theme-system`）中覆写同名变量。内置主题是「一个主题 = 一份完整 CSS」：
+  亮色与暗色各自覆盖默认 `.theme-dark` 里全部随模式翻转的 token，不回落到
+  默认配色（`crates/rssr-app/tests/test_builtin_theme_contracts.rs` 校验）。
+  Amethyst Glass 是参考实现。只写 `:root` 的自定义主题会在暗色外观下
+  混入默认暗色配色；只想要单一配色时，把同一组变量同时写进 `:root`、
+  `.theme-dark` 与 `.theme-system`，此时设置页的「外观」不再起作用。
+- 暗色的 `--button-secondary-bg` 是中性石板色字面量，不随 `--accent` 派生；
+  自定义主题在暗色里想要带强调色的次按钮，需要自行覆写它。
 - `body` 在 `.app-shell` 之外，读不到主题类上的变量：想让视口底纹随
   亮暗切换，需要用 `body:has(.theme-dark)`（及 `.theme-system` 的媒体查询
   变体）显式声明，或只覆写 `--app-bg` / `--app-bg-dark`。
@@ -542,7 +550,6 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 | --- | --- | --- |
 | 基础页面布局 | 视口 ≤ 720px | 缩减页面留白，目录、表单和工具栏适应手机宽度 |
 | 极窄页面 | 视口 ≤ 480px | 进一步压缩间距和网格列数，保留动作触达 |
-| Atlas Sidebar | ≤ 960px / ≥ 961px | 手机顶栏与桌面侧栏切换；桌面展开 280px、收起 44px |
 | 导航搜索 | 容器 ≤ 328px | 搜索框换到下一行，预算包含箭头占位，与视口宽度独立 |
 
 主题需要分别验证这些边界的两侧。默认按钮与原生 checkbox 应继承主题颜色；禁用按钮不得保留可点击的 hover/按压反馈。保持原生 `disabled` 语义，不以 CSS 独立推断可操作状态。
@@ -555,7 +562,7 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 
 `data-layout="reader-shortcut-scope"` 使用 `--focus-ring-color` 绘制焦点轮廓；收藏按钮同时发布 `aria-pressed` 与既有 `data-state`，主题不能以隐藏装饰图标为由省略状态区分。
 
-可访问性验收目标：普通文本与实际背景至少 **4.5:1**，大文本至少 **3:1**；识别控件和状态所必需的非文本视觉信息与相邻颜色至少 **3:1**。禁用控件有规范例外，但仍应可辨认。数值必须基于透明层、渐变和实际相邻背景合成后的颜色，不能只测 `--muted` / `--bg` 就宣布整个主题通过。检查 default 与四套内置主题的浅色、深色、跟随系统模式；原生 checkbox 和系统高对比模式保留浏览器回退。
+可访问性验收目标：普通文本与实际背景至少 **4.5:1**，大文本至少 **3:1**；识别控件和状态所必需的非文本视觉信息与相邻颜色至少 **3:1**。禁用控件有规范例外，但仍应可辨认。数值必须基于透明层、渐变和实际相邻背景合成后的颜色，不能只测 `--muted` / `--bg` 就宣布整个主题通过。检查默认主题与 Amethyst Glass 的浅色、深色、跟随系统模式；原生 checkbox 和系统高对比模式保留浏览器回退。
 
 依据：[WCAG 文本对比度](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)、[非文本对比度](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)、[焦点可见](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html)、[字符快捷键](https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html)。这是验收要求，不代表当前所有内置或用户主题已获完整符合性结论。
 
@@ -638,6 +645,7 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 - CSS 文本编辑本身不注入样式；“预览当前 CSS”或 CSS 文件导入校验后更新预览，显式保存才写入配置。普通页内导航离开设置会丢弃未保存草稿与预览；Web 的版本更新／重新登录恢复流程仍按既有规则暂存草稿。
 - 预览不连带保存其他设置；“保存设置”统一提交当时已编辑字段，保存期间的新编辑仍为草稿，失败保留草稿及当前预览。
 - 已保存 CSS 是版本快照，升级不会自动改写。旧版内置主题仍识别为对应预设；即使卡片显示“当前已选”，重新点击该卡片预览并保存，才会采用仓库中的新版样式。
+- Atlas Sidebar、Newsprint、Midnight Ledger 已下线（Midnight 的墨青配色并入默认主题的深色外观）。已保存的这些 CSS 仍原样生效，设置页识别为「已下线的内置主题」并提示更换；冻结副本在 `assets/themes/legacy/`。
 
 ### 在设置页中使用
 
@@ -650,14 +658,7 @@ filled 主按钮 / tinted 次按钮 / filled 红色危险 / tinted 红色弱危�
 ### 用 CLI 应用
 
 ```bash
-cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/newsprint.css
-```
-
-也可以换成：
-
-```bash
 cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/amethyst-glass.css
-cargo run --locked -p rssr-cli -- save-settings --custom-css-file assets/themes/midnight-ledger.css
 ```
 
 ## 阅读元信息与来源未读数
