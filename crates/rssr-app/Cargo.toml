@@ -36,6 +36,10 @@ tokio = { workspace = true, features = ["fs"] }
 rssr-infra = { path = "../rssr-infra" }
 webbrowser.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Exact: the WebKitGTK binding wry 0.53 hands out; used only for WebView settings.
+webkit2gtk = "=2.0.1"
+
 [target.'cfg(target_os = "android")'.dependencies]
 dioxus = { workspace = true, features = ["mobile"] }
 jni = "0.21.1"

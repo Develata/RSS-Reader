@@ -27,6 +27,8 @@ const APP_STYLESHEET: &str = concat!(
 #[component]
 #[allow(non_snake_case)]
 pub fn App() -> Element {
+    #[cfg(target_os = "linux")]
+    crate::bootstrap::native_document::use_direct_wheel_scrolling();
     crate::ui::reading_position::use_reading_positions();
     let theme = use_theme_controller();
     let shell = use_app_shell_state();
