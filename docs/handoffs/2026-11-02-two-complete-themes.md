@@ -51,13 +51,20 @@
 - SHOULD_FIX 2（已修复）：覆盖测试会把注释掉的声明算作覆盖，且只比较名称。已按上面的契约测试修正。
 - NEEDS_VERIFICATION 3（未覆盖）：浏览器主题矩阵只循环两个主题，没有浅色 / 深色 / 跟随系统 × 主题的计算样式断言。
 
+### Codex 复审第二轮（同模型，范围 08cf5716）
+
+- 结论：无 BLOCKER；2 项 SHOULD_FIX 均为测试守卫可被合法 CSS 绕过，已核实并修复；1 项 NEEDS_VERIFICATION 记为未覆盖。
+- 守卫只匹配完整的 `var(--surface-card)`，带 fallback、内部空白或注释里的 `)` 会漏检。现改用共享的 `tests/css_scan`（识别注释、字符串、括号），按 `var()` 第一个参数判断，四种写法均有反例测试。
+- 解析器删除注释会把 `--dan/**/ger` 拼成 `--danger`，按 `;` 直接切分会截断 `url("data:…;…")`。现注释替换为空格、只在顶层分号切分，形似自定义属性但不是单个标识符的名称直接失败；均有反例测试。
+- 视觉差异（已接受，未在应用中复看）：分层写法让色调端叠在表面之上，不再是两者插值。默认浅色各通道差约 3/255；Amethyst 浅色下添加订阅卡片底部、订阅统计卡片顶部更白（不透明度从约 0.4 升到约 0.8）。
+
 ## 验证与验收
 
 ### 自动化验证
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`：通过
-- `cargo test --workspace --locked`：通过（复审修复后 1198 通过、0 失败）
+- `cargo test --workspace --locked`：通过（第二轮修复后 1200 通过、0 失败）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
 - `cargo check --locked`（scripts/release-ui）：通过
 - `node --check` 四个改动的浏览器脚本、`bash -n scripts/run_server_web_regression.sh`：通过

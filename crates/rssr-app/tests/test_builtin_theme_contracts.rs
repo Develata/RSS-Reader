@@ -1,5 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+#[allow(dead_code)]
+mod css_scan;
+
 const DEFAULT_TOKENS: &str = include_str!("../../../assets/styles/tokens.css");
 const AMETHYST_GLASS: &str = include_str!("../../../assets/themes/amethyst-glass.css");
 
@@ -57,34 +60,28 @@ fn builtin_themes_reference_current_semantic_interfaces() {
     }
 }
 
-/// The CSS text without `/* ... */` comments (an unterminated comment runs to the end).
-fn without_comments(css: &str) -> String {
-    let mut text = String::with_capacity(css.len());
-    let mut rest = css;
-    while let Some(start) = rest.find("/*") {
-        text.push_str(&rest[..start]);
-        rest = rest[start + 2..].split_once("*/").map_or("", |(_, after)| after);
-    }
-    text.push_str(rest);
-    text
-}
-
 /// Custom properties (name -> whitespace-normalized value) declared in the first rule whose
 /// prelude starts at `prelude`. Token rules hold only declarations, so the rule ends at the
-/// first `}`.
+/// first top-level `}`. A declaration naming something like a custom property that is not one
+/// identifier (`--dan/**/ger`, `-- x`) fails instead of being read as a token.
 fn declarations(css: &str, prelude: &str) -> BTreeMap<String, String> {
-    let css = without_comments(css);
+    let css = css_scan::without_comments(css);
     let start = css.find(prelude).unwrap_or_else(|| panic!("missing rule `{prelude}`"));
     // The rule's own brace follows the prelude (a `@media {` inside the prelude is not it).
     let header_end = start + prelude.trim_end_matches('{').len();
     let body_start = header_end + css[header_end..].find('{').expect("rule body") + 1;
-    let body_end = body_start + css[body_start..].find('}').expect("rule end");
-    css[body_start..body_end]
-        .split(';')
-        .filter_map(|declaration| declaration.trim().split_once(':'))
-        .filter(|(name, _)| name.starts_with("--"))
-        .map(|(name, value)| {
-            (name.trim().to_string(), value.split_whitespace().collect::<Vec<_>>().join(" "))
+    let body_end = css_scan::rule_end(&css, body_start).expect("rule end");
+    css_scan::top_level_declarations(&css[body_start..body_end])
+        .into_iter()
+        .filter_map(|declaration| {
+            let (name, value) = declaration.split_once(':')?;
+            let name = name.trim();
+            if css_scan::is_custom_property(name) {
+                Some((name.to_string(), value.split_whitespace().collect::<Vec<_>>().join(" ")))
+            } else {
+                assert!(!name.contains("--"), "unreadable custom property name `{name}`");
+                None
+            }
         })
         .collect()
 }
@@ -108,10 +105,25 @@ fn assert_covers(name: &str, scheme: &str, declared: &BTreeSet<String>) {
 
 #[test]
 fn token_parser_ignores_commented_declarations_and_reads_values() {
-    let css = "\n.theme-dark {\n  /*\n  --danger: red;\n  */\n  --ink:\n    #fff;\n}";
+    let css = "\n.theme-dark {\n  /*\n  --danger: red;\n  */\n  --ink:\n    #fff;\n  color-scheme: dark;\n}";
     let parsed = declarations(css, "\n.theme-dark {");
     assert_eq!(parsed.len(), 1, "{parsed:?}");
     assert_eq!(parsed["--ink"], "#fff");
+}
+
+#[test]
+fn token_parser_keeps_semicolons_inside_strings_and_parentheses() {
+    let css = "\n:root {\n  --a: url(\"data:image/svg+xml;one\");\n  --b: url(data:x;two);\n  --c: \"}\";\n}";
+    let parsed = declarations(css, "\n:root {");
+    assert_eq!(parsed["--a"], "url(\"data:image/svg+xml;one\")");
+    assert_eq!(parsed["--b"], "url(data:x;two)");
+    assert_eq!(parsed["--c"], "\"}\"");
+}
+
+#[test]
+#[should_panic(expected = "unreadable custom property name")]
+fn token_parser_rejects_a_name_split_by_a_comment() {
+    declarations("\n.theme-dark {\n  --dan/**/ger: red;\n}", "\n.theme-dark {");
 }
 
 #[test]

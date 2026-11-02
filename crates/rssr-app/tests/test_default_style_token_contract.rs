@@ -6,6 +6,9 @@
 //! 3. 表面背景 token（`BACKGROUND_TOKENS`，可以是渐变）只能作为背景层，不能放进渐变当色标；
 //!    `--surface-tint` 用作色标，必须是颜色。
 
+#[allow(dead_code)]
+mod css_scan;
+
 const TOKENS: &str = include_str!("../../../assets/styles/tokens.css");
 
 const TOKEN_CONSUMING_SHEETS: &[(&str, &str)] = &[
@@ -143,33 +146,25 @@ fn tokens_stylesheet_exposes_documented_public_tokens() {
 
 /// Surface tokens a theme may set to an image (a gradient), not only a color.
 const BACKGROUND_TOKENS: &[&str] = &[
-    "var(--surface-panel)",
-    "var(--surface-reader)",
-    "var(--surface-card)",
-    "var(--surface-veil)",
-    "var(--surface-chip)",
-    "var(--surface-chip-hover)",
+    "--surface-panel",
+    "--surface-reader",
+    "--surface-card",
+    "--surface-veil",
+    "--surface-chip",
+    "--surface-chip-hover",
 ];
 
-/// Each background token inside a gradient's argument list (`name:line`).
+/// Each background token referenced inside a gradient's arguments (`name:line`), whatever the
+/// `var()` spelling (fallbacks, whitespace, comments).
 fn surface_tokens_used_as_gradient_stops(name: &str, css: &str) -> Vec<String> {
+    let css = css_scan::without_comments(css);
     let mut violations = Vec::new();
-    for (start, _) in css.match_indices("gradient(") {
-        let args_start = start + "gradient(".len();
-        let mut depth = 1;
-        let args_end = css[args_start..]
-            .char_indices()
-            .find_map(|(offset, character)| {
-                match character {
-                    '(' => depth += 1,
-                    ')' => depth -= 1,
-                    _ => {}
-                }
-                (depth == 0).then_some(args_start + offset)
-            })
-            .unwrap_or(css.len());
+    for (start, call) in css.match_indices("gradient(") {
+        let args_start = start + call.len();
+        let args_end = css_scan::closing_paren(&css, args_start).unwrap_or(css.len());
         let args = &css[args_start..args_end];
-        if BACKGROUND_TOKENS.iter().any(|token| args.contains(token)) {
+        if css_scan::var_references(args).iter().any(|(_, token)| BACKGROUND_TOKENS.contains(token))
+        {
             let line = css[..start].lines().count();
             violations.push(format!("{name}:{line}"));
         }
@@ -179,11 +174,20 @@ fn surface_tokens_used_as_gradient_stops(name: &str, css: &str) -> Vec<String> {
 
 #[test]
 fn surface_token_guard_detects_gradient_stops() {
-    let nested = "background: linear-gradient(180deg, var(--surface-card), var(--surface-tint));";
-    assert_eq!(surface_tokens_used_as_gradient_stops("test", nested).len(), 1);
-    let layered =
-        "background: linear-gradient(180deg, transparent, var(--accent)), var(--surface-card);";
-    assert!(surface_tokens_used_as_gradient_stops("test", layered).is_empty());
+    for nested in [
+        "background: linear-gradient(180deg, var(--surface-card), var(--surface-tint));",
+        "background: linear-gradient(180deg, var(--surface-card, transparent), transparent);",
+        "background: linear-gradient(180deg, var( --surface-card ), transparent);",
+        "background: linear-gradient(/* ) */ 180deg, var(--surface-veil), transparent);",
+    ] {
+        assert_eq!(surface_tokens_used_as_gradient_stops("test", nested).len(), 1, "{nested}");
+    }
+    for layered in [
+        "background: linear-gradient(180deg, transparent, var(--surface-tint)), var(--surface-card);",
+        "background: linear-gradient(180deg, var(--surface-cardigan), transparent);",
+    ] {
+        assert!(surface_tokens_used_as_gradient_stops("test", layered).is_empty(), "{layered}");
+    }
 }
 
 #[test]
