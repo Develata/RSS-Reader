@@ -7,6 +7,7 @@
 | 主题 | 优先阅读 |
 | --- | --- |
 | Linux 滚轮失效与滚动卡顿 | [根元素 overscroll、主题光晕与 WebKitGTK 平滑滚动](./2026-11-02-linux-wheel-scroll-lag.md) |
+| Settings 主题导入与预览宿主入口 | [只读评估：无实际复用阻碍，未改代码](./2026-11-02-settings-theme-host-assessment.md) |
 | Settings 规则边界与 PR #60 | [复审、Web 补验与主线核验](./2026-10-31-settings-review-merge.md)、[规则独立编译与装配保持](./2026-10-31-settings-rule-boundary.md) |
 | README 当前界面与 PR #59 | [真实 Web 截图、附件、GC 与主线核验](./2026-10-31-readme-media.md) |
 | Reader 读取恢复提示修复与 PR #57 | [主线核验与工作区保全](./2026-10-31-reader-recovery-merge.md)、[旧错误残留的复现、修复与故障回归](./2026-10-31-reader-reread-recovery.md) |
@@ -44,6 +45,7 @@
 | 日期 | 记录 |
 | --- | --- |
 | 2026-11-02 | [Linux 滚轮失效与滚动卡顿修复](./2026-11-02-linux-wheel-scroll-lag.md) |
+| 2026-11-02 | [Settings 主题导入与预览宿主入口评估](./2026-11-02-settings-theme-host-assessment.md) |
 | 2026-10-31 | [13 个已合并本地分支清理与保全核对](./2026-10-31-local-branch-cleanup.md) |
 | 2026-10-31 | [Settings 规则边界复审与整合](./2026-10-31-settings-review-merge.md) |
 | 2026-10-31 | [Settings 草稿与回填规则边界](./2026-10-31-settings-rule-boundary.md) |
