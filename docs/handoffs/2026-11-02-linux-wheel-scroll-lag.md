@@ -67,7 +67,7 @@ v0.2.1 Linux 桌面版在“全部文章”页鼠标滚轮完全失效，并在�
 
 ## 风险与后续事项
 
-- Atlas Sidebar、Amethyst Glass 也有全页径向渐变（Amethyst 还有 `backdrop-filter`），CPU 渲染下同样偏贵，本次未改、未测
+- Atlas Sidebar、Amethyst Glass 也有全页径向渐变（Amethyst 还有 `backdrop-filter`），CPU 渲染下同样偏贵，本次未改、未测；Develata 决定留待原生桌面版处理
 - 关闭平滑滚动只影响 Linux WebKitGTK；若以后需要平滑感，可考虑宿主层按滚轮频率动态切换该设置（未验证）
 - 内置预设升级不会自动替换用户已存的旧文本，属于既有机制
 - 计划中的原生 Rust 桌面版会绕开这些 WebView 问题，届时 `use_direct_wheel_scrolling` 随 WebView 删除
