@@ -449,12 +449,7 @@ async function checkReader(client) {
 }
 
 async function checkEntriesInitialization(client) {
-  // A failed first read leaves the page on the default archive window (3 months), so the seed's
-  // fixed dates would archive every entry once they age past it. Publish them yesterday instead.
-  const yesterday = new Date(Date.now() - 86400000).toISOString()
-    .replace('T', ' ').replace(/\.\d+Z$/, '.0 +00:00:00');
-  await seedAndNavigate(client, 'mobile-ui-short', '/entries', '[data-page="entries"][data-position-ready="true"]',
-    preset, {edit: ({core}) => { for (const entry of core.entries) entry.published_at = yesterday; }});
+  await seedAndNavigate(client, 'mobile-ui-short', '/entries', '[data-page="entries"][data-position-ready="true"]');
   // The page's first read (preferences and subscriptions) held at the server: the page waits and
   // does not claim the library is empty (formerly a Web Lock held by another tab).
   const held = [];

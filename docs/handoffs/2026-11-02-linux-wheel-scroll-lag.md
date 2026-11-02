@@ -47,8 +47,8 @@ v0.2.1 Linux 桌面版在“全部文章”页鼠标滚轮完全失效，并在�
 
 - PR #61 与 main `287256da`（仅文档）的 5 个 `web-ui` 在同一处失败：`checkEntriesInitialization` 让首次读取失败后，等不到 `entry-card-title`。main `f6c4a0cd` 在 10-31 用同一 Chrome（156.0.8078.80）全部通过。
 - 原因：首次读取（含偏好）失败时，文章页停在 `UserSettings::default()` 的 3 个月归档窗口；`mobile-ui-short` 种子文章固定发布于 2026-08-01。11-01 起分界越过该日期，全部文章被归档。
-- 修复：该检查用现有 `edit` 钩子把种子文章发布时间改为前一天，不再依赖当前日期；产品的失败回退行为不变。
-- 本机验证（release 构建，本机 Google Chrome，非 CI 的 Chrome for Testing）：`scripts/run_server_web_regression.sh` 默认 regression、`theme-matrix`、`feed-smoke`、`acceptance` 与 newsprint / atlas-sidebar / midnight-ledger / amethyst-glass 四个预设全部通过。
+- 修复：服务器 Web 回归的页面时钟固定为 `2026-10-15T12:00:00Z` 起走（`cdp_session.mjs` 的 `pinPageClock`，`ServerPage.start()` 调用，两个驱动共用）；种子与断言保持固定日期，产品的失败回退行为不变。曾先用“该检查把种子日期改为前一天”修补（`e27a2d86`），因相对日期会让月份分组随运行日变化，经 Develata 确认改为固定时钟并撤回该补丁。
+- 本机验证（release 构建，本机 Google Chrome，非 CI 的 Chrome for Testing，真实日期 2026-11-02）：见下方自动化验证。
 
 ## 验证与验收
 
@@ -58,6 +58,8 @@ v0.2.1 Linux 桌面版在“全部文章”页鼠标滚轮完全失效，并在�
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`：通过
 - `cargo test --workspace --locked`：通过（1192 passed，0 failed）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
+- `node --test scripts/browser/api_traffic.test.mjs scripts/browser/server_acceptance.test.mjs scripts/browser/workspace_response_probe.test.cjs`：通过（16/16）
+- `bash scripts/run_server_web_regression.sh --release`（regression、`--suite theme-matrix`、`feed-smoke`、`acceptance`，及 `--preset` newsprint / atlas-sidebar / midnight-ledger / amethyst-glass）：通过；本机 Google Chrome、真实日期 2026-11-02、固定页面时钟，`checkEntriesInitialization` 不再改种子日期仍通过
 - `cargo check -p rssr-app --target aarch64-linux-android --locked`：未完成（本机无 Android NDK，`ring` 构建脚本失败）；本次 Rust 改动只在 `target_os = "linux"` 下编译，Android 侧由 CI 覆盖
 
 ### 手工验收
