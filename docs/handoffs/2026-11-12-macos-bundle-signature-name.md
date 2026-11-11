@@ -60,8 +60,16 @@ Develata 报告无法安装 v0.2.2 的 macOS 版本。原因是应用包签名�
 
 ## 风险与后续事项
 
-- 要完全去掉 Gatekeeper 弹窗，需要 Apple Developer ID 证书和公证（年费），是否采用由 Develata 决定。
+- 用 Apple Developer ID 证书签名并公证（年费）后，系统不会再因开发者身份未验证而默认拦截；但首次打开从网上下载的应用时，仍可能弹出确认框。是否采用由 Develata 决定。
+- 真实下载路径仍待验收：拿下一版 Release 的正式附件，在 macOS 14 / 15 / 26（含 Intel）上用浏览器下载、系统解压、移入“应用程序”，再走“仍要打开”。记录系统版本、CPU、附件摘要、quarantine 状态、实际提示、能否启动，以及菜单栏和 Dock 的名称；同时用 `tar -tvzf` 和 `xattr -lr` 检查归档里有没有多余的 AppleDouble 文件。
 - 若以后加入 Developer ID 签名，把 `codesign --sign -` 换成证书身份并加上 hardened runtime 与公证步骤。`prepare_macos_bundle.py` 仍须排在签名之前。
+
+## Codex 评审（2026-11-12）
+
+- 结论：没有阻断问题。签名命令、plist 与签名的先后顺序、上传链路（发布时不会再解包、重打包）、改名不影响数据目录和 bundle id、测试有效性，都已核对。
+- 采纳两处文字修正：README 和 v0.2.2 说明把“已损坏”与绕过方法说成适用于所有架构和更早版本；“公证能完全去掉弹窗”的说法不准确。
+- 采纳：macOS 冒烟检查的步骤显式 `shell: bash`，让 `tar | grep` 管道带上 pipefail。这是旧问题，不是本次引入的。
+- 待验证：真实下载与“仍要打开”的路径、菜单栏截图，见上一节。
 
 ## 给下一位 Agent 的备注
 

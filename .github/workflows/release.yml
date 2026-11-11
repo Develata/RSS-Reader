@@ -541,6 +541,8 @@ jobs:
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
 
       - name: Smoke-check macOS artifacts
+        # Explicit bash adds pipefail, so a truncated archive cannot pass `tar | grep`.
+        shell: bash
         run: |
           temp_dir="$(mktemp -d)"
           trap 'rm -rf -- "$temp_dir"' EXIT

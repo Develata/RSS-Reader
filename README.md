@@ -40,7 +40,7 @@ Android 暂无应用内完整资料库备份和回退流程；配置导出不包
 
 上表附件均在 `v0.2.2` 发布；另有四平台 CLI 包和 Android AAB，共 14 个公开附件。本版只下载核对了 Linux 附件的哈希、版本与构建标识，其他平台正式包未上手重验；Android 证书、模拟器覆盖安装等核验仍是 v0.2.1 的结果，见[本版发布记录](./docs/handoffs/2026-11-02-v0.2.2-release.md)与 [v0.2.1 发布核验](./docs/handoffs/2026-10-28-v0.2.1-release.md)。macOS 实机交互、系统输入法及其他设备覆盖仍有边界。Windows 程序未做 Authenticode 签名，macOS 应用未用 Developer ID 签名或公证。
 
-macOS：v0.2.2 及更早的应用包签名不完整，从浏览器下载后打开会提示“已损坏”。解压并放好后在终端运行 `xattr -dr com.apple.quarantine /Applications/RSS-Reader.app`（按实际位置改路径）去掉下载标记，即可正常打开。之后的版本发布时对整个应用包做 ad-hoc 签名，菜单栏名称也由 `RssrApp` 改为 `RSS-Reader`；首次打开若提示无法验证开发者，到“系统设置 → 隐私与安全性”选择“仍要打开”。
+macOS：v0.2.2 的 Apple Silicon 包缺少整包签名，从浏览器下载后会被系统拒绝打开（通常提示“已损坏”）；Intel 包的程序完全未签名，提示可能不同；更早的版本没有逐一核对。可以在解压并放好后，在终端运行 `xattr -dr com.apple.quarantine /Applications/RSS-Reader.app`（按实际位置改路径）去掉下载标记再打开；这一做法只在 v0.2.2 Apple Silicon 包上确认过能启动。之后的版本发布时对整个应用包做 ad-hoc 签名，菜单栏名称也由 `RssrApp` 改为 `RSS-Reader`；首次打开若提示无法验证开发者，到“系统设置 → 隐私与安全性”选择“仍要打开”。
 
 **Linux 安装包：** `v0.2.2` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
 
