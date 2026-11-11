@@ -37,7 +37,7 @@
 | 正文性能与后台图片调度 | [PR 与 CI 验收](./2026-10-29-parse-image-pr-ci.md)、[实现及证据](./2026-10-28-parse-image-performance.md)、[长期预算契约](../design/reader-processing-budgets.md) |
 | 文档维护与归档 | [2026-10-30 分支回执补收](./2026-10-30-branch-consolidation.md)、[2026-10-29 整合](./2026-10-29-consolidation.md)、[历史索引](./archive/README.md) |
 | 历史待办核实与 PR 收尾 | [本轮核实](./2026-10-28-historical-followup-audit.md)、[当前待办](../maintenance-backlog.md) |
-| 最新发布与验收 | [v0.2.2 发布与 Linux 附件核对](./2026-11-02-v0.2.2-release.md)、[Linux 桌面入口名称与 0.2.2-1 打包修订](./2026-11-02-linux-desktop-entry-name.md)；上一版 [v0.2.1 正式发布](./2026-10-28-v0.2.1-release.md)、[此前原生、设计与升级检查](./2026-10-28-release-readiness.md) |
+| 最新发布与验收 | [v0.2.2 发布与 Linux 附件核对](./2026-11-02-v0.2.2-release.md)、[Linux 桌面入口名称与 0.2.2-1 打包修订](./2026-11-02-linux-desktop-entry-name.md)、[macOS 包签名不完整与菜单栏名称](./2026-11-12-macos-bundle-signature-name.md)；上一版 [v0.2.1 正式发布](./2026-10-28-v0.2.1-release.md)、[此前原生、设计与升级检查](./2026-10-28-release-readiness.md) |
 | 已发布版本 | [v0.2.2](./2026-11-02-v0.2.2-release.md)、[v0.2.1](./2026-10-28-v0.2.1-release.md)、[v0.2.0](./2026-10-23-v0.2.0-release.md) |
 
 ## 近期记录
@@ -47,6 +47,7 @@
 | 日期 | 记录 |
 | --- | --- |
 | 2026-11-12 | [CI 算力与时长优化](./2026-11-12-ci-cost.md) |
+| 2026-11-12 | [macOS 包签名不完整与菜单栏名称](./2026-11-12-macos-bundle-signature-name.md) |
 | 2026-11-02 | [Linux 桌面入口名称与 0.2.2-1 打包修订](./2026-11-02-linux-desktop-entry-name.md) |
 | 2026-11-02 | [v0.2.2 发布与 Linux 附件核对](./2026-11-02-v0.2.2-release.md) |
 | 2026-11-02 | [Linux 滚轮失效与滚动卡顿修复](./2026-11-02-linux-wheel-scroll-lag.md) |
