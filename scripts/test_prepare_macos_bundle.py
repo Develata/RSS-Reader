@@ -9,7 +9,7 @@ import tarfile
 import tempfile
 import unittest
 
-from prepare_macos_bundle import VERSION_KEYS, prepare_bundle
+from prepare_macos_bundle import NAME_KEYS, PRODUCT_NAME, VERSION_KEYS, prepare_bundle
 
 
 class MacOSBundleMetadataTests(unittest.TestCase):
@@ -26,7 +26,9 @@ class MacOSBundleMetadataTests(unittest.TestCase):
             "CFBundleVersion": "0.1.0",
             "CFBundleIdentifier": "io.github.develata.rssreader",
             "CFBundleExecutable": "rssr-app",
-            "CFBundleName": "RSS-Reader",
+            # What dx 0.7.9 emits: both names derived from the binary.
+            "CFBundleName": "RssrApp",
+            "CFBundleDisplayName": "RssrApp",
             "LSMinimumSystemVersion": "10.13",
             "CustomMetadata": {"enabled": True, "items": ["one", "two"]},
         }
@@ -41,6 +43,7 @@ class MacOSBundleMetadataTests(unittest.TestCase):
     def assert_versions(self, metadata, version):
         expected = dict(self.metadata)
         expected.update({key: version for key in VERSION_KEYS})
+        expected.update({key: PRODUCT_NAME for key in NAME_KEYS})
         self.assertEqual(metadata, expected)
 
     def test_updates_both_versions_and_preserves_other_metadata(self):
@@ -54,6 +57,14 @@ class MacOSBundleMetadataTests(unittest.TestCase):
                 self.assertEqual(self.binary.read_bytes(), b"fixture executable")
                 prepare_bundle(self.bundle, "v9.87.65")
                 self.assert_versions(plistlib.loads(self.plist.read_bytes()), "9.87.65")
+
+    def test_adds_missing_display_name(self):
+        del self.metadata["CFBundleDisplayName"]
+        self.write_plist()
+        prepare_bundle(self.bundle, "v0.1.22")
+        metadata = plistlib.loads(self.plist.read_bytes())
+        self.assertEqual(metadata["CFBundleName"], "RSS-Reader")
+        self.assertEqual(metadata["CFBundleDisplayName"], "RSS-Reader")
 
     def test_rejects_invalid_tags_without_mutating(self):
         original = self.plist.read_bytes()
