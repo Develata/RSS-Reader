@@ -1,10 +1,24 @@
 name: CI
 
+# Documentation-only changes cannot change a build or test result; skip the whole
+# workflow (a skipped job would fail the lint-and-test gate). Vendored crates stay in.
 on:
   push:
     branches:
       - main
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - '!LICENSE'
+      - 'vendor/**'
   pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!**/*.md'
+      - '!LICENSE'
+      - 'vendor/**'
   workflow_dispatch:
     inputs:
       acceptance_long:
@@ -124,6 +138,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: scripts/release-ui -> ../../target/release-ui-runner
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Check isolated release UI CLI
         run: |
           cargo fmt --manifest-path scripts/release-ui/Cargo.toml --check
@@ -165,16 +183,9 @@ jobs:
       - name: Install system dependencies
         if: matrix.package == 'rssr-app'
         timeout-minutes: 10
-        run: |
-          bash scripts/configure_ubuntu_apt.sh
-          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
-          sudo apt-get "${apt_options[@]}" update
-          sudo apt-get "${apt_options[@]}" install -y \
-            pkg-config \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libsoup-3.0-dev \
-            libxdo-dev
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libxdo-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -185,6 +196,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: native-${{ matrix.package }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Module Clippy
         run: cargo clippy --locked -p "$PACKAGE" --all-targets -- -D warnings
@@ -229,6 +241,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: web-build
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Dioxus CLI
         uses: ./.github/actions/setup-dioxus-cli
@@ -283,11 +296,16 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
-        preset: [default, amethyst-glass]
+        include:
+          - preset: default
+          # The default regression alone takes about as long as this preset's
+          # regression plus the preset-independent suites, so both jobs end together.
+          - preset: amethyst-glass
+            extra-suites: true
     env:
       PRESET: ${{ matrix.preset }}
+      EXTRA_SUITES: ${{ matrix.extra-suites && 'true' || 'false' }}
       ACCEPTANCE_LONG: ${{ inputs.acceptance_long && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v7
@@ -320,13 +338,14 @@ jobs:
           preset_args=()
           if [[ "$PRESET" != default ]]; then preset_args=(--preset "$PRESET"); fi
           bash scripts/run_server_web_regression.sh "${args[@]}" "${preset_args[@]}" --log-dir "target/ci-ui/$PRESET"
-          if [[ "$PRESET" == default ]]; then
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir "target/ci-ui/$PRESET-theme-matrix"
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir "target/ci-ui/$PRESET-feed-smoke"
+          # These suites use the default theme whichever job runs them.
+          if [[ "$EXTRA_SUITES" == true ]]; then
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir target/ci-ui/theme-matrix
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir target/ci-ui/feed-smoke
             # 常规 CI 跑短场景；手动运行可选择纳入等待 30 秒以上的长场景。
             acceptance_args=()
             if [[ "$ACCEPTANCE_LONG" == true ]]; then acceptance_args=(--long); fi
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance "${acceptance_args[@]}" --log-dir "target/ci-ui/$PRESET-acceptance"
+            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance "${acceptance_args[@]}" --log-dir target/ci-ui/acceptance
           fi
       - name: Preserve UI evidence even on failure
         if: always()
@@ -334,12 +353,12 @@ jobs:
         with:
           name: ci-ui-${{ matrix.preset }}
           path: |
-            target/ci-ui/${{ matrix.preset }}*/*.json
-            target/ci-ui/${{ matrix.preset }}*/*.md
-            target/ci-ui/${{ matrix.preset }}*/*.log
-            target/ci-ui/${{ matrix.preset }}*/*.png
-            target/ci-ui/${{ matrix.preset }}*/*.html
-            target/ci-ui/${{ matrix.preset }}*/*-traffic.txt
+            target/ci-ui/*/*.json
+            target/ci-ui/*/*.md
+            target/ci-ui/*/*.log
+            target/ci-ui/*/*.png
+            target/ci-ui/*/*.html
+            target/ci-ui/*/*-traffic.txt
           retention-days: 7
 
   reading-workspace:
@@ -397,10 +416,14 @@ jobs:
             target/ci-workspace/*/*.html
           retention-days: 7
 
-  wasm-contract-build:
+  # One job builds every harness once and runs them in turn: per-harness jobs spent
+  # most of their time on runner start-up, artifact transfer and browser setup.
+  wasm-browser-contract:
     needs: workspace
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
+    env:
+      HARNESSES: ${{ join(fromJSON(needs.workspace.outputs.harnesses), ' ') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -420,55 +443,42 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: wasm-contract-build
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Compile all contract harnesses once using Cargo's artifact paths
-        env:
-          HARNESSES: ${{ join(fromJSON(needs.workspace.outputs.harnesses), ' ') }}
         run: |
           read -r -a harnesses <<< "$HARNESSES"
           bash scripts/run_wasm_contract_harness.sh --prepare "$RUNNER_TEMP/ci-wasm-contracts" "${harnesses[@]}"
 
-      - name: Share the exact contract artifacts with browser jobs
-        uses: actions/upload-artifact@v7
-        with:
-          name: ci-wasm-contracts
-          path: ${{ runner.temp }}/ci-wasm-contracts/
-          if-no-files-found: error
-          retention-days: 3
-
-      # Warm the shared native tool cache before the parallel jobs start.
       - name: Prepare pinned wasm-bindgen test runner
         uses: ./.github/actions/setup-wasm-bindgen
-        with:
-          version: ${{ needs.workspace.outputs.wasm-bindgen-version }}
-
-  wasm-browser-contract:
-    needs: [workspace, wasm-contract-build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix:
-        harness: ${{ fromJSON(needs.workspace.outputs.harnesses) }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/download-artifact@v8
-        with:
-          name: ci-wasm-contracts
-          path: ${{ runner.temp }}/ci-wasm-contracts/
-      - uses: ./.github/actions/setup-wasm-bindgen
         with:
           version: ${{ needs.workspace.outputs.wasm-bindgen-version }}
 
       - name: Setup Chrome for Testing
         uses: ./.github/actions/setup-browser-tests
 
-      - name: Run wasm browser contract harness
-        env:
-          HARNESS: ${{ matrix.harness }}
-        run: bash scripts/run_wasm_contract_harness.sh --prebuilt "$RUNNER_TEMP/ci-wasm-contracts" "$HARNESS"
+      # Every harness runs even after a failure; the step fails at the end naming them.
+      - name: Run every wasm browser contract harness
+        run: |
+          read -r -a harnesses <<< "$HARNESSES"
+          failed=()
+          for harness in "${harnesses[@]}"; do
+            echo "::group::$harness"
+            if timeout 15m bash scripts/run_wasm_contract_harness.sh --prebuilt "$RUNNER_TEMP/ci-wasm-contracts" "$harness"; then
+              result=passed
+            else
+              result=failed
+              failed+=("$harness")
+            fi
+            echo "::endgroup::"
+            echo "$harness: $result"
+          done
+          if (( ${#failed[@]} )); then
+            echo "::error::${#failed[@]} of ${#harnesses[@]} wasm browser contracts failed: ${failed[*]}"
+            exit 1
+          fi
+          echo "All ${#harnesses[@]} wasm browser contracts passed"
 
   android-smoke:
     runs-on: ubuntu-latest
@@ -528,6 +538,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           key: android-build
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Dioxus CLI
         uses: ./.github/actions/setup-dioxus-cli
@@ -584,7 +595,7 @@ jobs:
   # Keep the former required-check name stable, now aggregating every module.
   lint-and-test:
     if: always()
-    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, reading-workspace, wasm-contract-build, wasm-browser-contract, android-smoke]
+    needs: [workspace, format, test-tools, release-ui-runner, native-module, web-smoke, web-ui, reading-workspace, wasm-browser-contract, android-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
