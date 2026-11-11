@@ -56,10 +56,12 @@ runs:
 
         # APT still plans and orders the transaction (Pre-Depends included) and checks every
         # file against the restored lists; --no-download fails if anything is missing.
+        # Any failure here, restoring included, falls back to the networked install.
         if [[ "$CACHE_HIT" == true ]]; then
-          sudo find "$cache/lists" -maxdepth 1 -type f -exec cp -t /var/lib/apt/lists {} +
-          sudo find "$cache/debs" -maxdepth 1 -name '*.deb' -exec cp -t /var/cache/apt/archives {} +
-          if sudo apt-get "${apt_options[@]}" install --no-download "${install_options[@]}" "${packages[@]}" \
+          if [[ -d "$cache/lists" && -d "$cache/debs" ]] \
+            && sudo find "$cache/lists" -maxdepth 1 -type f -exec cp -t /var/lib/apt/lists {} + \
+            && sudo find "$cache/debs" -maxdepth 1 -name '*.deb' -exec cp -t /var/cache/apt/archives {} + \
+            && sudo apt-get "${apt_options[@]}" install --no-download "${install_options[@]}" "${packages[@]}" \
             && installed; then
             echo "Installed from the cached lists and downloads, without network access"
             exit 0

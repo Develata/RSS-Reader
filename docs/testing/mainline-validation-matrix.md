@@ -30,17 +30,17 @@
 
 ## GitHub CI 并发矩阵
 
-[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate；`workspace` job 用完整 Git diff 判断改动是否只涉及文档（`docs/`、Markdown 文件、`LICENSE`；`vendor/` 内的文件算代码）。是则跳过其余模块，由 `lint-and-test` 认可这次跳过；没有可比较的基准（新分支、强推、手动触发）或判断出错时一律全跑。不用 workflow 的 `paths` 过滤：它最多只看 3000 个文件，超出部分的代码改动会被漏掉，而且整体不触发会让必需检查一直停在 Pending。模块列表来自锁定依赖的 `cargo metadata`；浏览器契约列表来自 `rssr-infra` 的 `package.metadata.rssr.wasm-contracts`，并核对每个 test target 存在。wasm-bindgen 版本读取 `Cargo.lock`。除上述纯文档跳过外没有按路径选测；业务依赖方向由 Cargo 决定，独立 runner 只拆分验收执行。
+[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate；PR 的 `workspace` job 用完整 Git diff（合并提交对其第一父提交，即整个 PR 相对目标分支）判断是否只改文档：任意目录下的 `*.md`，或 `docs/` 下的任何文件（证据 JSON、截图等，构建与测试都不读取）；其他任何文件（含 `LICENSE`）都全跑。是则跳过其余模块，由 `lint-and-test` 认可这次跳过；判断出错时全跑。main push 与手动触发始终全跑：纯文档 push 可能取消仍在测试前一个代码提交的运行，只比较相邻两次 push 无法证明代码已验收。不用 workflow 的 `paths` 过滤：它最多只看 3000 个文件，超出部分的代码改动会被漏掉，而且整体不触发会让必需检查一直停在 Pending。模块列表来自锁定依赖的 `cargo metadata`；浏览器契约列表来自 `rssr-infra` 的 `package.metadata.rssr.wasm-contracts`，并核对每个 test target 存在。wasm-bindgen 版本读取 `Cargo.lock`。除上述纯文档跳过外没有按路径选测；业务依赖方向由 Cargo 决定，独立 runner 只拆分验收执行。
 
 | Job / matrix | 自动验收 | 并发上限 / 超时 |
 | --- | --- | --- |
-| `workspace`、`format` | 判断是否只改文档；生成完整模块列表与 native 分组；`cargo fmt --all --check` | 其余 job 都在 `workspace` 之后启动；各 10 分钟 |
+| `workspace`、`format` | 判断 PR 是否只改文档；生成完整模块列表与 native 分组（纯文档时省略）；`cargo fmt --all --check` | 其余 job 都在 `workspace` 之后启动；各 10 分钟 |
 | `test-tools` | actionlint 1.7.12（官方校验和验证下载）；std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离；Linux `.deb` 版本与动态库依赖元数据适配测试 | 独立运行，10 分钟 |
 | `release-ui-runner` / Ubuntu + Windows | 独立 CLI 的 fmt、Clippy、单测与黑盒编排验收；用真实 workspace 的 Cargo metadata 核对计划引用的 package / test target；独立 target 目录有自己的 Rust cache | 2 / 每平台 10 分钟 |
 | `native-module` / 3 组 | 每个 crate 仍单独 `cargo clippy --locked -p <crate> --all-targets -- -D warnings`、`cargo test --locked -p <crate>`（含 doc tests）；CLI help。`rssr-app`（需 GTK / WebKit）与 `rssr-infra`（测试最长）各占一个 runner，其余 crate（含今后新增的）在同一 runner 上依次检查，共享已编译的 crate；某个 crate 失败不中断其余 | 3 / 每组 35 分钟 |
 | `web-smoke` | 四组 wasm Clippy（全部 `-D warnings`）：app 正式 Web、app `pages-demo`、infra 无额外 feature、infra `memory-store,http-backend --tests`；Dioxus 0.7.9 正式 Web release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
 | `web-ui` / default + amethyst-glass | 下载同次页面/服务器/夹具工具，每个主题运行 `regression`；不带 `--preset` 的 `theme-matrix`（自行遍历各主题）、`feed-smoke`、`acceptance` 放在 amethyst-glass job 里，使两个 job 用时接近；它们各是独立步骤，前一个失败不影响后一个运行。push / PR 默认短验收；手动 `acceptance_long=true` 纳入全部长场景 | 2 / 每 job 15 分钟 |
-| `wasm-browser-contract` / 14 targets | 一个锁定依赖的 Cargo 调用准备全部 harness，同一 job 内依次用 `--prebuilt` 运行共享 SQL、WASM 执行器与正文重解析契约；某个 harness 失败不中断其余，结束时列出全部失败项。每个 harness 最多 5 分钟（平时不到 20 秒），忽略 TERM 时 30 秒后强制结束；运行步骤自身限 55 分钟，预算放不下下一个 harness 时，其余记为“未运行”并判失败，汇总总会输出 | 准备 35 分钟、运行 60 分钟，job 100 分钟 |
+| `wasm-browser-contract` / 14 targets | 一个锁定依赖的 Cargo 调用准备全部 harness，同一 job 内依次用 `--prebuilt` 运行共享 SQL、WASM 执行器与正文重解析契约；某个 harness 失败不中断其余，结束时列出全部失败项。每个 harness 最多 3 分钟（平时不到 20 秒），忽略 TERM 时 30 秒后强制结束；运行步骤限 55 分钟，足够全部 harness 各跑满最坏情况（`workspace` 断言 harness 不超过 15 个）。万一预算仍不够，其余记为“未运行”并判失败；job 未被取消时，结尾总会列出失败或未运行的 harness | 准备 35 分钟、运行 60 分钟，job 100 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 app + CLI check、app bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
 | `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝。唯一例外：`workspace` 成功且判定只改文档时，接受各模块的 skipped，但任何失败仍拒绝 | 5 分钟 |
 

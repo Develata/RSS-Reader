@@ -37,49 +37,49 @@ jobs:
         with:
           # A pull request checks out its merge commit; the first parent is the base.
           fetch-depth: 2
-      # Documentation alone cannot change a build or test result, so every other job is
-      # skipped and the gate accepts that. The decision uses the complete Git diff
-      # (a workflow `paths` filter sees at most 3000 files); a file under vendor/ is code;
-      # anything unexpected, including no comparable base, runs everything.
+      # Documentation alone (Markdown anywhere, or anything under docs/, which no build or
+      # test reads) cannot change a result, so the other jobs are skipped and the gate
+      # accepts that. Only a pull request may skip: it is compared as a whole with its
+      # base, so an earlier cancelled run cannot hide code. A push to main always runs
+      # everything, because a documentation push can cancel the run still testing the
+      # code pushed before it. The complete Git diff is used (a workflow `paths` filter
+      # sees at most 3000 files); any error runs everything.
       - name: Classify the change
         id: change
         env:
           EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
         run: |
           python3 - <<'PY'
-          import os, re, subprocess
+          import os, subprocess
 
-          def git(*args):
-              return subprocess.run(['git', *args], capture_output=True, text=True)
-
-          def is_doc(path):
-              if path.startswith('vendor/'):
+          def documentation_only():
+              if os.environ['EVENT'] != 'pull_request':
+                  print('Not a pull request; running every job')
                   return False
-              return path.startswith('docs/') or path == 'LICENSE' or path.endswith('.md')
+              # The checked-out merge commit's first parent is the base branch.
+              diff = subprocess.run(
+                  ['git', 'diff', '--no-renames', '--name-only', '-z', 'HEAD^1', 'HEAD'],
+                  capture_output=True, timeout=120, check=True)
+              # Paths stay bytes: Git file names need not be UTF-8.
+              files = [name for name in diff.stdout.split(b'\0') if name]
+              docs = bool(files) and all(
+                  name.endswith(b'.md') or name.startswith(b'docs/') for name in files)
+              print(f'{len(files)} changed files; documentation only: {docs}')
+              return docs
 
-          event, before = os.environ['EVENT'], os.environ.get('BEFORE', '')
-          base = None
-          if event == 'pull_request':
-              parent = git('rev-parse', '--verify', '--quiet', 'HEAD^1')
-              base = parent.stdout.strip() if parent.returncode == 0 else None
-          elif event == 'push' and re.fullmatch(r'[0-9a-f]{40}', before) and before.strip('0'):
-              if git('fetch', '--quiet', '--depth=1', 'origin', before).returncode == 0:
-                  base = before
-          docs_only = False
-          if base:
-              diff = git('diff', '--no-renames', '--name-only', '-z', base, 'HEAD')
-              files = [name for name in diff.stdout.split('\0') if name]
-              docs_only = diff.returncode == 0 and bool(files) and all(map(is_doc, files))
-              print(f'{len(files)} changed files since {base[:12]}; documentation only: {docs_only}')
-          else:
-              print(f'No comparable base for {event}; running every job')
+          try:
+              docs_only = documentation_only()
+          except Exception as error:
+              print(f'Could not classify the change ({error!r}); running every job')
+              docs_only = False
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'docs-only={str(docs_only).lower()}\n')
           PY
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.change.outputs.docs-only != 'true'
       - name: Read workspace members from Cargo
         id: matrix
+        if: steps.change.outputs.docs-only != 'true'
         run: |
           cargo metadata --locked --no-deps --format-version 1 > metadata.json
           python3 - <<'PY'
@@ -97,6 +97,8 @@ jobs:
                           if p['name'] == 'wasm-bindgen'}
           assert packages, 'workspace matrix must not be empty'
           assert harnesses, 'wasm contract matrix must not be empty'
+          # The wasm run step's 55-minute budget gives every harness its 3.5-minute worst case.
+          assert len(harnesses) <= 15, 'more than 15 wasm harnesses: raise the wasm step budget'
           assert len(versions) == 1, 'expected one locked wasm-bindgen version'
           # rssr-app needs GTK / WebKit and rssr-infra has the longest tests; every other
           # crate (including new ones) shares a runner. Each crate is still checked alone.
@@ -530,10 +532,11 @@ jobs:
       - name: Setup Chrome for Testing
         uses: ./.github/actions/setup-browser-tests
 
-      # A failing harness does not stop the others. Each gets 5 minutes (normal runs take
-      # under 20 s) and is killed if it ignores TERM. Once the step's own budget cannot
-      # fit another harness, the rest are reported as not run, so the summary always
-      # appears and the step fails naming every harness that failed or did not run.
+      # A failing harness does not stop the others. Each gets 3 minutes (normal runs take
+      # under 20 s) and is killed 30 s later if it ignores TERM, so the 55-minute budget
+      # fits the worst case of every harness (the workspace job caps their number at 15).
+      # Should the budget still run out, the rest are reported as not run; unless the job
+      # is cancelled, the step ends by naming every harness that failed or did not run.
       - name: Run every wasm browser contract harness
         timeout-minutes: 60
         run: |
@@ -542,13 +545,13 @@ jobs:
           failed=()
           not_run=()
           for harness in "${harnesses[@]}"; do
-            if (( deadline - SECONDS < 6 * 60 )); then
+            if (( deadline - SECONDS < 4 * 60 )); then
               not_run+=("$harness")
               echo "$harness: not run (step budget exhausted)"
               continue
             fi
             echo "::group::$harness"
-            if timeout --kill-after=30s 5m \
+            if timeout --kill-after=30s 3m \
               bash scripts/run_wasm_contract_harness.sh --prebuilt "$RUNNER_TEMP/ci-wasm-contracts" "$harness"; then
               result=passed
             else
