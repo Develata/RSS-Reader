@@ -30,23 +30,23 @@
 
 ## GitHub CI 并发矩阵
 
-[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate；只改 `docs/`、Markdown 文件或 `LICENSE` 的 push / PR 不触发整个 workflow（`vendor/` 内的文件仍触发）。模块列表来自锁定依赖的 `cargo metadata`；浏览器契约列表来自 `rssr-infra` 的 `package.metadata.rssr.wasm-contracts`，并核对每个 test target 存在。wasm-bindgen 版本读取 `Cargo.lock`。除上述纯文档跳过外没有按路径选测；业务依赖方向由 Cargo 决定，独立 runner 只拆分验收执行。
+[ci.yml](../../.github/workflows/ci.yml) 每次 main push / PR（或手动触发）均覆盖所有 workspace crate；`workspace` job 用完整 Git diff 判断改动是否只涉及文档（`docs/`、Markdown 文件、`LICENSE`；`vendor/` 内的文件算代码）。是则跳过其余模块，由 `lint-and-test` 认可这次跳过；没有可比较的基准（新分支、强推、手动触发）或判断出错时一律全跑。不用 workflow 的 `paths` 过滤：它最多只看 3000 个文件，超出部分的代码改动会被漏掉，而且整体不触发会让必需检查一直停在 Pending。模块列表来自锁定依赖的 `cargo metadata`；浏览器契约列表来自 `rssr-infra` 的 `package.metadata.rssr.wasm-contracts`，并核对每个 test target 存在。wasm-bindgen 版本读取 `Cargo.lock`。除上述纯文档跳过外没有按路径选测；业务依赖方向由 Cargo 决定，独立 runner 只拆分验收执行。
 
 | Job / matrix | 自动验收 | 并发上限 / 超时 |
 | --- | --- | --- |
-| `workspace`、`format` | 生成完整模块列表；`cargo fmt --all --check` | 独立运行，各 10 分钟 |
+| `workspace`、`format` | 判断是否只改文档；生成完整模块列表与 native 分组；`cargo fmt --all --check` | 其余 job 都在 `workspace` 之后启动；各 10 分钟 |
 | `test-tools` | actionlint 1.7.12（官方校验和验证下载）；std-only Rust wasm runner 的 rustfmt、Clippy、单测及子进程隔离；Linux `.deb` 版本与动态库依赖元数据适配测试 | 独立运行，10 分钟 |
 | `release-ui-runner` / Ubuntu + Windows | 独立 CLI 的 fmt、Clippy、单测与黑盒编排验收；用真实 workspace 的 Cargo metadata 核对计划引用的 package / test target；独立 target 目录有自己的 Rust cache | 2 / 每平台 10 分钟 |
-| `native-module` / 7 crates | `cargo clippy --locked -p <crate> --all-targets -- -D warnings`；`cargo test --locked -p <crate>`（含 doc tests）；CLI help | 4 / 每模块 35 分钟 |
+| `native-module` / 3 组 | 每个 crate 仍单独 `cargo clippy --locked -p <crate> --all-targets -- -D warnings`、`cargo test --locked -p <crate>`（含 doc tests）；CLI help。`rssr-app`（需 GTK / WebKit）与 `rssr-infra`（测试最长）各占一个 runner，其余 crate（含今后新增的）在同一 runner 上依次检查，共享已编译的 crate；某个 crate 失败不中断其余 | 3 / 每组 35 分钟 |
 | `web-smoke` | 四组 wasm Clippy（全部 `-D warnings`）：app 正式 Web、app `pages-demo`、infra 无额外 feature、infra `memory-store,http-backend --tests`；Dioxus 0.7.9 正式 Web release bundle，同次构建服务器与夹具工具，上传 `ci-web-public` / `ci-web-server` | 40 分钟 |
-| `web-ui` / default + amethyst-glass | 下载同次页面/服务器/夹具工具，每个主题运行 `regression`；与主题无关的 `theme-matrix`、`feed-smoke`、`acceptance`（均用默认主题）放在 amethyst-glass job 里，使两个 job 用时接近。push / PR 默认短验收；手动 `acceptance_long=true` 纳入全部长场景 | 2 / 每 job 15 分钟 |
-| `wasm-browser-contract` / 14 targets | 一个锁定依赖的 Cargo 调用准备全部 harness，同一 job 内依次用 `--prebuilt` 运行共享 SQL、WASM 执行器与正文重解析契约；某个 harness 失败不中断其余，结束时列出全部失败项 | 45 分钟，每 harness 15 分钟 |
+| `web-ui` / default + amethyst-glass | 下载同次页面/服务器/夹具工具，每个主题运行 `regression`；不带 `--preset` 的 `theme-matrix`（自行遍历各主题）、`feed-smoke`、`acceptance` 放在 amethyst-glass job 里，使两个 job 用时接近；它们各是独立步骤，前一个失败不影响后一个运行。push / PR 默认短验收；手动 `acceptance_long=true` 纳入全部长场景 | 2 / 每 job 15 分钟 |
+| `wasm-browser-contract` / 14 targets | 一个锁定依赖的 Cargo 调用准备全部 harness，同一 job 内依次用 `--prebuilt` 运行共享 SQL、WASM 执行器与正文重解析契约；某个 harness 失败不中断其余，结束时列出全部失败项。每个 harness 最多 5 分钟（平时不到 20 秒），忽略 TERM 时 30 秒后强制结束；运行步骤自身限 55 分钟，预算放不下下一个 harness 时，其余记为“未运行”并判失败，汇总总会输出 | 准备 35 分钟、运行 60 分钟，job 100 分钟 |
 | `android-smoke` | 锁定 NDK / ARM64 app + CLI check、app bundle、APK 资源 / ABI / version 断言；`~/.gradle` 按 dx 版本与 Android 输入缓存 | 50 分钟 |
-| `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝 | 5 分钟 |
+| `lint-and-test` | 汇总所有 jobs，只有全部 success 才通过；失败、取消、意外跳过均拒绝。唯一例外：`workspace` 成功且判定只改文档时，接受各模块的 skipped，但任何失败仍拒绝 | 5 分钟 |
 
 ```mermaid
 flowchart LR
-  W[Cargo workspace] --> N[Native modules × 7]
+  W[Cargo workspace] --> N[Native module groups × 3]
   B[Web build once] --> U[UI jobs × 2]
   F[Format] --> G[lint-and-test gate]
   T[Rust acceptance runner] --> G
@@ -60,7 +60,7 @@ flowchart LR
 - 同一 PR / ref 的旧 CI run 会被新 run 取消；不同 PR 不共用 concurrency group。每个 matrix 使用 `fail-fast: false`，保留其他模块的完整结果。
 - 在 Actions 的 `CI` → `Run workflow` 勾选 `acceptance_long`，服务端验收（默认主题，在 amethyst-glass job 中运行）会追加 `--long`（C4c-2 R2 为 27 场景；未勾选为 24 场景）。其余主题和套件不受影响；结果以对应 artifact 的 `assertions.json` 为准。此选项只控制测试，不触发发布。
 - 上表上限是各 matrix 的上限，不是整个 workflow 的全局配额；实际并发还取决于 GitHub runner 配额。
-- `rssr-app` 的系统库与 UI 截图字体经 `.github/actions/install-apt-packages` 安装：按 runner 镜像（`ImageOS` / `ImageVersion`）与请求的包缓存下载的 `.deb`，命中时用 `dpkg -i` 离线安装，不访问 Ubuntu 镜像；安装失败或缓存未命中时回到原来的联网安装（同一发行版官方主镜像，带超时与重试）。两条路径最后都核对所请求的包已安装。镜像每周更新会使缓存失效一次。`rssr-app` 安装步骤上限为 10 分钟；整个 native job 仍为 35 分钟。下载失败须按日志区分，不记作 Rust 测试失败。
+- `rssr-app` 的系统库与 UI 截图字体经 `.github/actions/install-apt-packages` 安装：按 runner 镜像（`ImageOS` / `ImageVersion`）与请求的包，缓存一次联网安装用到的软件包列表和 `.deb`。命中时恢复二者，由 `apt-get install --no-download` 规划并安装（依赖顺序含 Pre-Depends 由 APT 负责，文件按列表校验），不访问 Ubuntu 镜像；缺任何文件或安装失败时回到原来的联网安装（同一发行版官方主镜像，带超时与重试）。命中路径尚待真实 runner 验证。两条路径最后都核对所请求的包已安装。镜像每周更新会使缓存失效一次。`rssr-app` 安装步骤上限为 10 分钟；整个 native job 仍为 35 分钟。下载失败须按日志区分，不记作 Rust 测试失败。
 - Rust cache 按 native crate / Web / Android / wasm / release-ui 构建职责区分，只有 UI crate 安装 GTK / WebKit。只有 main 上的 run 写入 Rust cache（`save-if`）：PR 范围的缓存其他 ref 读不到，却会占用仓库共享的 10 GB 配额、挤掉 main 的缓存；PR 照常读取 main 的缓存。代价是 main 缓存过期（7 天无访问）后，PR 的每次推送都从冷缓存编译，直到下一次 main push。UI job 不重复编译 Web 或服务器；不上传浏览器 profile。Web 包保留 3 天，UI 断言 / 日志 / 截图保留 7 天。
 - wasm-bindgen / Dioxus 工具在独立安装目录按 OS / 架构 / 精确版本缓存，命中后仍核对实际版本；不覆盖全局 Cargo 安装登记。缓存不可用时仍允许安装。Chrome 按解析出的精确版本缓存，只有 wasm job 安装匹配的 ChromeDriver；CDP UI job 只用 Chrome。冷缓存、artifact 传输和远端缓存服务耗时仍需真实 run 测量，编译次数减少不等于已证明总耗时同比下降。
 - 保留原 `lint-and-test` 检查名作为最终汇总，不自动修改仓库 branch protection / 发布权限。新增工作流配置仍需提交后由真实 GitHub run 验证，不能把本地检查视为已部署 CI。

@@ -1,5 +1,5 @@
 name: Install apt packages
-description: Install Ubuntu packages, reusing the downloaded .deb files on the same runner image
+description: Install Ubuntu packages, reusing the package lists and downloads of the same runner image
 inputs:
   packages:
     description: Space-separated package names
@@ -10,9 +10,9 @@ inputs:
 runs:
   using: composite
   steps:
-    # The cached files are exactly what this image lacked. Another image version may
-    # already carry newer copies, so the key names the image as well as the request.
-    # Without image identifiers (not a hosted runner) nothing is cached.
+    # The cache holds the package lists and the .deb files one networked install used on
+    # this image. Another image version may already carry newer packages, so the key names
+    # the image as well as the request. Without image identifiers nothing is cached.
     - name: Key package downloads to the runner image
       id: key
       shell: bash
@@ -24,14 +24,14 @@ runs:
           read -r -a packages <<< "$PACKAGES"
           request="$(printf '%s\n' "${packages[@]}" | sort | tr '\n' ' ')no-install-recommends=$NO_RECOMMENDS"
           digest="$(printf '%s' "$request" | sha256sum | cut -c1-16)"
-          echo "key=apt-$ImageOS-$ImageVersion-$RUNNER_ARCH-$digest" >> "$GITHUB_OUTPUT"
+          echo "key=apt-v2-$ImageOS-$ImageVersion-$RUNNER_ARCH-$digest" >> "$GITHUB_OUTPUT"
         fi
-    - name: Restore package downloads
+    - name: Restore package lists and downloads
       id: cache
       if: steps.key.outputs.key != ''
       uses: actions/cache@v6
       with:
-        path: ~/.cache/rssr-apt-debs
+        path: ~/.cache/rssr-apt
         key: ${{ steps.key.outputs.key }}
     - name: Install packages
       shell: bash
@@ -41,40 +41,42 @@ runs:
         CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
         CACHEABLE: ${{ steps.key.outputs.key != '' }}
       run: |
-        debs="$HOME/.cache/rssr-apt-debs"
+        cache="$HOME/.cache/rssr-apt"
         read -r -a packages <<< "$PACKAGES"
         installed() {
           local states
           states="$(dpkg-query -W -f='${db:Status-Status}\n' "${packages[@]}" 2>/dev/null || true)"
           [[ "$(grep -c '^installed$' <<< "$states")" -eq "${#packages[@]}" ]]
         }
+        apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+        install_options=(-y)
+        if [[ "$NO_RECOMMENDS" == true ]]; then install_options+=(--no-install-recommends); fi
+        # Rewrites only local source files, so the cached lists match the sources again.
+        bash scripts/configure_ubuntu_apt.sh
 
-        fix_options=()
+        # APT still plans and orders the transaction (Pre-Depends included) and checks every
+        # file against the restored lists; --no-download fails if anything is missing.
         if [[ "$CACHE_HIT" == true ]]; then
-          shopt -s nullglob
-          files=("$debs"/*.deb)
-          shopt -u nullglob
-          # No files means the image already had every package.
-          if { (( ${#files[@]} == 0 )) || sudo dpkg -i "${files[@]}"; } && installed; then
-            echo "Installed ${#files[@]} cached package files without downloading"
+          sudo find "$cache/lists" -maxdepth 1 -type f -exec cp -t /var/lib/apt/lists {} +
+          sudo find "$cache/debs" -maxdepth 1 -name '*.deb' -exec cp -t /var/cache/apt/archives {} +
+          if sudo apt-get "${apt_options[@]}" install --no-download "${install_options[@]}" "${packages[@]}" \
+            && installed; then
+            echo "Installed from the cached lists and downloads, without network access"
             exit 0
           fi
-          echo "::warning::Cached package files did not install; downloading again"
-          fix_options=(--fix-broken)
+          echo "::warning::Cached package lists or downloads did not install; downloading again"
+          install_options+=(--fix-broken)
         fi
 
-        bash scripts/configure_ubuntu_apt.sh
-        apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
-        install_options=(-y "${fix_options[@]}")
-        if [[ "$NO_RECOMMENDS" == true ]]; then install_options+=(--no-install-recommends); fi
         # Start from an empty archive so only this request's downloads are kept.
         sudo apt-get clean
         sudo apt-get "${apt_options[@]}" update
         sudo apt-get "${apt_options[@]}" install "${install_options[@]}" "${packages[@]}"
         installed
         if [[ "$CACHEABLE" == true ]]; then
-          rm -rf "$debs"
-          mkdir -p "$debs"
-          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t "$debs" {} +
-          echo "Kept $(find "$debs" -name '*.deb' | wc -l) package files for this runner image"
+          rm -rf "$cache"
+          mkdir -p "$cache/lists" "$cache/debs"
+          find /var/lib/apt/lists -maxdepth 1 -type f ! -name lock -exec cp -t "$cache/lists" {} +
+          find /var/cache/apt/archives -maxdepth 1 -name '*.deb' -exec cp -t "$cache/debs" {} +
+          echo "Kept $(find "$cache/lists" -type f | wc -l) list files and $(find "$cache/debs" -name '*.deb' | wc -l) package files for this runner image"
         fi

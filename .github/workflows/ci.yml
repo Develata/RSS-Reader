@@ -1,24 +1,10 @@
 name: CI
 
-# Documentation-only changes cannot change a build or test result; skip the whole
-# workflow (a skipped job would fail the lint-and-test gate). Vendored crates stay in.
 on:
   push:
     branches:
       - main
-    paths:
-      - '**'
-      - '!docs/**'
-      - '!**/*.md'
-      - '!LICENSE'
-      - 'vendor/**'
   pull_request:
-    paths:
-      - '**'
-      - '!docs/**'
-      - '!**/*.md'
-      - '!LICENSE'
-      - 'vendor/**'
   workflow_dispatch:
     inputs:
       acceptance_long:
@@ -42,11 +28,55 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      packages: ${{ steps.matrix.outputs.packages }}
+      docs-only: ${{ steps.change.outputs.docs-only }}
+      native-groups: ${{ steps.matrix.outputs.native-groups }}
       harnesses: ${{ steps.matrix.outputs.harnesses }}
       wasm-bindgen-version: ${{ steps.matrix.outputs.wasm-bindgen-version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # A pull request checks out its merge commit; the first parent is the base.
+          fetch-depth: 2
+      # Documentation alone cannot change a build or test result, so every other job is
+      # skipped and the gate accepts that. The decision uses the complete Git diff
+      # (a workflow `paths` filter sees at most 3000 files); a file under vendor/ is code;
+      # anything unexpected, including no comparable base, runs everything.
+      - name: Classify the change
+        id: change
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+
+          def git(*args):
+              return subprocess.run(['git', *args], capture_output=True, text=True)
+
+          def is_doc(path):
+              if path.startswith('vendor/'):
+                  return False
+              return path.startswith('docs/') or path == 'LICENSE' or path.endswith('.md')
+
+          event, before = os.environ['EVENT'], os.environ.get('BEFORE', '')
+          base = None
+          if event == 'pull_request':
+              parent = git('rev-parse', '--verify', '--quiet', 'HEAD^1')
+              base = parent.stdout.strip() if parent.returncode == 0 else None
+          elif event == 'push' and re.fullmatch(r'[0-9a-f]{40}', before) and before.strip('0'):
+              if git('fetch', '--quiet', '--depth=1', 'origin', before).returncode == 0:
+                  base = before
+          docs_only = False
+          if base:
+              diff = git('diff', '--no-renames', '--name-only', '-z', base, 'HEAD')
+              files = [name for name in diff.stdout.split('\0') if name]
+              docs_only = diff.returncode == 0 and bool(files) and all(map(is_doc, files))
+              print(f'{len(files)} changed files since {base[:12]}; documentation only: {docs_only}')
+          else:
+              print(f'No comparable base for {event}; running every job')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'docs-only={str(docs_only).lower()}\n')
+          PY
       - uses: dtolnay/rust-toolchain@stable
       - name: Read workspace members from Cargo
         id: matrix
@@ -68,13 +98,23 @@ jobs:
           assert packages, 'workspace matrix must not be empty'
           assert harnesses, 'wasm contract matrix must not be empty'
           assert len(versions) == 1, 'expected one locked wasm-bindgen version'
+          # rssr-app needs GTK / WebKit and rssr-infra has the longest tests; every other
+          # crate (including new ones) shares a runner. Each crate is still checked alone.
+          solo = ['rssr-app', 'rssr-infra']
+          groups = [{'name': p, 'packages': p, 'gtk': p == 'rssr-app'} for p in solo if p in packages]
+          others = [p for p in packages if p not in solo]
+          if others:
+              groups.append({'name': 'other crates', 'packages': ' '.join(others), 'gtk': False})
+          assert sorted(' '.join(g['packages'] for g in groups).split()) == packages
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('packages=' + json.dumps(packages) + '\n')
+              output.write('native-groups=' + json.dumps(groups) + '\n')
               output.write('harnesses=' + json.dumps(harnesses) + '\n')
               output.write('wasm-bindgen-version=' + versions.pop() + '\n')
           PY
 
   format:
+    needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -85,6 +125,8 @@ jobs:
       - run: cargo fmt --all --check
 
   test-tools:
+    needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -127,6 +169,8 @@ jobs:
         run: python3 scripts/test_build_id.py
 
   release-ui-runner:
+    needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
@@ -163,16 +207,15 @@ jobs:
           retention-days: 3
 
   native-module:
+    name: native-module (${{ matrix.group.name }})
     needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
       fail-fast: false
-      max-parallel: 4
       matrix:
-        package: ${{ fromJSON(needs.workspace.outputs.packages) }}
-    env:
-      PACKAGE: ${{ matrix.package }}
+        group: ${{ fromJSON(needs.workspace.outputs.native-groups) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -181,7 +224,7 @@ jobs:
         uses: ./.github/actions/cleanup-github-runner
 
       - name: Install system dependencies
-        if: matrix.package == 'rssr-app'
+        if: matrix.group.gtk
         timeout-minutes: 10
         uses: ./.github/actions/install-apt-packages
         with:
@@ -195,28 +238,43 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          key: native-${{ matrix.package }}
+          key: native-${{ matrix.group.name }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Module Clippy
-        run: cargo clippy --locked -p "$PACKAGE" --all-targets -- -D warnings
-
-      - name: Module tests including doc tests
-        run: cargo test --locked -p "$PACKAGE"
-
-      - name: Compile Reader rules without a UI framework
-        if: matrix.package == 'rssr-infra'
-        run: python3 scripts/check_reader_rule_boundary.py --target-dir target
-
-      - name: Compile Settings rules without a UI framework
-        if: matrix.package == 'rssr-api'
-        run: python3 scripts/check_settings_rule_boundary.py --target-dir target
-
-      - name: CLI smoke
-        if: matrix.package == 'rssr-cli'
-        run: cargo run --locked -p rssr-cli -- --help
+      # Every crate is still checked on its own (-p), so Cargo resolves only that crate's
+      # features; sharing a runner only reuses the compiled crates. A failing crate does
+      # not stop the others; the step fails at the end naming them.
+      - name: Module Clippy, tests including doc tests, and module checks
+        env:
+          PACKAGES: ${{ matrix.group.packages }}
+        run: |
+          check() {
+            local package="$1"
+            cargo clippy --locked -p "$package" --all-targets -- -D warnings || return
+            cargo test --locked -p "$package" || return
+            case "$package" in
+              # Reader / Settings rules compile without a UI framework.
+              rssr-infra) python3 scripts/check_reader_rule_boundary.py --target-dir target ;;
+              rssr-api) python3 scripts/check_settings_rule_boundary.py --target-dir target ;;
+              rssr-cli) cargo run --locked -p rssr-cli -- --help ;;
+            esac
+          }
+          read -r -a packages <<< "$PACKAGES"
+          failed=()
+          for package in "${packages[@]}"; do
+            echo "::group::$package"
+            if check "$package"; then result=passed; else result=failed; failed+=("$package"); fi
+            echo "::endgroup::"
+            echo "$package: $result"
+          done
+          if (( ${#failed[@]} )); then
+            echo "::error::${#failed[@]} of ${#packages[@]} crates failed: ${failed[*]}"
+            exit 1
+          fi
 
   web-smoke:
+    needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
@@ -327,26 +385,38 @@ jobs:
           with-driver: 'false'
           with-fonts: 'true'
       # 页面对真实 rssr-web（每个夹具重启在新资料库上，见 scripts/browser/server_harness.mjs）。
-      - name: Real UI assertions at mobile and desktop viewports
+      - name: Use the shared build
+        id: shared-build
         run: |
           # Artifacts do not keep the executable bit.
           chmod +x target/ci-server/rssr-web target/ci-server/examples/browser_fixture_library
-          args=(--release --chrome-bin "$HOME/.local/bin/google-chrome"
-            --server-bin target/ci-server/rssr-web
-            --fixture-bin target/ci-server/examples/browser_fixture_library
-            --static-dir target/dx/rssr-app/release/web/public)
+          echo "UI_ARGS=--release --chrome-bin $HOME/.local/bin/google-chrome --server-bin target/ci-server/rssr-web --fixture-bin target/ci-server/examples/browser_fixture_library --static-dir target/dx/rssr-app/release/web/public" >> "$GITHUB_ENV"
+      - name: Real UI assertions at mobile and desktop viewports
+        run: |
+          read -r -a args <<< "$UI_ARGS"
           preset_args=()
           if [[ "$PRESET" != default ]]; then preset_args=(--preset "$PRESET"); fi
           bash scripts/run_server_web_regression.sh "${args[@]}" "${preset_args[@]}" --log-dir "target/ci-ui/$PRESET"
-          # These suites use the default theme whichever job runs them.
-          if [[ "$EXTRA_SUITES" == true ]]; then
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir target/ci-ui/theme-matrix
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir target/ci-ui/feed-smoke
-            # 常规 CI 跑短场景；手动运行可选择纳入等待 30 秒以上的长场景。
-            acceptance_args=()
-            if [[ "$ACCEPTANCE_LONG" == true ]]; then acceptance_args=(--long); fi
-            bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance "${acceptance_args[@]}" --log-dir target/ci-ui/acceptance
-          fi
+      # The suites below take no --preset (theme-matrix walks the themes itself); they run
+      # in the amethyst-glass job for balance, each even if an earlier suite failed.
+      - name: Theme matrix
+        if: ${{ !cancelled() && env.EXTRA_SUITES == 'true' && steps.shared-build.outcome == 'success' }}
+        run: |
+          read -r -a args <<< "$UI_ARGS"
+          bash scripts/run_server_web_regression.sh "${args[@]}" --suite theme-matrix --log-dir target/ci-ui/theme-matrix
+      - name: Feed smoke
+        if: ${{ !cancelled() && env.EXTRA_SUITES == 'true' && steps.shared-build.outcome == 'success' }}
+        run: |
+          read -r -a args <<< "$UI_ARGS"
+          bash scripts/run_server_web_regression.sh "${args[@]}" --suite feed-smoke --log-dir target/ci-ui/feed-smoke
+      - name: Server acceptance
+        if: ${{ !cancelled() && env.EXTRA_SUITES == 'true' && steps.shared-build.outcome == 'success' }}
+        run: |
+          read -r -a args <<< "$UI_ARGS"
+          # 常规 CI 跑短场景；手动运行可选择纳入等待 30 秒以上的长场景。
+          acceptance_args=()
+          if [[ "$ACCEPTANCE_LONG" == true ]]; then acceptance_args=(--long); fi
+          bash scripts/run_server_web_regression.sh "${args[@]}" --suite acceptance "${acceptance_args[@]}" --log-dir target/ci-ui/acceptance
       - name: Preserve UI evidence even on failure
         if: always()
         uses: actions/upload-artifact@v7
@@ -420,8 +490,9 @@ jobs:
   # most of their time on runner start-up, artifact transfer and browser setup.
   wasm-browser-contract:
     needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 100
     env:
       HARNESSES: ${{ join(fromJSON(needs.workspace.outputs.harnesses), ' ') }}
     steps:
@@ -446,6 +517,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Compile all contract harnesses once using Cargo's artifact paths
+        timeout-minutes: 35
         run: |
           read -r -a harnesses <<< "$HARNESSES"
           bash scripts/run_wasm_contract_harness.sh --prepare "$RUNNER_TEMP/ci-wasm-contracts" "${harnesses[@]}"
@@ -458,14 +530,26 @@ jobs:
       - name: Setup Chrome for Testing
         uses: ./.github/actions/setup-browser-tests
 
-      # Every harness runs even after a failure; the step fails at the end naming them.
+      # A failing harness does not stop the others. Each gets 5 minutes (normal runs take
+      # under 20 s) and is killed if it ignores TERM. Once the step's own budget cannot
+      # fit another harness, the rest are reported as not run, so the summary always
+      # appears and the step fails naming every harness that failed or did not run.
       - name: Run every wasm browser contract harness
+        timeout-minutes: 60
         run: |
           read -r -a harnesses <<< "$HARNESSES"
+          deadline=$((SECONDS + 55 * 60))
           failed=()
+          not_run=()
           for harness in "${harnesses[@]}"; do
+            if (( deadline - SECONDS < 6 * 60 )); then
+              not_run+=("$harness")
+              echo "$harness: not run (step budget exhausted)"
+              continue
+            fi
             echo "::group::$harness"
-            if timeout 15m bash scripts/run_wasm_contract_harness.sh --prebuilt "$RUNNER_TEMP/ci-wasm-contracts" "$harness"; then
+            if timeout --kill-after=30s 5m \
+              bash scripts/run_wasm_contract_harness.sh --prebuilt "$RUNNER_TEMP/ci-wasm-contracts" "$harness"; then
               result=passed
             else
               result=failed
@@ -476,11 +560,16 @@ jobs:
           done
           if (( ${#failed[@]} )); then
             echo "::error::${#failed[@]} of ${#harnesses[@]} wasm browser contracts failed: ${failed[*]}"
-            exit 1
           fi
+          if (( ${#not_run[@]} )); then
+            echo "::error::${#not_run[@]} of ${#harnesses[@]} wasm browser contracts did not run: ${not_run[*]}"
+          fi
+          if (( ${#failed[@]} + ${#not_run[@]} )); then exit 1; fi
           echo "All ${#harnesses[@]} wasm browser contracts passed"
 
   android-smoke:
+    needs: workspace
+    if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
@@ -602,13 +691,21 @@ jobs:
       - name: Require all acceptance modules to succeed
         env:
           RESULTS: ${{ toJSON(needs) }}
+          DOCS_ONLY: ${{ needs.workspace.outputs.docs-only }}
         run: |
           python3 - <<'PY'
           import json, os, sys
           results = json.loads(os.environ['RESULTS'])
+          # A documentation-only change skips the modules; it never excuses a failure.
+          docs_only = os.environ['DOCS_ONLY'] == 'true'
+          allowed = {'success', 'skipped'} if docs_only else {'success'}
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              if docs_only:
+                  summary.write('Documentation-only change: modules were skipped.\n\n')
               summary.write('| Module | Result |\n| --- | --- |\n')
               for name, result in results.items():
                   summary.write(f"| {name} | {result['result']} |\n")
-          sys.exit(0 if results and all(r['result'] == 'success' for r in results.values()) else 1)
+          passed = (results.get('workspace', {}).get('result') == 'success'
+                    and all(r['result'] in allowed for r in results.values()))
+          sys.exit(0 if passed else 1)
           PY
