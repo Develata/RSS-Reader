@@ -528,11 +528,15 @@ jobs:
           mkdir -p target/macos-archive/${{ matrix.suffix }}
           rm -rf target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
           cp -R "$APP_BUNDLE_PATH" target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
-          # dx currently emits an unsigned bundle. Set both versions before any future
-          # signing/notarization; the adapter refuses bundles with an existing seal.
+          # dx emits an unsealed bundle: on arm64 the executable carries only the
+          # linker's ad-hoc signature, which expects sealed resources that do not
+          # exist, so Gatekeeper calls a downloaded copy "damaged". Set both versions
+          # first (the adapter refuses sealed bundles), then seal the whole bundle
+          # ad hoc. This is not Developer ID signing or notarization.
           python3 scripts/prepare_macos_bundle.py \
             target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app \
             --release-tag "$RELEASE_TAG"
+          codesign --force --sign - target/macos-archive/${{ matrix.suffix }}/RSS-Reader.app
           tar -C target/macos-archive/${{ matrix.suffix }} -czf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz RSS-Reader.app
           tar -C target/${{ matrix.target }}/release -czf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz rssr-cli
 
@@ -543,6 +547,8 @@ jobs:
           tar -xzf release-assets/RSS-Reader-${{ matrix.suffix }}.tar.gz -C "$temp_dir"
           PLIST_PATH="$temp_dir/RSS-Reader.app/Contents/Info.plist"
           plutil -lint "$PLIST_PATH"
+          # Checked after the tar round trip: the seal must cover the shipped files.
+          codesign --verify --deep --strict --verbose=2 "$temp_dir/RSS-Reader.app"
           for key in CFBundleShortVersionString CFBundleVersion; do
             actual="$(/usr/libexec/PlistBuddy -c "Print :$key" "$PLIST_PATH")"
             if [[ "$actual" != "${RELEASE_TAG#v}" ]]; then
@@ -550,6 +556,10 @@ jobs:
               exit 1
             fi
             echo "$key=$actual"
+          done
+          # The menu bar and Finder show the product name, not dx's binary-derived `RssrApp`.
+          for key in CFBundleName CFBundleDisplayName; do
+            test "$(/usr/libexec/PlistBuddy -c "Print :$key" "$PLIST_PATH")" = 'RSS-Reader'
           done
           tar -tzf release-assets/rssr-cli-${{ matrix.suffix }}.tar.gz | grep '^rssr-cli$'
 

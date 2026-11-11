@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Set release versions on an unsigned macOS app before archiving/signing."""
+"""Set release versions and the product name on an unsigned macOS app before signing."""
 
 import argparse
 from pathlib import Path
@@ -8,6 +8,9 @@ import re
 
 
 VERSION_KEYS = ("CFBundleShortVersionString", "CFBundleVersion")
+# dx derives both names from the binary (`RssrApp`); the menu bar and Finder show them.
+PRODUCT_NAME = "RSS-Reader"
+NAME_KEYS = ("CFBundleName", "CFBundleDisplayName")
 
 
 def prepare_bundle(bundle: Path, release_tag: str) -> str:
@@ -38,6 +41,8 @@ def prepare_bundle(bundle: Path, release_tag: str) -> str:
         raise ValueError("Info.plist must contain both bundle version fields as strings")
     for key in VERSION_KEYS:
         metadata[key] = version
+    for key in NAME_KEYS:
+        metadata[key] = PRODUCT_NAME
     fmt = plistlib.FMT_BINARY if original.startswith(b"bplist00") else plistlib.FMT_XML
     plist_path.write_bytes(plistlib.dumps(metadata, fmt=fmt, sort_keys=False))
     return version
@@ -52,7 +57,7 @@ def main() -> None:
         version = prepare_bundle(args.bundle, args.release_tag)
     except (OSError, ValueError, plistlib.InvalidFileException) as error:
         parser.exit(1, f"macOS bundle metadata: {error}\n")
-    print(f"{args.bundle}: both bundle versions set to {version}")
+    print(f"{args.bundle}: both bundle versions set to {version}; named {PRODUCT_NAME}")
 
 
 if __name__ == "__main__":
