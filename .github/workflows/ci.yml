@@ -494,25 +494,32 @@ jobs:
     needs: workspace
     if: needs.workspace.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    # Each step has its own limit (sum 165 min); the job adds 15 min for post-job steps,
+    # so slow preparation can never cut the harness loop's budget short.
+    timeout-minutes: 180
     env:
       HARNESSES: ${{ join(fromJSON(needs.workspace.outputs.harnesses), ' ') }}
     steps:
       - name: Checkout
+        timeout-minutes: 5
         uses: actions/checkout@v7
 
       - name: Setup WASM C toolchain
+        timeout-minutes: 10
         uses: ./.github/actions/setup-wasm-c-toolchain
 
       - name: Cleanup runner
+        timeout-minutes: 10
         uses: ./.github/actions/cleanup-github-runner
 
       - name: Install Rust
+        timeout-minutes: 10
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo
+        timeout-minutes: 10
         uses: Swatinem/rust-cache@v2
         with:
           key: wasm-contract-build
@@ -525,11 +532,13 @@ jobs:
           bash scripts/run_wasm_contract_harness.sh --prepare "$RUNNER_TEMP/ci-wasm-contracts" "${harnesses[@]}"
 
       - name: Prepare pinned wasm-bindgen test runner
+        timeout-minutes: 10
         uses: ./.github/actions/setup-wasm-bindgen
         with:
           version: ${{ needs.workspace.outputs.wasm-bindgen-version }}
 
       - name: Setup Chrome for Testing
+        timeout-minutes: 15
         uses: ./.github/actions/setup-browser-tests
 
       # A failing harness does not stop the others. Each gets 3 minutes (normal runs take
