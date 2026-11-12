@@ -77,6 +77,7 @@
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`：通过
 - `cargo test --workspace --locked`：通过（67 个测试目标，0 失败）；新增 `test_library_remote_sync`（8）、`local_backend::tests` 五例、`webdav_conditional_*` / `webdav_asks_for_the_identity_encoding` / `webdav_weak_entity_tags_are_not_used`、`profile_file` 两例、`remote_sync_text` 三例、同步页状态三例、`client_tests::the_saved_endpoint_through_the_client`；UI 特征转录只新增条目
+- PR #74 首次 CI：`web-ui (amethyst-glass)` 的 `restored-draft-then-sign-in` 失败，原因是会话结束后设置页重读时 `/api/v1/remote-sync` 也返回 401，场景只声明了 `/api/v1/settings`；已在场景中补上这一预期（`scripts/browser/rssr_server_acceptance.mjs`），场景自身的三项检查当时都已通过
 - 变异检查：恢复旧的“先读指纹后导出”顺序、去掉 `identity` 请求头，各自对应的测试失败
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --features pages-demo --locked`：通过
