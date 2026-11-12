@@ -45,6 +45,8 @@
 
 - 去掉 Remote Path：配置固定为 Endpoint 文件夹里的 `rss-reader.json`（`rssr_application::REMOTE_CONFIG_FILE`，`012ee973`）；无需先建子目录。CLI 的 `remote_path` 参数可省略、默认同名。v0.2.3 及更早默认写到 `config/rss-reader.json`，读旧文件时把 Endpoint 指向该 `config/` 文件夹。Endpoint 示例改为 `https://example.com/dav/path/`（`5b89d171`）。Penpot 4 张设置画板同步，rev 490，命名版本 `WebDAV fixed file name & endpoint example · 012ee973 · 2026-11-13` 由 Develata 手动保存、插件回读。交互规范 `docs/design/frontend-command-reference.md` 已按新行为更新；画布沿用基线惯例（状态画板 + 文档），设置页无原型交互。
 
+- WebDAV 状态画板：08 页新增 6 张（已记住、需要处理、显示密码、档案无法读取；手机 2 张），rev 498，命名版本 `WebDAV state boards · 012ee973 · 2026-11-13`。采集中发现并修复：需要处理时结果行虽带 `data-state="invalid"` 却无样式（新增 `[data-field="webdav-sync-status"][data-state="invalid"]` 用 `--status-error-fg`；数值提示同名属性一直无样式，未改动）；档案无法读取的提示去掉重复的后半句。网络失败的结果行显示原始连接错误文本（如 `Connection refused (os error 61)`），未改。
+
 ## 独立评审（Codex，第一轮，`fcd356fa`）
 
 结论“不通过”。逐条核对源码后处理如下：

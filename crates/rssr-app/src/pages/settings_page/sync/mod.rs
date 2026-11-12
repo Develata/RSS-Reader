@@ -57,7 +57,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                         h3 { "data-slot": "settings-card-section-title", "自动同步" }
                     }
                     p { "data-slot": "page-intro", "data-state": "invalid", "data-field": "webdav-sync-status",
-                        "保存的自动同步设置无法读取：{problem}。停用后可重新记住端点。"
+                        "保存的自动同步设置无法读取：{problem}"
                     }
                     div { class: "inline-actions", "data-layout": "settings-card-actions",
                         button {
