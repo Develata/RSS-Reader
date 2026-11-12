@@ -32,11 +32,19 @@
 ### rssr-web 测试临时目录
 
 - macOS 默认 `TMPDIR` 在 `/var/folders/...`，而 `/var` 是指向 `/private/var` 的符号链接；`AuthStore::open` 有意拒绝带符号链接的路径（见 `docs/deployment/web.md`），导致 66 项测试报 "unable to open database file"。
-- `ScratchDir::new` 先对 `std::env::temp_dir()` 做 `canonicalize()` 再拼接子目录；生产侧的符号链接拒绝未放宽。rssr-web 内其他测试均经由 `ScratchDir`。
+- `ScratchDir::new` 在 Unix 上先对 `std::env::temp_dir()` 做 `canonicalize()` 再拼接子目录；生产侧的符号链接拒绝未放宽。rssr-web 内其他测试均经由 `ScratchDir`。
+- 规范化只在 `#[cfg(unix)]` 下进行：Windows 的 `canonicalize` 返回 `\\?\` 前缀路径，SQLite 对它的处理未经核实，Windows 行为保持原样。
 
 ## 验证与验收
 
 ### 自动化验证
+
+改前复现（把两个文件还原到 6a863b8d 后实测）：
+
+- `cargo test -p rssr-infra --test test_library_store --locked --no-run`：E0308 与 E0277（`can't compare i32 with i16`），编译失败
+- `cargo test -p rssr-web --locked`：多项报 `unable to open database file: /var/folders/.../auth.sqlite3`；失败总数 66 来自发起会话的报告，本会话未重新计数
+
+改后：
 
 环境：macOS 27.2 arm64，rustc 1.99.1，默认 `TMPDIR=/var/folders/hp/.../T/`。
 
@@ -55,7 +63,7 @@
 
 ## 风险与后续事项
 
-- 未在 Linux 本地复跑；Linux 上 `F_UNLCK as c_short` 是 `c_int → c_short` 的取值不变转换，由 CI 覆盖。
+- 未在 Linux、Windows 本地复跑；Windows 上测试路径与改前相同；Linux 上 `F_UNLCK as c_short` 是 `c_int → c_short` 的取值不变转换，由 CI 覆盖。
 - rssr-infra / rssr-cli 其他测试也直接用 `std::env::temp_dir()`，目前在 macOS 通过（那些路径不做符号链接拒绝）；若以后给它们加同样的拒绝，需要同样规范化基目录。
 
 ## 给下一位 Agent 的备注
