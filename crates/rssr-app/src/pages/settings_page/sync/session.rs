@@ -5,7 +5,10 @@ use dioxus::prelude::*;
 use super::state::SettingsPageSyncState;
 use crate::pages::settings_page::intent::SettingsPageIntent;
 use crate::ui::{AppShellState, SettingsCommand, UiCommand, UiIntent, run_ui_command};
-use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
+use crate::{
+    pages::settings_page::session::SettingsPageSession,
+    status::{set_status_error, set_status_info},
+};
 
 /// How often the open page reads a synchronization in progress again.
 const SYNC_FOLLOW_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
@@ -42,6 +45,33 @@ impl SettingsPageSyncSession {
         self.state.with_mut(|state| state.set_remote_path(remote_path));
     }
 
+    pub(crate) fn set_username(mut self, username: String) {
+        self.state.with_mut(|state| state.set_username(username));
+    }
+
+    pub(crate) fn set_password(mut self, password: String) {
+        self.state.with_mut(|state| state.set_password(password));
+    }
+
+    pub(crate) fn toggle_password_visible(mut self) {
+        self.state.with_mut(|state| state.password_visible = !state.password_visible);
+    }
+
+    /// Where the transfer goes; shown as the page's error when the credentials are incomplete.
+    fn target_or_report(self) -> Option<rssr_application::RemoteTarget> {
+        match self.snapshot().target() {
+            Ok(target) => Some(target),
+            Err(message) => {
+                set_status_error(
+                    self.page.status_signal(),
+                    self.page.status_tone_signal(),
+                    message,
+                );
+                None
+            }
+        }
+    }
+
     pub(crate) fn push(self) {
         self.push_with(run_ui_command);
     }
@@ -50,10 +80,11 @@ impl SettingsPageSyncSession {
         mut self,
         execute: impl FnOnce(UiCommand) -> F,
     ) {
-        let snapshot = self.snapshot();
+        let Some(target) = self.target_or_report() else {
+            return;
+        };
         self.state.with_mut(|state| state.clear_pending_remote_pull());
-        let pushing =
-            execute(UiCommand::Settings(SettingsCommand::PushConfig { target: snapshot.target() }));
+        let pushing = execute(UiCommand::Settings(SettingsCommand::PushConfig { target }));
         self.shell.spawn_in_shell(async move {
             let intents = pushing.await;
             self.finish(intents, false);
@@ -68,6 +99,9 @@ impl SettingsPageSyncSession {
         mut self,
         execute: impl FnOnce(UiCommand) -> F,
     ) {
+        let Some(target) = self.target_or_report() else {
+            return;
+        };
         let confirmation_required = {
             let mut confirmation_required = false;
             self.state.with_mut(|state| {
@@ -96,10 +130,8 @@ impl SettingsPageSyncSession {
             return;
         }
         self.page.invalidate_theme_import();
-        let snapshot = self.snapshot();
         self.state.with_mut(|state| state.clear_pending_remote_pull());
-        let pulling =
-            execute(UiCommand::Settings(SettingsCommand::PullConfig { target: snapshot.target() }));
+        let pulling = execute(UiCommand::Settings(SettingsCommand::PullConfig { target }));
         self.shell.spawn_in_shell(async move {
             let intents = pulling.await;
             self.finish(intents, true);
@@ -144,8 +176,12 @@ impl SettingsPageSyncSession {
 
     /// Remembers the endpoint typed on the page for automatic synchronization.
     pub(crate) fn save_remote_sync(self) {
-        let remote = self.snapshot().typed_endpoint();
-        self.write_profile(SettingsCommand::SaveRemoteSync(remote));
+        match self.snapshot().typed_endpoint() {
+            Ok(remote) => self.write_profile(SettingsCommand::SaveRemoteSync(remote)),
+            Err(message) => {
+                set_status_error(self.page.status_signal(), self.page.status_tone_signal(), message)
+            }
+        }
     }
 
     /// Forgets the saved endpoint and its credentials.

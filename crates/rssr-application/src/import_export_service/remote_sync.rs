@@ -236,6 +236,37 @@ pub fn display_endpoint(endpoint: &str) -> String {
     }
 }
 
+/// `endpoint` with `username` and `password` as its user information, when a user name is given
+/// (it replaces any in the endpoint); else the endpoint as typed, credentials in it or none.
+/// Every character but letters and digits is percent-encoded, `%` included, so any password
+/// comes back unchanged when the credentials are decoded. A password without a user name is
+/// refused: HTTP Basic would send none.
+pub fn endpoint_with_credentials(
+    endpoint: &str,
+    username: &str,
+    password: &str,
+) -> std::result::Result<String, String> {
+    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+
+    if username.is_empty() {
+        if password.is_empty() {
+            return Ok(endpoint.to_owned());
+        }
+        return Err("填写了密码时，也需要填写用户名".to_owned());
+    }
+    // An endpoint that is no URL is the backend's to refuse, with its own message.
+    let Ok(mut url) = url::Url::parse(endpoint) else {
+        return Ok(endpoint.to_owned());
+    };
+    let username = utf8_percent_encode(username, NON_ALPHANUMERIC).to_string();
+    let password = utf8_percent_encode(password, NON_ALPHANUMERIC).to_string();
+    let password = (!password.is_empty()).then_some(password.as_str());
+    if url.set_username(&username).is_err() || url.set_password(password).is_err() {
+        return Err("这个 Endpoint 不能带用户名和密码".to_owned());
+    }
+    Ok(url.to_string())
+}
+
 /// Where a host keeps the profile.
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]

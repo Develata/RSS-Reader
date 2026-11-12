@@ -396,6 +396,29 @@ mod tests {
         );
     }
 
+    /// Credentials typed apart from the endpoint come back exactly, whatever they hold.
+    #[test]
+    fn credentials_typed_apart_come_back_unchanged() {
+        for (username, password) in
+            [("Develata", "pwh2004@"), ("user@example.com", "p@ss/1?#%41:x 中文"), ("a:b", "")]
+        {
+            let endpoint = rssr_application::endpoint_with_credentials(
+                "https://openlist.example/dav/百度网盘/apps/rssr",
+                username,
+                password,
+            )
+            .unwrap();
+            let sync = WebDavConfigSync::new(endpoint, "r.json").unwrap();
+            let credentials = sync.credentials.as_ref().expect("credentials");
+            assert_eq!(credentials.username, username);
+            assert_eq!(credentials.password.as_deref().unwrap_or(""), password);
+            assert_eq!(
+                sync.endpoint.as_str(),
+                "https://openlist.example/dav/%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98/apps/rssr"
+            );
+        }
+    }
+
     #[test]
     fn percent_encoded_credentials_are_decoded() {
         let sync =

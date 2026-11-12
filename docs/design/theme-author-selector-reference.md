@@ -236,6 +236,9 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-action="apply-theme-preset"`
 - `data-action="push-webdav"`
 - `data-action="pull-webdav"`
+- `data-action="save-webdav-sync"`：记住当前端点并启用自动同步
+- `data-action="clear-webdav-sync"`：停用自动同步并删除保存的凭据
+- `data-action="toggle-password-visibility"`：密码框内的显示／隐藏切换；`data-state` 为 `shown` / `hidden`，同时带 `aria-pressed`
 - `data-action="open-github-repo"`
 - `data-action="activate-home"`
 - `data-action="toggle-search"`
@@ -277,7 +280,11 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-field="reader-font-scale"`
 - `data-field="custom-css"`
 - `data-field="webdav-endpoint"`
+- `data-field="webdav-username"`
+- `data-field="webdav-password"`：默认 `type="password"`，切换显示时为 `type="text"`
 - `data-field="webdav-remote-path"`
+- `data-field="webdav-saved-endpoint"`：已记住的端点（不含密码）
+- `data-field="webdav-sync-status"`：最近一次同步结果；需要处理时 `data-state="invalid"`
 
 ## 布局与槽位接口
 

@@ -7,6 +7,7 @@ pub use remote_sync::{
     RemoteContentHash, RemoteEndpoint, RemoteSyncBase, RemoteSyncOutcome, RemoteSyncProfile,
     RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport, RemoteSyncStep,
     RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SavedRemote, display_endpoint,
+    endpoint_with_credentials,
 };
 
 use std::sync::Arc;

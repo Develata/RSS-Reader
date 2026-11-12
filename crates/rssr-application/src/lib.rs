@@ -46,7 +46,7 @@ pub use import_export_service::{
     RemoteConfigStore, RemoteContentHash, RemoteEndpoint, RemoteSyncBase, RemoteSyncOutcome,
     RemoteSyncProfile, RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport,
     RemoteSyncStep, RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SavedRemote, SystemClock,
-    UploadPrecondition, display_endpoint,
+    UploadPrecondition, display_endpoint, endpoint_with_credentials,
 };
 pub use library_queries::{
     ConfigSnapshot, EntriesPage, EntriesStart, FeedsOverview, LibraryQueryPort, ReaderSnapshot,

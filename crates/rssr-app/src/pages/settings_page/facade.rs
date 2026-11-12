@@ -166,6 +166,30 @@ impl SettingsPageFacade {
         self.sync.set_endpoint(endpoint);
     }
 
+    pub(crate) fn username(&self) -> &str {
+        &self.sync_snapshot.username
+    }
+
+    pub(crate) fn set_username(&self, username: String) {
+        self.sync.set_username(username);
+    }
+
+    pub(crate) fn password(&self) -> &str {
+        &self.sync_snapshot.password
+    }
+
+    pub(crate) fn set_password(&self, password: String) {
+        self.sync.set_password(password);
+    }
+
+    pub(crate) fn is_password_visible(&self) -> bool {
+        self.sync_snapshot.password_visible
+    }
+
+    pub(crate) fn toggle_password_visible(&self) {
+        self.sync.toggle_password_visible();
+    }
+
     pub(crate) fn remote_path(&self) -> &str {
         &self.sync_snapshot.remote_path
     }

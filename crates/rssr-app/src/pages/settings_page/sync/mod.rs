@@ -7,9 +7,37 @@ pub(crate) use self::session::SettingsPageSyncSession;
 pub(crate) use self::state::SettingsPageSyncState;
 use super::facade::SettingsPageFacade;
 
+/// The eye of a password field: open while the password is shown, struck through while hidden.
+#[component]
+fn PasswordEye(shown: bool) -> Element {
+    rsx! {
+        svg {
+            xmlns: "http://www.w3.org/2000/svg",
+            view_box: "0 0 24 24",
+            width: "20",
+            height: "20",
+            fill: "none",
+            stroke: "currentColor",
+            stroke_width: "1.8",
+            stroke_linecap: "round",
+            stroke_linejoin: "round",
+            "aria-hidden": "true",
+            path { d: "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" }
+            circle { cx: "12", cy: "12", r: "3" }
+            if !shown {
+                path { d: "M4 4l16 16" }
+            }
+        }
+    }
+}
+
 #[component]
 pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
     let endpoint_facade = facade.clone();
+    let username_facade = facade.clone();
+    let password_facade = facade.clone();
+    let toggle_password_facade = facade.clone();
+    let password_visible = facade.is_password_visible();
     let remote_path_facade = facade.clone();
     let push_facade = facade.clone();
     let save_sync_facade = facade.clone();
@@ -86,7 +114,49 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                                 oninput: move |event| endpoint_facade.set_endpoint(event.value())
                             }
                             p { "data-slot": "page-intro",
-                                "需要登录的 WebDAV 服务，请把凭据写进 endpoint（形如 https://用户名:密码@主机/路径/）。不记住时只保存在当前会话；记住后以明文保存在本机数据目录（自托管 Web 为服务器数据目录），不会写入配置包。"
+                                "需要登录的 WebDAV 服务，在下面填写用户名和密码，任何字符都不必转义；也可以照旧写进 Endpoint（https://用户名:密码@主机/路径/）。不记住时只保存在当前会话；记住后以明文保存在本机数据目录（自托管 Web 为服务器数据目录），不会写入配置包。"
+                            }
+                        }
+                        div { "data-slot": "settings-form-grid-item",
+                            label { class: "field-label", r#for: "settings-webdav-username", "用户名" }
+                            input {
+                                id: "settings-webdav-username",
+                                name: "webdav_username",
+                                class: "text-input",
+                                "data-field": "webdav-username",
+                                autocomplete: "username",
+                                autocapitalize: "off",
+                                spellcheck: "false",
+                                value: "{facade.username()}",
+                                oninput: move |event| username_facade.set_username(event.value())
+                            }
+                        }
+                        div { "data-slot": "settings-form-grid-item",
+                            label { class: "field-label", r#for: "settings-webdav-password", "密码" }
+                            div { "data-slot": "password-field",
+                                input {
+                                    id: "settings-webdav-password",
+                                    name: "webdav_password",
+                                    class: "text-input",
+                                    "data-field": "webdav-password",
+                                    r#type: if password_visible { "text" } else { "password" },
+                                    autocomplete: "current-password",
+                                    autocapitalize: "off",
+                                    spellcheck: "false",
+                                    value: "{facade.password()}",
+                                    oninput: move |event| password_facade.set_password(event.value())
+                                }
+                                button {
+                                    r#type: "button",
+                                    "data-action": "toggle-password-visibility",
+                                    "data-state": if password_visible { "shown" } else { "hidden" },
+                                    aria_label: if password_visible { "隐藏密码" } else { "显示密码" },
+                                    title: if password_visible { "隐藏密码" } else { "显示密码" },
+                                    aria_pressed: if password_visible { "true" } else { "false" },
+                                    aria_controls: "settings-webdav-password",
+                                    onclick: move |_| toggle_password_facade.toggle_password_visible(),
+                                    PasswordEye { shown: password_visible }
+                                }
                             }
                         }
                         div { "data-slot": "settings-form-grid-item",

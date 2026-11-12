@@ -3,6 +3,11 @@ use rssr_application::{RemoteEndpoint, RemoteSyncView, RemoteTarget, SavedRemote
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SettingsPageSyncState {
     pub(crate) endpoint: String,
+    /// Typed apart from the endpoint, so no character needs encoding; empty: the endpoint's own.
+    pub(crate) username: String,
+    pub(crate) password: String,
+    /// The password field shows its text (the eye toggle); session-only.
+    pub(crate) password_visible: bool,
     pub(crate) remote_path: String,
     pub(crate) pending_remote_pull: bool,
     /// Automatic synchronization as last read; `None` before the first read.
@@ -22,6 +27,9 @@ impl std::fmt::Debug for SettingsPageSyncState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SettingsPageSyncState")
             .field("endpoint", &rssr_application::display_endpoint(&self.endpoint))
+            .field("username", &self.username)
+            .field("password", &(!self.password.is_empty()).then_some("<redacted>"))
+            .field("password_visible", &self.password_visible)
             .field("remote_path", &self.remote_path)
             .field("pending_remote_pull", &self.pending_remote_pull)
             .field("remote_sync", &self.remote_sync)
@@ -36,6 +44,9 @@ impl SettingsPageSyncState {
     pub(crate) fn new() -> Self {
         Self {
             endpoint: String::new(),
+            username: String::new(),
+            password: String::new(),
+            password_visible: false,
             remote_path: "config/rss-reader.json".to_string(),
             pending_remote_pull: false,
             remote_sync: None,
@@ -109,16 +120,32 @@ impl SettingsPageSyncState {
 
     /// Where an upload or a download goes: the saved endpoint the page shows (the backend
     /// refuses when another is saved by now), else the one typed on the page.
-    pub(crate) fn target(&self) -> RemoteTarget {
-        match self.saved_remote() {
+    pub(crate) fn target(&self) -> Result<RemoteTarget, String> {
+        Ok(match self.saved_remote() {
             Some(saved) => RemoteTarget::Saved(saved),
-            None => RemoteTarget::Endpoint(self.typed_endpoint()),
-        }
+            None => RemoteTarget::Endpoint(self.typed_endpoint()?),
+        })
     }
 
-    /// The endpoint typed on the page.
-    pub(crate) fn typed_endpoint(&self) -> RemoteEndpoint {
-        RemoteEndpoint { endpoint: self.endpoint.clone(), remote_path: self.remote_path.clone() }
+    /// The endpoint typed on the page, with the user name and password typed apart (they
+    /// replace any in the endpoint). Fails when only a password is typed.
+    pub(crate) fn typed_endpoint(&self) -> Result<RemoteEndpoint, String> {
+        let endpoint = rssr_application::endpoint_with_credentials(
+            &self.endpoint,
+            &self.username,
+            &self.password,
+        )?;
+        Ok(RemoteEndpoint { endpoint, remote_path: self.remote_path.clone() })
+    }
+
+    pub(crate) fn set_username(&mut self, username: String) {
+        self.username = username;
+        self.pending_remote_pull = false;
+    }
+
+    pub(crate) fn set_password(&mut self, password: String) {
+        self.password = password;
+        self.pending_remote_pull = false;
     }
 
     /// A new view: another saved endpoint (or none) asks to confirm a download again, since it
@@ -201,7 +228,7 @@ mod tests {
         };
         let mut state = SettingsPageSyncState::new();
         state.endpoint = "https://dav.example/".into();
-        assert!(matches!(state.target(), RemoteTarget::Endpoint(_)));
+        assert!(matches!(state.target(), Ok(RemoteTarget::Endpoint(_))));
 
         state.pending_remote_pull = true;
         state.set_remote_sync(view("https://alice@a.example/"));
@@ -209,7 +236,7 @@ mod tests {
             endpoint: "https://alice@a.example/".into(),
             remote_path: "r.json".into(),
         };
-        assert_eq!(state.target(), RemoteTarget::Saved(saved));
+        assert_eq!(state.target(), Ok(RemoteTarget::Saved(saved)));
         assert!(!state.pending_remote_pull, "the download may go elsewhere now");
 
         // The same endpoint read again keeps the confirmation; another one does not.
@@ -273,6 +300,32 @@ mod tests {
             RemoteSyncView { available: true, ..RemoteSyncView::default() },
         );
         assert!(!state.begin_following(), "done: no more reads");
+    }
+
+    /// The user name and password typed apart go into the endpoint encoded, whatever they hold;
+    /// a password alone is refused; `Debug` never shows it.
+    #[test]
+    fn credentials_typed_apart_reach_the_endpoint() {
+        let mut state = SettingsPageSyncState::new();
+        state.endpoint = "https://dav.example/dav/网盘/rssr".into();
+        assert_eq!(state.typed_endpoint().unwrap().endpoint, "https://dav.example/dav/网盘/rssr");
+
+        state.set_password("p@ss/1?#%41:x".into());
+        assert!(state.typed_endpoint().is_err(), "a password needs a user name");
+
+        state.pending_remote_pull = true;
+        state.set_username("Develata".into());
+        assert!(!state.pending_remote_pull, "other credentials: confirm again");
+        let endpoint = state.typed_endpoint().unwrap().endpoint;
+        let url = url::Url::parse(&endpoint).unwrap();
+        // Every character but letters and digits encoded, `%` included (the decoding that gives
+        // the password back is the WebDAV client's, tested there).
+        assert_eq!(url.username(), "Develata");
+        assert_eq!(url.password(), Some("p%40ss%2F1%3F%23%2541%3Ax"));
+        assert_eq!(url.host_str(), Some("dav.example"));
+
+        let shown = format!("{state:?}");
+        assert!(!shown.contains("p@ss") && !shown.contains("p%40ss"), "{shown}");
     }
 
     #[test]
