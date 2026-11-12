@@ -30,6 +30,8 @@ pub mod migrate;
 mod mutations;
 mod options;
 mod queries;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod query_plans;
 mod refresh;
 mod workspace_edits;
 pub use workspace_edits::LibraryWorkspaceEdits;

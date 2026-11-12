@@ -32,6 +32,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "manual_archive",
         sql: include_str!("migrations/0002_manual_archive.sql"),
     },
+    Migration {
+        version: 3,
+        name: "entry_flag_index",
+        sql: include_str!("migrations/0003_entry_flag_index.sql"),
+    },
 ];
 
 /// SHA-384 of the SQL with CRLF converted to LF.

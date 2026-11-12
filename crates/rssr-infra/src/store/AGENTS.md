@@ -27,10 +27,12 @@
 - 共用数据目录的程序都必须经 `local::open_library_in` / `open_local_library` 打开：直接 `LibraryStore::open` 会在没有资料库时建空库而不查找旧库，从而让其他程序跳过导入。
 - 程序退出前必须 `LibraryStore::close().await`（不能 await 的地方用 `close_blocking`）并等它返回，出错退出的路径也一样：只丢弃句柄不等连接关闭，进程退出可能截断最后一个连接关闭时的检查点，留下身份探测拒绝的主文件。
 - 性能敏感路径（列表查询、刷新提交）优先：索引友好、避免全表扫描模拟导航、减少 clone 与分配；列表查询不读正文列。
+- 资料库不跑 `ANALYZE`，规划器只按默认估计选连接顺序，所以 `entries.rs` 用 `CROSS JOIN` 固定顺序：不限订阅的列表从 `entries` 出发走 `idx_entries_sort_key`，计数从 `feeds` 出发只读 `idx_entries_feed_flags`；`OnlyArchived` 写成 `ExcludeArchived` 的否定，避免被拆成多索引 `OR`。`store::query_plans` 钉住这些计划，改动前后用 50k / 250k 规模的全组合计时比较（方法见 `docs/testing/evidence/2026-11-12-storage-queries/`）。
 
 ## 修改约束
 
-- 任何文章排序或筛选变更，都要同步考虑：文章页列表、阅读页上一 / 下一未读、搜索结果一致性；跑 `test_library_entry_state_and_search`。
+- 任何文章排序或筛选变更，都要同步考虑：文章页列表、阅读页上一 / 下一未读、搜索结果一致性；跑 `test_library_entry_state_and_search`、`test_library_entry_filter_combinations` 与 `store::query_plans`。
+- 加减 `entries` 索引会改变其他语句的计划：对所有 `entries` 语句比较 `EXPLAIN QUERY PLAN`，计划变了的再计时。
 - 改刷新提交规则（序号、校验器、诊断）时跑 `test_library_refresh_tickets` 与刷新相关的 `test_library_*` 契约测试。
 - 改 WASM 执行器时跑 `wasm_memory_store`、共享 SQL 浏览器案例和 Pages 页面验收，记录 SQLite 版本并检查正式 Web 不带 SQLite。
 - 改执行器或文件层时跑 `test_library_store`、`store::` 单元测试，并在 Linux（WSL）上跑一遍：POSIX 锁与路径语义只在 Unix 上成立。

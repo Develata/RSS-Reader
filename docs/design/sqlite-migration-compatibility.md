@@ -9,6 +9,10 @@
 - `store/migrations/0001_baseline.sql` 是已发布基线，不改写其内容或校验历史。
 - `0002_manual_archive.sql` 增加独立手动归档状态，已有文章默认未手动归档；
   自动归档仍由时间查询决定，关闭自动归档不会丢失手动归档状态。
+- `0003_entry_flag_index.sql` 只加覆盖索引 `idx_entries_feed_flags`
+  （`feed_id, is_read, is_starred, is_archived, published_at`），不改数据：订阅的未读 / 总数、
+  列表旁的归档计数改为只读该索引。升级时按现有文章数一次性建索引（25 万篇约 0.4 秒）。
+  和 0002 一样，升级后的库不能再由更早的程序打开（`NewerLibrary`），回退须恢复升级前备份。
 - SHA-384 校验前将 SQL 换行为 LF，使 Windows / Unix 一致；不忽略 SQL、空白或注释修改。
 - 历史必须是已知迁移的连续前缀；未知版本、缺失版本和校验不符拒绝打开。
   待执行迁移及其历史在单个事务中提交，失败回滚。
