@@ -112,7 +112,7 @@ cargo test --locked --workspace
 cargo check --locked -p rssr-app --target wasm32-unknown-unknown
 ```
 
-页面或移动端交互改动还应按环境补充 Android target、Web/原生 UI 验收。CI 分模块并行执行 Rust 检查、Web 浏览器契约及 Android 构建；每条路径与环境限制见[主线验证矩阵](./docs/testing/mainline-validation-matrix.md)。编译通过不等于 Android 或 macOS 实机已验收。
+页面或移动端交互改动还应按环境补充 Android target、Web/原生 UI 验收。CI 分模块并行执行 Rust 检查、Web 浏览器契约及 Android 构建，只改文档（Markdown 或 `docs/`）的 PR 跳过各检查模块，main 上的 push 始终全跑；每条路径与环境限制见[主线验证矩阵](./docs/testing/mainline-validation-matrix.md)。编译通过不等于 Android 或 macOS 实机已验收。
 
 ## 发布与文档
 
