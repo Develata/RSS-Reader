@@ -46,6 +46,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-11-12 | [cargo binstall 支持与 workspace 版本跟随发布](./2026-11-12-binstall-workspace-version.md) |
 | 2026-11-12 | [CI 算力与时长优化](./2026-11-12-ci-cost.md) |
 | 2026-11-12 | [macOS 包签名不完整与菜单栏名称](./2026-11-12-macos-bundle-signature-name.md) |
 | 2026-11-02 | [Linux 桌面入口名称与 0.2.2-1 打包修订](./2026-11-02-linux-desktop-entry-name.md) |

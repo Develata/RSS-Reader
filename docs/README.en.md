@@ -41,6 +41,14 @@ Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a webs
 
 The table lists `v0.2.2` assets; four platform CLI packages and an Android AAB are also published, 14 assets in total. For this release only the Linux assets were downloaded and checked (digests, version, build id); other platform packages were not re-tested by hand. Android certificate and emulator upgrade checks are from v0.2.1; see the [v0.2.2 release record](./handoffs/2026-11-02-v0.2.2-release.md) and the [v0.2.1 verification record](./handoffs/2026-10-28-v0.2.1-release.md). Physical macOS interaction, system IME and other-device coverage remain limited. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
 
+The CLI can also be installed from the latest release with [cargo-binstall](https://github.com/cargo-bins/cargo-binstall). `rssr-cli` is not on crates.io, hence `--git`; platforms without a published archive fall back to compiling from source:
+
+```bash
+cargo binstall --git https://github.com/Develata/RSS-Reader rssr-cli
+```
+
+It lands in `~/.cargo/bin`. On macOS it shares `~/Library/Application Support/RSS-Reader/` with the desktop app; on Windows and Linux it keeps data next to the executable (`~/.cargo/bin/RSS-Reader/`), so pass `--data-dir` or set `RSSR_DATA_DIR` to manage the desktop app's library.
+
 **Linux package:** the `v0.2.2` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
