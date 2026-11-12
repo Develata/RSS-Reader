@@ -110,7 +110,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                                 class: "text-input",
                                 "data-field": "webdav-endpoint",
                                 value: "{facade.endpoint()}",
-                                placeholder: "https://dav.example.com/base/",
+                                placeholder: "https://example.com/dav/path/",
                                 oninput: move |event| endpoint_facade.set_endpoint(event.value())
                             }
                             p { "data-slot": "page-intro",
