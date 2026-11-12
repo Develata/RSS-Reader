@@ -4,9 +4,9 @@
 - 作者 / Agent：Claude（Opus）
 - 分支：`claude/webdav-auto-sync`
 - 当前 HEAD：见分支
-- 相关 commit：`fcd356fa`（实现）、`b39e3729`（交接）、评审修复见下一提交
+- 相关 commit：`fcd356fa`（实现）、`b39e3729`（交接）、`dfebd297`（首轮评审修复）、复审修复见下一提交
 - 相关 tag / release：N/A
-- 状态：`draft`（第一轮独立评审的修复已完成，待复审）
+- 状态：`validated`（自动化验证；真实网盘与界面手工验收未做）
 
 ## 工作摘要
 
@@ -55,13 +55,29 @@
 | 11 多实例共用数据目录 | 不在支持范围 | 规格与指南写明 |
 | 12 测试覆盖 | 部分采纳 | 新增上列回归、失败路径、`Debug` 脱敏、`/api/v1/remote-sync` 经 `HttpBackend` 的往返（含保存端点上传、身份不符拒绝、停用后文件删除） |
 
+## 独立评审（Codex，复审，`dfebd297`）
+
+结论“通过 / 无 blocker”：首轮 1、2、3、8、10、11 已解决。其余与新增问题核对后均成立，处理如下：
+
+| 项 | 处理 |
+| --- | --- |
+| N1 关掉 gzip 却没拒绝压缩响应 | 每个请求带 `Accept-Encoding: identity`；测试 `webdav_asks_for_the_identity_encoding`（去掉该头时失败） |
+| N2 读与读乱序 | 每次读写都领新序号，只采纳最新请求；过期读取的失败也不显示 |
+| N3 `syncing` 不可靠、轮询可叠加 | 启动同步由守卫结束（含 panic，测试 `the_start_never_stays_pending`）；修改后同步取得锁之后才清排队标记；保存档案只看排队状态；页面同时只有一个后续读取 |
+| N4 写不进档案时把 `Pulled` 改成失败 | 结果保持原样，另标 `unrecorded`；外壳照常重读并以错误提示告知 |
+| N5、R3 文档措辞 | 窗口改为“从读取远端到上传完成”；备份说明区分 `rssr-cli backup` 与整目录复制 |
+| R1 其余 `Debug` | `WebDavCredentials`、设置页同步状态改为脱敏 |
+| R2 写不进档案的结果看不到 | 后端在内存保留最近未写入的报告，`load_remote_sync` 优先显示，写入成功后清除 |
+| V1 手动上传竞态测试无区分力 | 删去该段：手动上传一次调用同时取包与指纹，中间无可插入点 |
+
 ## 验证与验收
 
 ### 自动化验证
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`：通过
-- `cargo test --workspace --locked`：通过（67 个测试目标，0 失败）；新增 `test_library_remote_sync`（8）、`local_backend::tests` 四例、`webdav_conditional_*` / `webdav_weak_entity_tags_are_not_used`、`profile_file` 两例、`remote_sync_text` 两例、同步页状态两例、`client_tests::the_saved_endpoint_through_the_client`；UI 特征转录只新增条目（视图字段随修复增加）
+- `cargo test --workspace --locked`：通过（67 个测试目标，0 失败）；新增 `test_library_remote_sync`（8）、`local_backend::tests` 五例、`webdav_conditional_*` / `webdav_asks_for_the_identity_encoding` / `webdav_weak_entity_tags_are_not_used`、`profile_file` 两例、`remote_sync_text` 三例、同步页状态三例、`client_tests::the_saved_endpoint_through_the_client`；UI 特征转录只新增条目
+- 变异检查：恢复旧的“先读指纹后导出”顺序、去掉 `identity` 请求头，各自对应的测试失败
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --features pages-demo --locked`：通过
 - `cargo check -p rssr-app --target aarch64-linux-android --locked`：未执行（本机无 Android NDK，`ring` 找不到 `aarch64-linux-android-clang`）；CI 的 Android job 覆盖
@@ -73,11 +89,11 @@
 
 ## 结果
 
-- 第一轮评审问题已修复并验证；复审通过后可开 PR。
+- 两轮独立评审的问题均已修复并经自动化验证，可开 PR；合并前建议用真实网盘（坚果云 / Nextcloud）验收 ETag 与条件请求，并在桌面与正式 Web 上走一遍记住、停用、启动提示。
 
 ## 风险与后续事项
 
-- 服务器不返回强 ETag 时，上传前后的竞争窗口内另一设备的上传可能被覆盖；返回 ETag 的服务器会识别为冲突。
+- 服务器不返回强 ETag 时，从读取远端到上传完成之间另一设备的上传可能被覆盖；返回强 ETag 的服务器会识别为冲突。是否在此时停用自动上传，待 Develata 在真实网盘验收后决定。
 - 凭据明文保存（Develata 决定）；以后可换系统钥匙串，档案接口不变。
 - 同一数据目录只应由一个带档案的进程使用（桌面与服务器不要共用数据目录）。
 - 下一步：“备份 / 恢复”入口单独写设计文档，第一步做本地整库文件导出与恢复（GUI + `rssr-cli restore`）。

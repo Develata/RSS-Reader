@@ -329,12 +329,31 @@ async fn webdav_conditional_upload_sends_its_precondition_and_reports_a_refusal(
     assert!(format!("{error:#}").contains("412"), "{error:#}");
 
     let requests = server.requests();
-    let encoding = requests[0].header("accept-encoding").unwrap_or_default();
-    assert!(!encoding.contains("gzip"), "no compression that would weaken the tag: {encoding}");
+    for request in &requests {
+        assert_eq!(request.header("accept-encoding"), Some("identity"), "every request");
+    }
     assert_eq!(requests[1].header("if-match"), Some("\"v1\""));
     assert_eq!(requests[2].header("if-match"), Some("\"v0\""));
     assert_eq!(requests[3].header("if-none-match"), Some("*"));
     assert_eq!(requests[4].header("if-match"), None, "an unconditional upload sends none");
+}
+
+/// The client asks for the identity encoding and reads what a server that honours it sends;
+/// without the header a server may compress, which the client (without decompression) could
+/// not read (re-review N1).
+#[tokio::test]
+async fn webdav_asks_for_the_identity_encoding() {
+    let server = Server::start(|request| {
+        if request.header("accept-encoding") == Some("identity") {
+            Response::new(200, "Content-Type: application/json\r\n", CONFIG)
+        } else {
+            let gzip = b"\x1f\x8b\x08\x00not really gzip".to_vec();
+            Response::new(200, "Content-Type: application/json\r\nContent-Encoding: gzip\r\n", gzip)
+        }
+    })
+    .await;
+    let sync = WebDavConfigSync::new(server.url.join("dav/").unwrap().as_str(), "c.json").unwrap();
+    assert_eq!(sync.download_text().await.unwrap().as_deref(), Some(CONFIG));
 }
 
 /// A weak entity tag cannot serve `If-Match` (strong comparison): it is not used.

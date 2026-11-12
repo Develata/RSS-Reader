@@ -218,7 +218,7 @@ impl SettingsPageFacade {
             .as_ref()
             .and_then(|view| view.profile.as_ref())
             .and_then(|profile| profile.last_report.as_ref())
-            .is_some_and(|report| crate::ui::remote_sync_text::needs_attention(&report.outcome))
+            .is_some_and(crate::ui::remote_sync_text::report_needs_attention)
     }
 
     /// Why the saved profile cannot be read, if it cannot.

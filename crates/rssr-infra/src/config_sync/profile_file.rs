@@ -153,6 +153,7 @@ mod tests {
             at: time::OffsetDateTime::UNIX_EPOCH,
             trigger: RemoteSyncTrigger::Startup,
             outcome: RemoteSyncOutcome::Failed { message: "无法访问远端".into() },
+            unrecorded: false,
         });
         store.save(&profile).await.unwrap();
         assert_eq!(store.load().await.unwrap(), Some(profile.clone()));

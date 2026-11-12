@@ -109,8 +109,8 @@ impl SettingsPageSyncSession {
     /// Reads automatic synchronization's state (at start, on every re-read, after a save of
     /// the settings, and again while a synchronization is in progress). Its answer applies only
     /// if no write started since (independent review, finding 6).
-    pub(crate) fn load_remote_sync(self) {
-        let Some(epoch) = self.state.peek().begin_profile_read() else {
+    pub(crate) fn load_remote_sync(mut self) {
+        let Some(ticket) = self.state.with_mut(|state| state.begin_profile_read()) else {
             return;
         };
         let mut state = self.state;
@@ -125,16 +125,18 @@ impl SettingsPageSyncSession {
                 match intent {
                     UiIntent::RemoteSyncLoaded(view) => {
                         let applied =
-                            state.with_mut(|state| state.accept_profile_read(epoch, view));
+                            state.with_mut(|state| state.accept_profile_read(ticket, view));
                         if applied {
                             self.follow_sync_in_progress();
                         }
                     }
-                    other => {
+                    // A stale read's failure is not shown either.
+                    other if state.peek().is_current_read(ticket) => {
                         if let Some(intent) = other.into_settings_page_intent() {
                             page.dispatch(intent);
                         }
                     }
+                    _ => {}
                 }
             }
         });
@@ -186,14 +188,15 @@ impl SettingsPageSyncSession {
 
     /// While a synchronization is scheduled or running, reads its state again shortly, so its
     /// result reaches the open page (independent review, finding 7).
-    fn follow_sync_in_progress(self) {
-        let syncing = self.state.peek().remote_sync.as_ref().is_some_and(|view| view.syncing);
-        if !syncing {
+    fn follow_sync_in_progress(mut self) {
+        if !self.state.with_mut(|state| state.begin_following()) {
             return;
         }
         let page = self.page;
+        let mut state = self.state;
         spawn(async move {
             crate::ui::shell_browser::sleep(SYNC_FOLLOW_INTERVAL).await;
+            state.with_mut(|state| state.following = false);
             if page.is_open() {
                 self.load_remote_sync();
             }

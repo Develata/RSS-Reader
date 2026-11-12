@@ -139,7 +139,11 @@ pub enum RemoteSyncOutcome {
 pub struct RemoteSyncReport {
     pub at: OffsetDateTime,
     pub trigger: RemoteSyncTrigger,
+    /// What the synchronization did (a download that happened stays a download).
     pub outcome: RemoteSyncOutcome,
+    /// Its base could not be stored: automatic synchronization goes on from the old one.
+    #[serde(default)]
+    pub unrecorded: bool,
 }
 
 /// The endpoint saved for automatic synchronization, kept by the host next to the library and

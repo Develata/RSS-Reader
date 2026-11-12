@@ -121,9 +121,12 @@ struct Inner<H> {
     auto_refresh_started: AtomicBool,
     /// Serializes everything that reads or writes the synchronization profile.
     remote_sync: tokio::sync::Mutex<()>,
-    /// A synchronization after a change is scheduled and has not started.
+    /// A synchronization after a change is scheduled and has not taken the lock yet.
     after_change_pending: AtomicBool,
     startup_sync: tokio::sync::watch::Sender<StartupSync>,
+    /// The last result whose profile could not be written, shown until one is written again
+    /// (re-review R2: the file that failed cannot carry it).
+    unrecorded: std::sync::Mutex<Option<RemoteSyncReport>>,
 }
 
 /// The synchronization after the first periodic refresh of this process.
@@ -131,6 +134,22 @@ struct Inner<H> {
 enum StartupSync {
     Pending,
     Done(Option<RemoteSyncReport>),
+}
+
+/// Ends the startup synchronization's wait however the first refresh ends, a panic included:
+/// still pending when dropped, it becomes "nothing to report" (re-review N3).
+struct StartupSyncGuard(tokio::sync::watch::Sender<StartupSync>);
+
+impl Drop for StartupSyncGuard {
+    fn drop(&mut self) {
+        self.0.send_if_modified(|state| {
+            let pending = *state == StartupSync::Pending;
+            if pending {
+                *state = StartupSync::Done(None);
+            }
+            pending
+        });
+    }
 }
 
 /// Clears the periodic refresh's "in progress" flag when dropped.
@@ -163,6 +182,7 @@ impl<H: LocalHost> LocalBackend<H> {
                 remote_sync: tokio::sync::Mutex::new(()),
                 after_change_pending: AtomicBool::new(false),
                 startup_sync: tokio::sync::watch::Sender::new(StartupSync::Pending),
+                unrecorded: std::sync::Mutex::new(None),
             }),
         }
     }
@@ -285,9 +305,11 @@ impl<H: LocalHost> LocalBackend<H> {
                 );
                 let backend = self.clone();
                 let done = InProgress(Arc::clone(&in_progress));
+                let startup = first.then(|| StartupSyncGuard(self.inner.startup_sync.clone()));
                 self.inner.host.spawn(Box::pin(async move {
                     // Cleared when the refresh ends, however it ends.
                     let _done = done;
+                    let _startup = startup;
                     if let Err(error) = backend.refresh_all().await {
                         tracing::warn!(error = %error, "后台自动刷新失败");
                     }
@@ -341,14 +363,51 @@ impl<H: LocalHost> LocalBackend<H> {
         trigger: RemoteSyncTrigger,
         outcome: RemoteSyncOutcome,
     ) -> RemoteSyncReport {
-        RemoteSyncReport { at: self.inner.host.now_utc(), trigger, outcome }
+        RemoteSyncReport { at: self.inner.host.now_utc(), trigger, outcome, unrecorded: false }
+    }
+
+    /// Keeps `profile` with `report` as its last result. When it cannot be written, the
+    /// report says so and stays visible from memory; `false` then.
+    async fn record(
+        &self,
+        profiles: &dyn RemoteSyncProfileStore,
+        profile: &mut RemoteSyncProfile,
+        report: &mut RemoteSyncReport,
+    ) -> bool {
+        profile.last_report = Some(report.clone());
+        let unrecorded = &self.inner.unrecorded;
+        match profiles.save(profile).await {
+            Ok(()) => {
+                *unrecorded.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+                true
+            }
+            Err(error) => {
+                tracing::warn!(error = %format!("{error:#}"), "保存 WebDAV 同步结果失败");
+                report.unrecorded = true;
+                *unrecorded.lock().unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    Some(report.clone());
+                false
+            }
+        }
     }
 
     /// One automatic synchronization with the saved profile; its result is recorded there.
     /// `None` when there is no profile or it did nothing.
     async fn run_remote_sync(&self, trigger: RemoteSyncTrigger) -> Option<RemoteSyncReport> {
-        let profiles = self.remote_sync_profiles()?;
+        let after_change = trigger == RemoteSyncTrigger::AfterChange;
+        let Some(profiles) = self.remote_sync_profiles() else {
+            if after_change {
+                self.inner.after_change_pending.store(false, Ordering::SeqCst);
+            }
+            return None;
+        };
         let _serialized = self.inner.remote_sync.lock().await;
+        // Held from scheduling until here, then the lock shows it: never seen as idle between.
+        // A change from now on schedules another synchronization; this one reads the
+        // configuration after this point, so a change before it is covered.
+        if after_change {
+            self.inner.after_change_pending.store(false, Ordering::SeqCst);
+        }
         let mut profile = match profiles.load().await {
             Ok(Some(profile)) => profile,
             Ok(None) => return None,
@@ -376,11 +435,7 @@ impl<H: LocalHost> LocalBackend<H> {
             Err(error) => failed(&error),
         };
         let mut report = self.sync_report(trigger, outcome);
-        profile.last_report = Some(report.clone());
-        if let Err(error) = profiles.save(&profile).await {
-            tracing::warn!(error = %format!("{error:#}"), "保存 WebDAV 同步结果失败");
-            report.outcome = RemoteSyncOutcome::Failed { message: NOT_RECORDED.to_string() };
-        }
+        self.record(profiles, &mut profile, &mut report).await;
         Some(report)
     }
 
@@ -402,19 +457,26 @@ impl<H: LocalHost> LocalBackend<H> {
         let backend = self.clone();
         self.inner.host.spawn(Box::pin(async move {
             backend.inner.host.sleep(AFTER_CHANGE_SYNC_DELAY).await;
-            // A change from now on schedules another synchronization.
-            backend.inner.after_change_pending.store(false, Ordering::SeqCst);
             backend.run_remote_sync(RemoteSyncTrigger::AfterChange).await;
         }));
     }
 
-    /// Whether a synchronization is scheduled or running (its result is not recorded yet).
-    fn remote_sync_in_progress(&self) -> bool {
+    /// Whether a synchronization is scheduled: the one after the start, or one after a change
+    /// that has not taken the lock yet.
+    fn remote_sync_scheduled(&self) -> bool {
         let startup_pending = self.inner.auto_refresh_started.load(Ordering::SeqCst)
             && *self.inner.startup_sync.borrow() == StartupSync::Pending;
-        startup_pending
-            || self.inner.after_change_pending.load(Ordering::SeqCst)
-            || self.inner.remote_sync.try_lock().is_err()
+        startup_pending || self.inner.after_change_pending.load(Ordering::SeqCst)
+    }
+
+    /// Whether a synchronization is scheduled or running (its result is not recorded yet).
+    fn remote_sync_in_progress(&self) -> bool {
+        self.remote_sync_scheduled() || self.inner.remote_sync.try_lock().is_err()
+    }
+
+    /// The last result that could not be written to the profile, if any.
+    fn unrecorded_report(&self) -> Option<RemoteSyncReport> {
+        self.inner.unrecorded.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
 
     /// Runs `transfer` with the saved profile the user meant (`saved`) and records its result
@@ -451,11 +513,10 @@ impl<H: LocalHost> LocalBackend<H> {
             }
             Err(error) => failed(error),
         };
-        profile.last_report = Some(self.sync_report(RemoteSyncTrigger::Manual, outcome));
-        let recorded = profiles.save(&profile).await;
+        let mut report = self.sync_report(RemoteSyncTrigger::Manual, outcome);
+        let recorded = self.record(profiles, &mut profile, &mut report).await;
         let (value, _) = result?;
-        if let Err(error) = recorded {
-            tracing::warn!(error = %format!("{error:#}"), "保存 WebDAV 同步结果失败");
+        if !recorded {
             return Err(rssr_api::BackendError::new(rssr_api::ErrorCode::Storage, NOT_RECORDED));
         }
         Ok(value)
@@ -565,12 +626,14 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         };
         let syncing = self.remote_sync_in_progress();
         Ok(match profiles.load().await {
-            Ok(profile) => RemoteSyncView {
-                available: true,
-                profile: profile.map(|profile| profile.view()),
-                syncing,
-                problem: None,
-            },
+            Ok(profile) => {
+                let mut profile = profile.map(|profile| profile.view());
+                // A newer result the file could not take.
+                if let (Some(view), Some(report)) = (profile.as_mut(), self.unrecorded_report()) {
+                    view.last_report = Some(report);
+                }
+                RemoteSyncView { available: true, profile, syncing, problem: None }
+            }
             // Still available, so the page offers to forget it (independent review, finding 8).
             Err(error) => RemoteSyncView {
                 available: true,
@@ -604,7 +667,8 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
             profile.last_report = saved.last_report;
         }
         profiles.save(&profile).await?;
-        let syncing = self.inner.after_change_pending.load(Ordering::SeqCst);
+        // The lock is held here: only what is scheduled counts.
+        let syncing = self.remote_sync_scheduled();
         Ok(RemoteSyncView {
             available: true,
             profile: Some(profile.view()),
@@ -1219,11 +1283,16 @@ mod tests {
         assert!(backend.host().remote.0.lock().unwrap().is_some(), "the upload happened");
         backend.ensure_auto_refresh_started();
         let report = backend.startup_remote_sync().await.unwrap().expect("a report");
-        assert!(
-            matches!(&report.outcome, RemoteSyncOutcome::Failed { message } if message.contains("无法保存同步状态")),
-            "{report:?}"
-        );
+        // What happened stays what it is; that it is not recorded is said beside it.
+        assert_eq!(report.outcome, RemoteSyncOutcome::UpToDate, "{report:?}");
+        assert!(report.unrecorded);
+        let shown = backend.load_remote_sync().await.unwrap().profile.unwrap().last_report;
+        assert_eq!(shown, Some(report), "shown from memory, the file could not take it");
         backend.host().profiles.2.store(false, Ordering::SeqCst);
+        // Written again: the memory gives way to the file.
+        backend.push_remote_config(&saved).await.unwrap();
+        let shown = backend.load_remote_sync().await.unwrap().profile.unwrap().last_report;
+        assert!(shown.is_some_and(|report| !report.unrecorded));
 
         // Unreadable: the view says so and forgetting it works.
         backend.host().profiles.1.store(true, Ordering::SeqCst);
@@ -1233,6 +1302,24 @@ mod tests {
         backend.clear_remote_sync().await.expect("forgetting needs no reading");
         backend.host().profiles.1.store(false, Ordering::SeqCst);
         assert_eq!(backend.load_remote_sync().await.unwrap().profile, None);
+    }
+
+    /// A first refresh that ends without its synchronization (a panic) does not leave the
+    /// start waiting, nor the page following a synchronization that never comes.
+    #[tokio::test]
+    async fn the_start_never_stays_pending() {
+        let backend = sync_backend().await;
+        backend.save_remote_sync("https://dav.example/", "r.json").await.unwrap();
+        backend.inner.auto_refresh_started.store(true, Ordering::SeqCst);
+        assert!(backend.load_remote_sync().await.unwrap().syncing);
+        let guard = StartupSyncGuard(backend.inner.startup_sync.clone());
+        let task = tokio::spawn(async move {
+            let _guard = guard;
+            panic!("the first refresh failed hard");
+        });
+        assert!(task.await.unwrap_err().is_panic());
+        assert_eq!(backend.startup_remote_sync().await.unwrap(), None);
+        assert!(!backend.load_remote_sync().await.unwrap().syncing);
     }
 
     /// `Debug` of what carries an endpoint shows no password (independent review, finding 4).

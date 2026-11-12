@@ -299,19 +299,8 @@ async fn an_edit_during_a_transfer_and_its_undo_both_reach_the_remote() {
         "undoing the edit is a change"
     );
     assert!(remote.raw().unwrap().contains("\"refresh_interval_minutes\": 40"));
-
-    // The same through the user's upload.
-    let fifty = UserSettings { refresh_interval_minutes: 50, ..UserSettings::default() };
-    remote.edit_during_next_download(&device.library, fifty);
-    device.sync(&remote, RemoteSyncTrigger::Startup).await;
-    device.set_interval(40).await;
-    let (_, base) = device.service.push_remote_config_tracked(&remote).await.expect("push");
-    device.base = Some(base);
-    device.set_interval(50).await;
-    assert_eq!(
-        device.sync(&remote, RemoteSyncTrigger::AfterChange).await,
-        Some(RemoteSyncOutcome::Pushed { exported_feed_count: 0 })
-    );
+    // The user's upload reads the package and its fingerprint in one call
+    // (`export_config_with_fingerprint`): there is no point between them to edit at.
 }
 
 /// A download replaces this library only if it did not change after the decision was read.

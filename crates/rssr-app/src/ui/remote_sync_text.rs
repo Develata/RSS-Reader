@@ -47,23 +47,36 @@ fn trigger_text(trigger: RemoteSyncTrigger) -> &'static str {
     }
 }
 
+/// Said after a result whose base could not be stored.
+const UNRECORDED: &str = "同步状态未能保存，自动同步暂不可靠，请稍后再手动上传或下载一次。";
+
+/// What a report says: its outcome, and that it was not recorded when it was not.
+fn report_body(report: &RemoteSyncReport) -> String {
+    let outcome = outcome_text(&report.outcome);
+    if report.unrecorded { format!("{outcome}{UNRECORDED}") } else { outcome }
+}
+
 /// The settings page's line about the last synchronization.
 pub(crate) fn report_text(report: &RemoteSyncReport) -> String {
     let at = crate::datetime::format_datetime(Some(report.at)).unwrap_or_default();
-    format!("最近一次（{}，{at}）：{}", trigger_text(report.trigger), outcome_text(&report.outcome))
+    format!("最近一次（{}，{at}）：{}", trigger_text(report.trigger), report_body(report))
+}
+
+/// Whether the report needs the user: a direction to choose, a failure, or a base not stored.
+pub(crate) fn report_needs_attention(report: &RemoteSyncReport) -> bool {
+    report.unrecorded || needs_attention(&report.outcome)
 }
 
 /// The shell's notice after the synchronization at start: only a download or what needs the
 /// user is worth interrupting for.
 pub(crate) fn startup_notice(report: &RemoteSyncReport) -> Option<(String, &'static str)> {
-    match &report.outcome {
-        RemoteSyncOutcome::Pulled { .. } => {
-            Some((format!("WebDAV 自动同步：{}", outcome_text(&report.outcome)), "info"))
-        }
-        outcome if needs_attention(outcome) => {
-            Some((format!("WebDAV 自动同步：{}", outcome_text(outcome)), "error"))
-        }
-        _ => None,
+    let text = format!("WebDAV 自动同步：{}", report_body(report));
+    if report_needs_attention(report) {
+        Some((text, "error"))
+    } else if matches!(report.outcome, RemoteSyncOutcome::Pulled { .. }) {
+        Some((text, "info"))
+    } else {
+        None
     }
 }
 
@@ -76,6 +89,7 @@ mod tests {
             at: time::OffsetDateTime::UNIX_EPOCH,
             trigger: RemoteSyncTrigger::Startup,
             outcome,
+            unrecorded: false,
         }
     }
 
@@ -95,6 +109,18 @@ mod tests {
         ] {
             assert_eq!(startup_notice(&report(outcome)).map(|(_, tone)| tone), Some("error"));
         }
+    }
+
+    #[test]
+    fn a_result_not_recorded_keeps_what_happened_and_says_so() {
+        let pulled = RemoteSyncOutcome::Pulled { imported_feed_count: 3, removed_feed_count: 0 };
+        let mut report = report(pulled);
+        report.unrecorded = true;
+        let (text, tone) = startup_notice(&report).expect("worth a notice");
+        assert_eq!(tone, "error");
+        assert!(text.contains("已下载远端配置") && text.contains("未能保存"), "{text}");
+        report.outcome = RemoteSyncOutcome::UpToDate;
+        assert!(startup_notice(&report).is_some(), "even with nothing transferred");
     }
 
     #[test]

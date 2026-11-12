@@ -21,10 +21,20 @@ pub struct WebDavConfigSync {
     credentials: Option<WebDavCredentials>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct WebDavCredentials {
     username: String,
     password: Option<String>,
+}
+
+/// No password, decoded or not (re-review R1).
+impl std::fmt::Debug for WebDavCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDavCredentials")
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 impl WebDavConfigSync {
@@ -63,8 +73,11 @@ impl WebDavConfigSync {
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
                 .referer(false)
                 // A configuration is small; a server (or a proxy such as nginx) that compresses
-                // the answer weakens its entity tag, which then cannot guard an upload.
+                // the answer weakens its entity tag, which then cannot guard an upload. Without
+                // decompression, every request asks for the identity encoding explicitly (no
+                // `Accept-Encoding` would allow any coding, RFC 9110 12.5.3).
                 .no_gzip()
+                .default_headers(identity_encoding())
                 .redirect(policy.redirect(|attempt| {
                     // reqwest 0.12.28 preserves GET/PUT on 301/302/307/308, but
                     // 303 turns PUT into GET. Reject 303 for this shared client.
@@ -222,6 +235,13 @@ impl WebDavConfigSync {
             None => request,
         }
     }
+}
+
+/// `Accept-Encoding: identity`: the configuration's bytes as stored.
+fn identity_encoding() -> header::HeaderMap {
+    let mut headers = header::HeaderMap::new();
+    headers.insert(header::ACCEPT_ENCODING, header::HeaderValue::from_static("identity"));
+    headers
 }
 
 fn same_webdav_origin(endpoint: &Url, target: &Url) -> bool {

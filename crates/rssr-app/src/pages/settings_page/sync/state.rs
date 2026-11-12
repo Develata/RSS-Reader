@@ -1,6 +1,6 @@
 use rssr_application::{RemoteEndpoint, RemoteSyncView, RemoteTarget, SavedRemote};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SettingsPageSyncState {
     pub(crate) endpoint: String,
     pub(crate) remote_path: String,
@@ -10,8 +10,26 @@ pub(crate) struct SettingsPageSyncState {
     /// Saving or forgetting the endpoint is in flight: one at a time, and no read applies
     /// meanwhile.
     pub(crate) profile_write_pending: bool,
-    /// Bumped by every write: a read issued before it is stale (independent review, finding 6).
-    pub(crate) profile_epoch: u64,
+    /// Bumped by every read and write of the profile: only the latest request's answer applies
+    /// (independent review, finding 6; re-review N2).
+    pub(crate) profile_request: u64,
+    /// A follow-up read of a synchronization in progress is scheduled (one at a time).
+    pub(crate) following: bool,
+}
+
+/// The typed endpoint without its password (re-review R1).
+impl std::fmt::Debug for SettingsPageSyncState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SettingsPageSyncState")
+            .field("endpoint", &rssr_application::display_endpoint(&self.endpoint))
+            .field("remote_path", &self.remote_path)
+            .field("pending_remote_pull", &self.pending_remote_pull)
+            .field("remote_sync", &self.remote_sync)
+            .field("profile_write_pending", &self.profile_write_pending)
+            .field("profile_request", &self.profile_request)
+            .field("following", &self.following)
+            .finish()
+    }
 }
 
 impl SettingsPageSyncState {
@@ -22,7 +40,8 @@ impl SettingsPageSyncState {
             pending_remote_pull: false,
             remote_sync: None,
             profile_write_pending: false,
-            profile_epoch: 0,
+            profile_request: 0,
+            following: false,
         }
     }
 
@@ -35,14 +54,24 @@ impl SettingsPageSyncState {
         })
     }
 
-    /// A read may start (no write in flight); its answer applies only with this epoch.
-    pub(crate) fn begin_profile_read(&self) -> Option<u64> {
-        (!self.profile_write_pending).then_some(self.profile_epoch)
+    /// A read may start (no write in flight); the ticket its answer must carry. Earlier reads
+    /// in flight become stale: answers can arrive in any order.
+    pub(crate) fn begin_profile_read(&mut self) -> Option<u64> {
+        if self.profile_write_pending {
+            return None;
+        }
+        self.profile_request += 1;
+        Some(self.profile_request)
     }
 
-    /// A read's answer, applied unless a write started since it was issued.
-    pub(crate) fn accept_profile_read(&mut self, epoch: u64, view: RemoteSyncView) -> bool {
-        if self.profile_write_pending || epoch != self.profile_epoch {
+    /// Whether the read with `ticket` is still the latest request.
+    pub(crate) fn is_current_read(&self, ticket: u64) -> bool {
+        !self.profile_write_pending && ticket == self.profile_request
+    }
+
+    /// A read's answer, applied only while it is the latest request.
+    pub(crate) fn accept_profile_read(&mut self, ticket: u64, view: RemoteSyncView) -> bool {
+        if !self.is_current_read(ticket) {
             return false;
         }
         self.set_remote_sync(view);
@@ -55,7 +84,18 @@ impl SettingsPageSyncState {
             return false;
         }
         self.profile_write_pending = true;
-        self.profile_epoch += 1;
+        self.profile_request += 1;
+        true
+    }
+
+    /// Whether a follow-up read should be scheduled: a synchronization is in progress and
+    /// none is scheduled yet. Marks it scheduled.
+    pub(crate) fn begin_following(&mut self) -> bool {
+        let syncing = self.remote_sync.as_ref().is_some_and(|view| view.syncing);
+        if !syncing || self.following {
+            return false;
+        }
+        self.following = true;
         true
     }
 
@@ -197,6 +237,12 @@ mod tests {
         let mut state = SettingsPageSyncState::new();
         let read = state.begin_profile_read().expect("no write in flight");
 
+        // Two reads answered out of order: only the later request applies.
+        let later = state.begin_profile_read().expect("another read");
+        assert!(!state.accept_profile_read(read, saved.clone()), "superseded by the later read");
+        assert!(state.accept_profile_read(later, cleared.clone()));
+        let read = state.begin_profile_read().expect("a read before the write");
+
         assert!(state.begin_profile_write());
         assert!(!state.begin_profile_write(), "one write at a time");
         assert_eq!(state.begin_profile_read(), None, "no read while a write is in flight");
@@ -207,6 +253,26 @@ mod tests {
         let read = state.begin_profile_read().expect("a new read");
         assert!(state.accept_profile_read(read, saved.clone()));
         assert_eq!(state.remote_sync, Some(saved));
+    }
+
+    /// One follow-up read at a time, and only while a synchronization is in progress.
+    #[test]
+    fn a_synchronization_in_progress_is_followed_once() {
+        let mut state = SettingsPageSyncState::new();
+        assert!(!state.begin_following(), "nothing read yet");
+        let ticket = state.begin_profile_read().unwrap();
+        let syncing =
+            RemoteSyncView { available: true, syncing: true, ..RemoteSyncView::default() };
+        state.accept_profile_read(ticket, syncing);
+        assert!(state.begin_following());
+        assert!(!state.begin_following(), "already scheduled");
+        state.following = false;
+        let ticket = state.begin_profile_read().unwrap();
+        state.accept_profile_read(
+            ticket,
+            RemoteSyncView { available: true, ..RemoteSyncView::default() },
+        );
+        assert!(!state.begin_following(), "done: no more reads");
     }
 
     #[test]
