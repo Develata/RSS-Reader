@@ -15,13 +15,13 @@ _Actual Web interface from main (2026-10-31), with sample subscriptions and arti
 
 RSS-Reader is a local-first RSS reader built with Rust and Dioxus. Desktop, Web, Android, and CLI share the same core subscription and reading behavior. Desktop and Android keep a library on the device. Self-hosted Web keeps one library on the server, shared by browsers and the CLI using that server data directory. JSON, OPML, and optional WebDAV exchange subscriptions and settings between separate libraries.
 
-The current release is [v0.2.2](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.2). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
+The current release is [v0.2.3](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.3). Before upgrading from v0.1.x, read the data migration notes below, especially the old macOS data location.
 
-v0.2.2 does not change the library schema; built-in themes are reduced to Default and Amethyst Glass, and saved CSS of retired themes keeps applying (see the [release notes](./releases/v0.2.2.md)). Before upgrading from v0.2.0, close the app and back up the library. v0.2.1 added manual archiving; v0.2.0 cannot open the upgraded schema. To roll back, restore the pre-upgrade backup as well as the old executable.
+v0.2.3 does not change the library schema; it fixes the macOS app bundle signature and name and lets cargo binstall install the CLI (see the [release notes](./releases/v0.2.3.md)). Since v0.2.2 the built-in themes are Default and Amethyst Glass, and saved CSS of retired themes keeps applying. Before upgrading from v0.2.0, close the app and back up the library. v0.2.1 added manual archiving; v0.2.0 cannot open the upgraded schema. To roll back, restore the pre-upgrade backup as well as the old executable.
 
 Android has no in-app full-library backup or rollback flow. Configuration exports exclude articles and read/favorite state; uninstalling clears local data, so do not uninstall and reinstall to roll back. On first launch, a supported legacy directory is copied and verified while the original is retained. Migration of real legacy Android data still needs separate acceptance.
 
-v0.2.2 packages the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
+Since v0.2.2, releases package the server and its matching page together for Linux x86_64, Windows x86_64, and macOS x86_64 / aarch64 as `rssr-web-<platform>.tar.gz` (Windows: `.zip`). See the [deployment guide](./deployment/web.md); the standalone Pages demo remains separate.
 
 [Latest release](https://github.com/Develata/RSS-Reader/releases/latest) · [Release notes](https://github.com/Develata/RSS-Reader/releases) · [中文](../README.md) · [Documentation](./README.md) · [Issues](https://github.com/Develata/RSS-Reader/issues)
 
@@ -39,7 +39,9 @@ Download the appropriate asset from [Releases](https://github.com/Develata/RSS-R
 
 Open Subscribe (the RSS-wave icon in the top bar), add an RSS/Atom URL or a website homepage, then select **R** (Read / Home). From another page, R navigates home; when already home, R manually refreshes all feeds. Repeated clicks share the in-flight refresh. On mobile, pull down at the top of Home to request the same refresh.
 
-The table lists `v0.2.2` assets; four platform CLI packages and an Android AAB are also published, 14 assets in total. For this release only the Linux assets were downloaded and checked (digests, version, build id); other platform packages were not re-tested by hand. Android certificate and emulator upgrade checks are from v0.2.1; see the [v0.2.2 release record](./handoffs/2026-11-02-v0.2.2-release.md) and the [v0.2.1 verification record](./handoffs/2026-10-28-v0.2.1-release.md). Physical macOS interaction, system IME and other-device coverage remain limited. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
+The table lists `v0.2.3` assets; four platform CLI packages and an Android AAB are also published, 14 assets in total. For this release the macOS app and CLI assets of both architectures were downloaded and checked (digests, bundle signature, name, version), and the Apple Silicon app was launched with an isolated HOME; other platform packages were not re-tested by hand. The Linux asset checks are from v0.2.2 and the Android certificate and emulator upgrade checks from v0.2.1; see the [v0.2.3 release record](./handoffs/2026-11-12-v0.2.3-release.md), the [v0.2.2 release record](./handoffs/2026-11-02-v0.2.2-release.md) and the [v0.2.1 verification record](./handoffs/2026-10-28-v0.2.1-release.md). Physical macOS interaction, system IME and other-device coverage remain limited. Windows binaries have no Authenticode signature; macOS apps are unsigned and not notarized.
+
+macOS: from v0.2.3 the app bundle carries a complete ad-hoc signature and the menu bar shows `RSS-Reader`. Without a Developer ID signature or notarization, the first launch of a browser download may report an unverified developer; choose "Open Anyway" in System Settings → Privacy & Security (this UI path is not yet tested). v0.2.2 bundles lack the bundle signature and are reported as "damaged" after a browser download; run `xattr -dr com.apple.quarantine /Applications/RSS-Reader.app` or switch to v0.2.3.
 
 The CLI can also be installed from the latest release with [cargo-binstall](https://github.com/cargo-bins/cargo-binstall). `rssr-cli` is not on crates.io, hence `--git`; platforms without a published archive fall back to compiling from source:
 
@@ -49,7 +51,7 @@ cargo binstall --git https://github.com/Develata/RSS-Reader rssr-cli
 
 It lands in `~/.cargo/bin`. On macOS it shares `~/Library/Application Support/RSS-Reader/` with the desktop app; on Windows and Linux it keeps data next to the executable (`~/.cargo/bin/RSS-Reader/`), so pass `--data-dir` or set `RSSR_DATA_DIR` to manage the desktop app's library.
 
-**Linux package:** the `v0.2.2` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
+**Linux package:** the `v0.2.3` release workflow installed its package on Ubuntu 24.04 and launched it twice as an ordinary user under Xvfb, checking creation, integrity and data reuse of the single `library.sqlite3` in a path with Chinese characters and spaces. Minimum library versions come from the Ubuntu 24.04 build environment; check the package's `Depends` before installing on another distribution, especially an older one.
 
 ## Reading workflow
 
