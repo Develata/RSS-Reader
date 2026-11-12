@@ -41,6 +41,8 @@
 - Mac 编辑快捷键：本分支早于 PR #72，已合并 `main`（`ece1d067`）。
 - 用户名、密码单独输入：`rssr_application::endpoint_with_credentials` 把两栏按“字母数字以外全部百分号编码（含 `%`）”写进端点，WebDAV 客户端解码后原样还原；只填密码时拒绝。按 Develata 的决定只保留这一种格式：Endpoint 自带凭据即拒绝（功能未发布，旧写法只存在于会话里，无需迁移；CLI 的 `--endpoint` 未改）。密码框带显示／隐藏切换（`data-action="toggle-password-visibility"`），选择器文档已补。测试：`credentials_typed_apart_come_back_unchanged`、`credentials_typed_apart_reach_the_endpoint`。
 
+- Penpot：4 张含 WebDAV 卡片的画板已按 `2aa905c5` 实测更新，rev 444，命名版本 `WebDAV auto sync & credential fields · 2aa905c5 · 2026-11-13`，完整性 0 错误；细节见 `docs/design/penpot-code-baseline.md` 开头。主题区（五张卡片、列表密度）与第 12 页主题实效仍是旧代码状态，未在本 PR 处理。
+
 ## 独立评审（Codex，第一轮，`fcd356fa`）
 
 结论“不通过”。逐条核对源码后处理如下：
