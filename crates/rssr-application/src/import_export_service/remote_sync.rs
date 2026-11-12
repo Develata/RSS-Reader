@@ -236,11 +236,12 @@ pub fn display_endpoint(endpoint: &str) -> String {
     }
 }
 
-/// `endpoint` with `username` and `password` as its user information, when a user name is given
-/// (it replaces any in the endpoint); else the endpoint as typed, credentials in it or none.
-/// Every character but letters and digits is percent-encoded, `%` included, so any password
-/// comes back unchanged when the credentials are decoded. A password without a user name is
-/// refused: HTTP Basic would send none.
+/// The one way the settings page takes credentials: `endpoint` is an address only, and
+/// `username` and `password` (typed apart) become its user information. Every character but
+/// letters and digits is percent-encoded, `%` included, so any password comes back unchanged
+/// when the credentials are decoded (the encoding is the request's detail, never the user's).
+/// Refused: credentials written into the endpoint, and a password without a user name (HTTP
+/// Basic would send none).
 pub fn endpoint_with_credentials(
     endpoint: &str,
     username: &str,
@@ -248,16 +249,19 @@ pub fn endpoint_with_credentials(
 ) -> std::result::Result<String, String> {
     use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 
+    // An endpoint that is no URL is the backend's to refuse, with its own message.
+    let Ok(mut url) = url::Url::parse(endpoint) else {
+        return Ok(endpoint.to_owned());
+    };
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("Endpoint 只填地址，用户名和密码请填在下面两栏".to_owned());
+    }
     if username.is_empty() {
         if password.is_empty() {
             return Ok(endpoint.to_owned());
         }
         return Err("填写了密码时，也需要填写用户名".to_owned());
     }
-    // An endpoint that is no URL is the backend's to refuse, with its own message.
-    let Ok(mut url) = url::Url::parse(endpoint) else {
-        return Ok(endpoint.to_owned());
-    };
     let username = utf8_percent_encode(username, NON_ALPHANUMERIC).to_string();
     let password = utf8_percent_encode(password, NON_ALPHANUMERIC).to_string();
     let password = (!password.is_empty()).then_some(password.as_str());

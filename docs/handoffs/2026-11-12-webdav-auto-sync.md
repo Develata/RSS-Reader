@@ -39,7 +39,7 @@
 ## 用户验收后的补充（2026-11-13）
 
 - Mac 编辑快捷键：本分支早于 PR #72，已合并 `main`（`ece1d067`）。
-- 用户名、密码单独输入：`rssr_application::endpoint_with_credentials` 把两栏按“字母数字以外全部百分号编码（含 `%`）”写进端点，WebDAV 客户端解码后原样还原；只填密码时拒绝。密码框带显示／隐藏切换（`data-action="toggle-password-visibility"`），选择器文档已补。测试：`credentials_typed_apart_come_back_unchanged`、`credentials_typed_apart_reach_the_endpoint`。
+- 用户名、密码单独输入：`rssr_application::endpoint_with_credentials` 把两栏按“字母数字以外全部百分号编码（含 `%`）”写进端点，WebDAV 客户端解码后原样还原；只填密码时拒绝。按 Develata 的决定只保留这一种格式：Endpoint 自带凭据即拒绝（功能未发布，旧写法只存在于会话里，无需迁移；CLI 的 `--endpoint` 未改）。密码框带显示／隐藏切换（`data-action="toggle-password-visibility"`），选择器文档已补。测试：`credentials_typed_apart_come_back_unchanged`、`credentials_typed_apart_reach_the_endpoint`。
 
 ## 独立评审（Codex，第一轮，`fcd356fa`）
 

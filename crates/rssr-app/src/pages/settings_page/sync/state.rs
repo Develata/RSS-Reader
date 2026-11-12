@@ -326,6 +326,14 @@ mod tests {
 
         let shown = format!("{state:?}");
         assert!(!shown.contains("p@ss") && !shown.contains("p%40ss"), "{shown}");
+
+        // One format: credentials written into the endpoint are refused, fields or not.
+        state.endpoint = "https://alice:secret@dav.example/dav/".into();
+        let error = state.typed_endpoint().unwrap_err();
+        assert!(error.contains("下面两栏"), "{error}");
+        state.username.clear();
+        state.password.clear();
+        assert!(state.typed_endpoint().is_err());
     }
 
     #[test]

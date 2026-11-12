@@ -110,11 +110,11 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                                 class: "text-input",
                                 "data-field": "webdav-endpoint",
                                 value: "{facade.endpoint()}",
-                                placeholder: "https://用户名:密码@dav.example.com/base/",
+                                placeholder: "https://dav.example.com/base/",
                                 oninput: move |event| endpoint_facade.set_endpoint(event.value())
                             }
                             p { "data-slot": "page-intro",
-                                "需要登录的 WebDAV 服务，在下面填写用户名和密码，任何字符都不必转义；也可以照旧写进 Endpoint（https://用户名:密码@主机/路径/）。不记住时只保存在当前会话；记住后以明文保存在本机数据目录（自托管 Web 为服务器数据目录），不会写入配置包。"
+                                "Endpoint 只填地址；需要登录的 WebDAV 服务，在下面填写用户名和密码，任何字符都不必转义。不记住时只保存在当前会话；记住后以明文保存在本机数据目录（自托管 Web 为服务器数据目录），不会写入配置包。"
                             }
                         }
                         div { "data-slot": "settings-form-grid-item",

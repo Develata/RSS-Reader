@@ -271,9 +271,7 @@ fn percent_decode(raw: &str) -> String {
 fn unauthorized_hint(status: StatusCode) -> String {
     match status {
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-            format!(
-                "{status}（该端点需要认证，请在 endpoint 中带上 https://用户名:密码@主机/ 形式的凭据）"
-            )
+            format!("{status}（该端点需要认证，或用户名、密码不对，请检查）")
         }
         other => other.to_string(),
     }
