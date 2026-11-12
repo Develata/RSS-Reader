@@ -43,7 +43,7 @@
 
 - Penpot：4 张含 WebDAV 卡片的画板已按 `2aa905c5` 实测更新，rev 444，命名版本 `WebDAV auto sync & credential fields · 2aa905c5 · 2026-11-13`，完整性 0 错误；细节见 `docs/design/penpot-code-baseline.md` 开头。主题区（五张卡片、列表密度）与第 12 页主题实效仍是旧代码状态，未在本 PR 处理。
 
-- 去掉 Remote Path：配置固定为 Endpoint 文件夹里的 `rss-reader.json`（`rssr_application::REMOTE_CONFIG_FILE`，`012ee973`）；无需先建子目录。CLI 的 `remote_path` 参数可省略、默认同名。v0.2.3 及更早默认写到 `config/rss-reader.json`，读旧文件时把 Endpoint 指向该 `config/` 文件夹。Endpoint 示例改为 `https://example.com/dav/path/`（`5b89d171`）。Penpot 4 张设置画板同步，rev 490。
+- 去掉 Remote Path：配置固定为 Endpoint 文件夹里的 `rss-reader.json`（`rssr_application::REMOTE_CONFIG_FILE`，`012ee973`）；无需先建子目录。CLI 的 `remote_path` 参数可省略、默认同名。v0.2.3 及更早默认写到 `config/rss-reader.json`，读旧文件时把 Endpoint 指向该 `config/` 文件夹。Endpoint 示例改为 `https://example.com/dav/path/`（`5b89d171`）。Penpot 4 张设置画板同步，rev 490，命名版本 `WebDAV fixed file name & endpoint example · 012ee973 · 2026-11-13` 已回读。
 
 ## 独立评审（Codex，第一轮，`fcd356fa`）
 
