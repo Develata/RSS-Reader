@@ -47,6 +47,7 @@
 
 | 日期 | 记录 |
 | --- | --- |
+| 2026-11-12 | [macOS 桌面端恢复系统编辑快捷键](./2026-11-12-macos-edit-shortcuts.md) |
 | 2026-11-12 | [cargo binstall 支持与 workspace 版本跟随发布](./2026-11-12-binstall-workspace-version.md) |
 | 2026-11-12 | [CI 算力与时长优化](./2026-11-12-ci-cost.md) |
 | 2026-11-12 | [macOS 包签名不完整与菜单栏名称](./2026-11-12-macos-bundle-signature-name.md) |

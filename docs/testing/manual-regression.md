@@ -146,7 +146,7 @@ node scripts/browser/rssr_small_viewport_assertions.mjs \
 ### 11. 原生文本选择与快捷键
 
 - 默认主题下鼠标拖选正文、标题及合理的 metadata，确认原生选区正常。
-- Windows 在正文选区按 Ctrl+C，粘贴到临时文本编辑器核对内容；Ctrl+A 保留原生全选行为，不触发已读、收藏或切篇。macOS 可用时独立验证 Cmd+C / Cmd+A。
+- Windows 在正文选区按 Ctrl+C，粘贴到临时文本编辑器核对内容；Ctrl+A 保留原生全选行为，不触发已读、收藏或切篇。macOS 可用时独立验证：正文 Cmd+C / Cmd+A；订阅地址输入框 Cmd+V / Cmd+X / Cmd+Z / Shift+Cmd+Z；Cmd+M、Cmd+H、Cmd+W 与 Cmd+Q（退出后数据目录不残留 `library.sqlite3-wal`）。这些键只经 macOS 菜单栏的 key equivalent 送达 WKWebView，Chromium 中的 Web 回归不能代替。
 - Tab 进入阅读区，有可理解的区域名称和可见焦点；区内 M/F/方向键与按钮行为一致。
 - 搜索输入框中输入 m、f 与方向键，不改变文章状态或切篇；离开阅读区的字符输入、IME 组词和修饰键不触发阅读快捷键。
 - Android 可用时长按正文，确认原生选择手柄和复制操作；Reader 不响应下拉刷新，选择不被手势监听劫持。
