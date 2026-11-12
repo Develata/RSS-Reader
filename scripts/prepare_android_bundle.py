@@ -63,8 +63,8 @@ def parse_release_tag(tag: str) -> tuple[int, str]:
 def patch_gradle_version(text: str, version_code: int, version_name: str) -> str:
     """把 versionCode / versionName 写进生成的 Gradle 文件。
 
-    Dioxus 脚手架固定生成 `versionCode = 1` / `versionName = "0.1.0"`，而工作区
-    `Cargo.toml` 的版本号长期停在 0.1.0，所以真正的版本号只能来自发布 tag。
+    Dioxus 脚手架固定生成 `versionCode = 1` / `versionName = "0.1.0"`，不读工作区
+    `Cargo.toml`，所以版本号取自发布 tag（release.yml 另行要求 tag 与工作区版本一致）。
 
     这里必须**验证替换确实发生**：脚手架换个写法（Kotlin DSL 与 Groovy 的赋值语法不同）
     就会让正则静默落空，产物照样带着 versionCode=1 发出去，而 CI 全绿。宁可在这里炸掉。

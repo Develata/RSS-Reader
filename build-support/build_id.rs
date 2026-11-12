@@ -9,7 +9,7 @@
 //   differ); Cargo computes it again exactly when one of them changes (review C3-R1 F15);
 // - `dev-unknown` without Git.
 //
-// Never `CARGO_PKG_VERSION`: it stays at 0.1.0.
+// Never `CARGO_PKG_VERSION`: it changes only at a release, so it cannot tell two builds apart.
 
 /// What goes into the page and the server: watched by Cargo and hashed, the same list for both,
 /// relative to the repository's root. Changes elsewhere (documents, scripts) leave the id.

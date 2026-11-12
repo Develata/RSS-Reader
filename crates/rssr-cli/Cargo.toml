@@ -4,6 +4,27 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+
+# `cargo binstall --git https://github.com/Develata/RSS-Reader rssr-cli` reads this from the default
+# branch and fills `{ version }` from the workspace version, so that version must equal the latest
+# published release (release.yml checks the tag against it). The paths match the CLI archives
+# release.yml uploads: the binary sits at the archive root.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ os-name }-{ target-arch }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "{ bin }{ binary-ext }"
+# Third-party builds of this crate would not be ours; an unpublished target compiles from git.
+disabled-strategies = ["quick-install"]
+
+[package.metadata.binstall.overrides.'cfg(target_os = "windows")']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ os-name }-{ target-arch }.zip"
+pkg-fmt = "zip"
+
+# Linux archives are glibc builds. Name an asset that is not published so musl hosts compile
+# instead of receiving a binary their libc cannot load.
+[package.metadata.binstall.overrides.'cfg(target_env = "musl")']
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ os-name }-{ target-arch }-musl.tar.gz"
 
 [dependencies]
 anyhow.workspace = true

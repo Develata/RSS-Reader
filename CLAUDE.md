@@ -75,7 +75,7 @@ bash scripts/run_release_ui_regression.sh --with-fixed-smokes
 
 - 正式 Web 的资料库在服务器 `library.sqlite3`；浏览器经 `HttpBackend` 访问同源 API，不直连 feed。浏览器只保留设备偏好与 `sessionStorage` 草稿。旧 Web 文章不迁移，正式 Web 不再离线可读。
 - `pages-demo` 使用预抓取 RSS 与内存 SQLite，资料库操作重载即重置；BrowserStore / Web Locks 已退役。在线订阅、WebDAV、自动刷新禁用。正式与演示构建分别验证。
-- Android 本地打包需在 `dx bundle` 后运行 `python3 scripts/prepare_android_bundle.py`，再用生成的 Gradle 工程出 APK。发布流水线额外传 `--release-tag`，把 tag 转成 `versionCode` / `versionName`（`Cargo.toml` 版本号长期停在 0.1.0，不能作为版本来源）。
+- Android 本地打包需在 `dx bundle` 后运行 `python3 scripts/prepare_android_bundle.py`，再用生成的 Gradle 工程出 APK。发布流水线额外传 `--release-tag`，把 tag 转成 `versionCode` / `versionName`（dx 脚手架不读 `Cargo.toml` 版本）。workspace 版本必须等于最新已发布版本：在发版准备提交里改成新版本再打 tag，`release.yml` 的 `check-version` 会拦下不一致；main 上不写“下一个开发版本”，否则 `cargo binstall --git` 会去下载不存在的附件。
 - Android 发布产物的断言只认资源名（`aapt2 dump resources` 里的 `mipmap/rssr_launcher`），不认文件路径：release 会跑 `optimizeReleaseResources` 压缩资源路径，按路径断言的写法只在 debug 上成立。
 
 ## 代码风格
