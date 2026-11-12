@@ -118,6 +118,18 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                             }
                         }
                         div { "data-slot": "settings-form-grid-item",
+                            label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
+                            input {
+                                id: "settings-webdav-remote-path",
+                                name: "webdav_remote_path",
+                                class: "text-input",
+                                "data-field": "webdav-remote-path",
+                                value: "{facade.remote_path()}",
+                                placeholder: "config/rss-reader.json",
+                                oninput: move |event| remote_path_facade.set_remote_path(event.value())
+                            }
+                        }
+                        div { "data-slot": "settings-form-grid-item",
                             label { class: "field-label", r#for: "settings-webdav-username", "用户名" }
                             input {
                                 id: "settings-webdav-username",
@@ -157,18 +169,6 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                                     onclick: move |_| toggle_password_facade.toggle_password_visible(),
                                     PasswordEye { shown: password_visible }
                                 }
-                            }
-                        }
-                        div { "data-slot": "settings-form-grid-item",
-                            label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
-                            input {
-                                id: "settings-webdav-remote-path",
-                                name: "webdav_remote_path",
-                                class: "text-input",
-                                "data-field": "webdav-remote-path",
-                                value: "{facade.remote_path()}",
-                                placeholder: "config/rss-reader.json",
-                                oninput: move |event| remote_path_facade.set_remote_path(event.value())
                             }
                         }
                     }
