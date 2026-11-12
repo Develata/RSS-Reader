@@ -31,7 +31,7 @@ use futures_util::StreamExt;
 use reqwest::{Method, header};
 use rssr_api::protocol::{
     self, AddSubscription, ImportConfigJson, ImportOpml, JobCreated, JobId, JobResult, JobStatus,
-    MAX_ANSWER_BYTES, MAX_JOB_STATUS_BYTES, MAX_SMALL_ANSWER_BYTES, RemoteConfig, SetRead,
+    MAX_ANSWER_BYTES, MAX_JOB_STATUS_BYTES, MAX_SMALL_ANSWER_BYTES, SaveRemoteSync, SetRead,
     SetStarred, routes,
 };
 use rssr_api::{Backend, BackendError, ErrorCode, Result};
@@ -39,7 +39,8 @@ use rssr_application::{
     AddSubscriptionOutcome, ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome,
     EntriesListOutcome, EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome,
     ReaderEntrySnapshot, RefreshAllExecutionOutcome, RefreshFeedExecutionOutcome,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch, StartupTarget,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteSyncReport, RemoteSyncView,
+    RemoteTarget, SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -529,34 +530,54 @@ impl Backend for HttpBackend {
         self.read(routes::STARTUP_TARGET, None).await
     }
 
-    async fn push_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> Result<RemoteConfigPushOutcome> {
-        let body = encode(&RemoteConfig {
-            endpoint: endpoint.to_owned(),
-            remote_path: remote_path.to_owned(),
-        })?;
+    async fn push_remote_config(&self, target: &RemoteTarget) -> Result<RemoteConfigPushOutcome> {
+        let body = encode(target)?;
         match self.run_job(routes::JOB_REMOTE_PUSH, Some(body)).await? {
             JobResult::RemoteConfigPush(outcome) => Ok(outcome),
             _ => Err(wrong_kind()),
         }
     }
 
-    async fn pull_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> Result<RemoteConfigPullOutcome> {
-        let body = encode(&RemoteConfig {
-            endpoint: endpoint.to_owned(),
-            remote_path: remote_path.to_owned(),
-        })?;
+    async fn pull_remote_config(&self, target: &RemoteTarget) -> Result<RemoteConfigPullOutcome> {
+        let body = encode(target)?;
         match self.run_job(routes::JOB_REMOTE_PULL, Some(body)).await? {
             JobResult::RemoteConfigPull(outcome) => Ok(outcome),
             _ => Err(wrong_kind()),
         }
+    }
+
+    async fn load_remote_sync(&self) -> Result<RemoteSyncView> {
+        self.read(routes::REMOTE_SYNC, None).await
+    }
+
+    async fn save_remote_sync(&self, endpoint: &str, remote_path: &str) -> Result<RemoteSyncView> {
+        let body =
+            SaveRemoteSync { endpoint: endpoint.to_owned(), remote_path: remote_path.to_owned() };
+        self.write(
+            Method::PUT,
+            routes::REMOTE_SYNC,
+            Some(encode(&body)?),
+            self.timeouts.request,
+            MAX_SMALL_ANSWER_BYTES,
+        )
+        .await
+    }
+
+    async fn clear_remote_sync(&self) -> Result<()> {
+        self.write(
+            Method::DELETE,
+            routes::REMOTE_SYNC,
+            None,
+            self.timeouts.request,
+            MAX_SMALL_ANSWER_BYTES,
+        )
+        .await
+    }
+
+    /// The server synchronizes when it starts, not when a page loads; its result is in
+    /// [`Backend::load_remote_sync`].
+    async fn startup_remote_sync(&self) -> Result<Option<RemoteSyncReport>> {
+        Ok(None)
     }
 
     async fn bootstrap_entries(

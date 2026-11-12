@@ -30,7 +30,9 @@ use rssr_application::{
     ReaderEntrySnapshot, RefreshAllExecutionOutcome, RefreshAllInput, RefreshAllOutcome,
     RefreshFailureItem, RefreshFeedExecutionOutcome, RefreshFeedOutcome, RefreshFeedResult,
     RefreshLocalizationCandidate, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
-    RemoteConfigStore, RemoveSubscriptionInput, SettingsPatch, StartupTarget,
+    RemoteConfigStore, RemoteSyncOutcome, RemoteSyncProfile, RemoteSyncProfileStore,
+    RemoteSyncReport, RemoteSyncTrigger, RemoteSyncView, RemoteTarget, RemoveSubscriptionInput,
+    SettingsPatch, StartupTarget, display_endpoint,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -39,7 +41,9 @@ use rssr_domain::{
 use time::OffsetDateTime;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use native_host::{NativeHost, native_local_backend, native_local_backend_with};
+pub use native_host::{
+    NativeHost, native_local_backend, native_local_backend_in, native_local_backend_with,
+};
 use refresh_flight::RefreshFlight;
 
 /// Background work a host runs: `Send` on native targets, anything on wasm32.
@@ -80,6 +84,11 @@ pub trait LocalHost: HostBound + 'static {
     /// Runs `task` in the background.
     fn spawn(&self, task: LocalTask);
     async fn sleep(&self, duration: Duration);
+    /// Where this host keeps the saved WebDAV synchronization profile; `None`: no automatic
+    /// synchronization here.
+    fn remote_sync_profiles(&self) -> Option<&dyn RemoteSyncProfileStore> {
+        None
+    }
     /// The store a configuration is pushed to or pulled from.
     fn remote_config_store(
         &self,
@@ -110,6 +119,18 @@ struct Inner<H> {
     host: H,
     refresh_flight: RefreshFlight,
     auto_refresh_started: AtomicBool,
+    /// Serializes everything that reads or writes the synchronization profile.
+    remote_sync: tokio::sync::Mutex<()>,
+    /// A synchronization after a change is scheduled and has not started.
+    after_change_pending: AtomicBool,
+    startup_sync: tokio::sync::watch::Sender<StartupSync>,
+}
+
+/// The synchronization after the first periodic refresh of this process.
+#[derive(Debug, Clone, PartialEq)]
+enum StartupSync {
+    Pending,
+    Done(Option<RemoteSyncReport>),
 }
 
 /// Clears the periodic refresh's "in progress" flag when dropped.
@@ -120,6 +141,9 @@ impl Drop for InProgress {
         self.0.store(false, Ordering::SeqCst);
     }
 }
+
+/// How long a synchronization after a change waits, so a burst of changes uploads once.
+const AFTER_CHANGE_SYNC_DELAY: Duration = Duration::from_secs(3);
 
 /// How long the periodic refresh waits after failing to read the settings.
 const AUTO_REFRESH_RETRY_DELAY: Duration = Duration::from_secs(30);
@@ -136,6 +160,9 @@ impl<H: LocalHost> LocalBackend<H> {
                 host,
                 refresh_flight: RefreshFlight::default(),
                 auto_refresh_started: AtomicBool::new(false),
+                remote_sync: tokio::sync::Mutex::new(()),
+                after_change_pending: AtomicBool::new(false),
+                startup_sync: tokio::sync::watch::Sender::new(StartupSync::Pending),
             }),
         }
     }
@@ -251,6 +278,7 @@ impl<H: LocalHost> LocalBackend<H> {
             );
             let started = due && !in_progress.swap(true, Ordering::SeqCst);
             if started {
+                let first = last_refresh_started_at.is_none();
                 tracing::info!(
                     refresh_interval_minutes = settings.refresh_interval_minutes,
                     "触发后台自动刷新全部订阅"
@@ -262,6 +290,9 @@ impl<H: LocalHost> LocalBackend<H> {
                     let _done = done;
                     if let Err(error) = backend.refresh_all().await {
                         tracing::warn!(error = %error, "后台自动刷新失败");
+                    }
+                    if first {
+                        backend.finish_startup_sync().await;
                     }
                 }));
                 last_refresh_started_at = Some(now);
@@ -282,6 +313,129 @@ impl<H: LocalHost> LocalBackend<H> {
     }
 }
 
+/// No saved endpoint where one is needed.
+fn no_saved_endpoint() -> anyhow::Error {
+    rssr_domain::DomainError::InvalidInput("还没有保存 WebDAV 自动同步的端点".to_string()).into()
+}
+
+/// What the user sees of a failed synchronization.
+fn failed(error: &anyhow::Error) -> RemoteSyncOutcome {
+    tracing::warn!(error = %format!("{error:#}"), "WebDAV 同步失败");
+    RemoteSyncOutcome::Failed { message: rssr_application::classify(error).message }
+}
+
+impl<H: LocalHost> LocalBackend<H> {
+    /// The profile store, where this host keeps one and may use the network.
+    fn remote_sync_profiles(&self) -> Option<&dyn RemoteSyncProfileStore> {
+        self.inner.host.require_network().ok()?;
+        self.inner.host.remote_sync_profiles()
+    }
+
+    fn sync_report(
+        &self,
+        trigger: RemoteSyncTrigger,
+        outcome: RemoteSyncOutcome,
+    ) -> RemoteSyncReport {
+        RemoteSyncReport { at: self.inner.host.now_utc(), trigger, outcome }
+    }
+
+    /// One automatic synchronization with the saved profile; its result is recorded there.
+    /// `None` when there is no profile or it did nothing.
+    async fn run_remote_sync(&self, trigger: RemoteSyncTrigger) -> Option<RemoteSyncReport> {
+        let profiles = self.remote_sync_profiles()?;
+        let _serialized = self.inner.remote_sync.lock().await;
+        let mut profile = match profiles.load().await {
+            Ok(Some(profile)) => profile,
+            Ok(None) => return None,
+            // Unreadable: the user is told; nothing can be recorded in it.
+            Err(error) => return Some(self.sync_report(trigger, failed(&error))),
+        };
+        let synced = async {
+            let remote =
+                self.inner.host.remote_config_store(&profile.endpoint, &profile.remote_path)?;
+            self.inner
+                .use_cases
+                .import_export_service
+                .sync_remote_config(remote.as_ref(), profile.base.as_ref(), trigger)
+                .await
+        }
+        .await;
+        let outcome = match synced {
+            Ok(None) => return None,
+            Ok(Some(step)) => {
+                if let Some(base) = step.base {
+                    profile.base = Some(base);
+                }
+                step.outcome
+            }
+            Err(error) => failed(&error),
+        };
+        let report = self.sync_report(trigger, outcome);
+        profile.last_report = Some(report.clone());
+        if let Err(error) = profiles.save(&profile).await {
+            tracing::warn!(error = %format!("{error:#}"), "保存 WebDAV 同步结果失败");
+        }
+        Some(report)
+    }
+
+    /// The synchronization after the first periodic refresh; whoever waits for it is told.
+    async fn finish_startup_sync(&self) {
+        let report = self.run_remote_sync(RemoteSyncTrigger::Startup).await;
+        self.inner.startup_sync.send_replace(StartupSync::Done(report));
+    }
+
+    /// After an operation that may have changed the configuration: synchronizes a moment later
+    /// (once for a burst of changes). Nothing goes over the network while the configuration
+    /// equals the base.
+    fn config_may_have_changed(&self) {
+        if self.remote_sync_profiles().is_none()
+            || self.inner.after_change_pending.swap(true, Ordering::SeqCst)
+        {
+            return;
+        }
+        let backend = self.clone();
+        self.inner.host.spawn(Box::pin(async move {
+            backend.inner.host.sleep(AFTER_CHANGE_SYNC_DELAY).await;
+            // A change from now on schedules another synchronization.
+            backend.inner.after_change_pending.store(false, Ordering::SeqCst);
+            backend.run_remote_sync(RemoteSyncTrigger::AfterChange).await;
+        }));
+    }
+
+    /// Runs `transfer` with the saved profile and records its result there: a success's base,
+    /// and the report either way.
+    async fn with_saved_profile<T, F, Fut>(
+        &self,
+        transfer: F,
+        report: impl FnOnce(&T) -> RemoteSyncOutcome,
+    ) -> Result<T>
+    where
+        F: FnOnce(Box<dyn RemoteConfigStore>) -> Fut,
+        Fut: Future<Output = Result<(T, Option<rssr_application::RemoteSyncBase>)>>,
+    {
+        let profiles = self.remote_sync_profiles().ok_or_else(no_saved_endpoint)?;
+        let _serialized = self.inner.remote_sync.lock().await;
+        let mut profile = profiles.load().await?.ok_or_else(no_saved_endpoint)?;
+        let remote =
+            self.inner.host.remote_config_store(&profile.endpoint, &profile.remote_path)?;
+        let result = transfer(remote).await;
+        let outcome = match &result {
+            Ok((value, base)) => {
+                if let Some(base) = base {
+                    profile.base = Some(base.clone());
+                }
+                report(value)
+            }
+            Err(error) => failed(error),
+        };
+        profile.last_report = Some(self.sync_report(RemoteSyncTrigger::Manual, outcome));
+        if let Err(error) = profiles.save(&profile).await {
+            tracing::warn!(error = %format!("{error:#}"), "保存 WebDAV 同步结果失败");
+        }
+        result.map(|(value, _)| value)
+    }
+}
+
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 impl<H: LocalHost> Backend for LocalBackend<H> {
@@ -290,7 +444,9 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
     }
 
     async fn update_settings(&self, patch: SettingsPatch) -> BackendResult<UserSettings> {
-        Ok(self.inner.use_cases.settings_service.update(patch).await?)
+        let settings = self.inner.use_cases.settings_service.update(patch).await?;
+        self.config_may_have_changed();
+        Ok(settings)
     }
 
     fn ensure_auto_refresh_started(&self) {
@@ -308,22 +464,121 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
 
     async fn push_remote_config(
         &self,
-        endpoint: &str,
-        remote_path: &str,
+        target: &RemoteTarget,
     ) -> BackendResult<RemoteConfigPushOutcome> {
         self.inner.host.require_network()?;
-        let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
-        Ok(self.inner.use_cases.import_export_service.push_remote_config(remote.as_ref()).await?)
+        let service = &self.inner.use_cases.import_export_service;
+        match target {
+            RemoteTarget::Endpoint { endpoint, remote_path } => {
+                let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
+                Ok(service.push_remote_config(remote.as_ref()).await?)
+            }
+            RemoteTarget::Saved => Ok(self
+                .with_saved_profile(
+                    |remote| async move {
+                        let (outcome, base) =
+                            service.push_remote_config_tracked(remote.as_ref()).await?;
+                        Ok((outcome, Some(base)))
+                    },
+                    |outcome| RemoteSyncOutcome::Pushed {
+                        exported_feed_count: outcome.exported_feed_count,
+                    },
+                )
+                .await?),
+        }
     }
 
     async fn pull_remote_config(
         &self,
-        endpoint: &str,
-        remote_path: &str,
+        target: &RemoteTarget,
     ) -> BackendResult<RemoteConfigPullOutcome> {
         self.inner.host.require_network()?;
-        let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
-        Ok(self.inner.use_cases.import_export_service.pull_remote_config(remote.as_ref()).await?)
+        let service = &self.inner.use_cases.import_export_service;
+        match target {
+            RemoteTarget::Endpoint { endpoint, remote_path } => {
+                let remote = self.inner.host.remote_config_store(endpoint, remote_path)?;
+                let outcome = service.pull_remote_config(remote.as_ref()).await?;
+                self.config_may_have_changed();
+                Ok(outcome)
+            }
+            RemoteTarget::Saved => {
+                Ok(self
+                    .with_saved_profile(
+                        |remote| async move {
+                            service.pull_remote_config_tracked(remote.as_ref()).await
+                        },
+                        |outcome: &RemoteConfigPullOutcome| match outcome.import() {
+                            Some(import) => RemoteSyncOutcome::Pulled {
+                                imported_feed_count: import.imported_feed_count,
+                                removed_feed_count: import.removed_feed_count,
+                            },
+                            None => RemoteSyncOutcome::Failed {
+                                message: "远端还没有配置文件".to_string(),
+                            },
+                        },
+                    )
+                    .await?)
+            }
+        }
+    }
+
+    async fn load_remote_sync(&self) -> BackendResult<RemoteSyncView> {
+        let Some(profiles) = self.remote_sync_profiles() else {
+            return Ok(RemoteSyncView { available: false, profile: None });
+        };
+        let profile = profiles.load().await?;
+        Ok(RemoteSyncView { available: true, profile: profile.map(|profile| profile.view()) })
+    }
+
+    async fn save_remote_sync(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> BackendResult<RemoteSyncView> {
+        let profiles = self.remote_sync_profiles().ok_or_else(|| {
+            anyhow::Error::from(rssr_domain::DomainError::InvalidInput(
+                "此处不能保存 WebDAV 自动同步".to_string(),
+            ))
+        })?;
+        // The same checks as an upload's, before anything is kept.
+        self.inner.host.remote_config_store(endpoint, remote_path)?;
+        let _serialized = self.inner.remote_sync.lock().await;
+        let mut profile = RemoteSyncProfile::new(endpoint, remote_path);
+        // New credentials for the same remote keep the base: the remote did not change.
+        if let Ok(Some(saved)) = profiles.load().await
+            && display_endpoint(&saved.endpoint) == display_endpoint(endpoint)
+            && saved.remote_path == remote_path
+        {
+            profile.base = saved.base;
+            profile.last_report = saved.last_report;
+        }
+        profiles.save(&profile).await?;
+        Ok(RemoteSyncView { available: true, profile: Some(profile.view()) })
+    }
+
+    async fn clear_remote_sync(&self) -> BackendResult<()> {
+        let Some(profiles) = self.inner.host.remote_sync_profiles() else {
+            return Ok(());
+        };
+        let _serialized = self.inner.remote_sync.lock().await;
+        Ok(profiles.clear().await?)
+    }
+
+    async fn startup_remote_sync(&self) -> BackendResult<Option<RemoteSyncReport>> {
+        if self.remote_sync_profiles().is_none()
+            || !self.inner.auto_refresh_started.load(Ordering::SeqCst)
+        {
+            return Ok(None);
+        }
+        let mut state = self.inner.startup_sync.subscribe();
+        let done = state
+            .wait_for(|state| matches!(state, StartupSync::Done(_)))
+            .await
+            .map_err(|_| anyhow::anyhow!("启动同步的状态已关闭"))?;
+        match &*done {
+            StartupSync::Done(report) => Ok(report.clone()),
+            StartupSync::Pending => Ok(None),
+        }
     }
 
     async fn bootstrap_entries(
@@ -395,7 +650,9 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         Ok(self.inner.use_cases.feed_edit_service.details(feed_id).await?)
     }
     async fn update_subscription(&self, edit: rssr_domain::FeedEditRequest) -> BackendResult<()> {
-        Ok(self.inner.use_cases.feed_edit_service.update(edit).await?)
+        self.inner.use_cases.feed_edit_service.update(edit).await?;
+        self.config_may_have_changed();
+        Ok(())
     }
 
     async fn load_feeds_snapshot(&self) -> BackendResult<FeedsSnapshotOutcome> {
@@ -432,6 +689,7 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
             )
             .await
             .context("保存订阅失败")?;
+        self.config_may_have_changed();
         let refresh = outcome.first_refresh.expect("refresh_after_add produces refresh outcome");
         match self.handle_refresh_feed_outcome(refresh).await.failure {
             Some(failure) => Ok(AddSubscriptionOutcome::SavedRefreshFailed { failure }),
@@ -464,12 +722,13 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
     }
 
     async fn remove_feed(&self, feed_id: i64) -> BackendResult<()> {
-        Ok(self
-            .inner
+        self.inner
             .use_cases
             .subscription_workflow
             .remove_subscription(RemoveSubscriptionInput { feed_id, purge_entries: true })
-            .await?)
+            .await?;
+        self.config_may_have_changed();
+        Ok(())
     }
 
     async fn export_config_json(&self) -> BackendResult<String> {
@@ -481,7 +740,10 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
         raw: &str,
         expected: &ConfigFingerprint,
     ) -> BackendResult<ConfigImportOutcome> {
-        Ok(self.inner.use_cases.import_export_service.import_config_json(raw, expected).await?)
+        let outcome =
+            self.inner.use_cases.import_export_service.import_config_json(raw, expected).await?;
+        self.config_may_have_changed();
+        Ok(outcome)
     }
 
     async fn export_opml(&self) -> BackendResult<String> {
@@ -489,7 +751,9 @@ impl<H: LocalHost> Backend for LocalBackend<H> {
     }
 
     async fn import_opml(&self, raw: &str) -> BackendResult<OpmlImportOutcome> {
-        Ok(self.inner.use_cases.import_export_service.import_opml(raw).await?)
+        let outcome = self.inner.use_cases.import_export_service.import_opml(raw).await?;
+        self.config_may_have_changed();
+        Ok(outcome)
     }
 }
 
@@ -706,6 +970,169 @@ mod tests {
         }
         assert_eq!(accepted.load(Ordering::SeqCst), 2);
     }
+    /// A remote document shared by every store the host hands out.
+    #[derive(Clone, Default)]
+    struct SharedRemote(Arc<Mutex<Option<String>>>);
+
+    #[async_trait::async_trait]
+    impl RemoteConfigStore for SharedRemote {
+        async fn upload_config(&self, raw: &str) -> Result<()> {
+            *self.0.lock().unwrap() = Some(raw.to_owned());
+            Ok(())
+        }
+        async fn download_config(&self) -> Result<Option<String>> {
+            Ok(self.0.lock().unwrap().clone())
+        }
+    }
+
+    #[derive(Default)]
+    struct MemoryProfiles(Mutex<Option<RemoteSyncProfile>>);
+
+    #[async_trait::async_trait]
+    impl RemoteSyncProfileStore for MemoryProfiles {
+        async fn load(&self) -> Result<Option<RemoteSyncProfile>> {
+            Ok(self.0.lock().unwrap().clone())
+        }
+        async fn save(&self, profile: &RemoteSyncProfile) -> Result<()> {
+            *self.0.lock().unwrap() = Some(profile.clone());
+            Ok(())
+        }
+        async fn clear(&self) -> Result<()> {
+            *self.0.lock().unwrap() = None;
+            Ok(())
+        }
+    }
+
+    /// A host that keeps a profile and one remote; it runs what it spawns. The wait before a
+    /// synchronization after a change passes at once; every other sleep (the periodic refresh's)
+    /// never ends.
+    #[derive(Default)]
+    struct SyncHost {
+        profiles: MemoryProfiles,
+        remote: SharedRemote,
+        /// The endpoints stores were made for (credentials included).
+        endpoints: Mutex<Vec<String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl LocalHost for SyncHost {
+        fn refresh_concurrency(&self) -> usize {
+            1
+        }
+        fn now_utc(&self) -> OffsetDateTime {
+            OffsetDateTime::UNIX_EPOCH
+        }
+        fn spawn(&self, task: LocalTask) {
+            tokio::spawn(task);
+        }
+        async fn sleep(&self, duration: Duration) {
+            if duration != AFTER_CHANGE_SYNC_DELAY {
+                std::future::pending::<()>().await;
+            }
+        }
+        fn remote_sync_profiles(&self) -> Option<&dyn RemoteSyncProfileStore> {
+            Some(&self.profiles)
+        }
+        fn remote_config_store(
+            &self,
+            endpoint: &str,
+            _remote_path: &str,
+        ) -> Result<Box<dyn RemoteConfigStore>> {
+            self.endpoints.lock().unwrap().push(endpoint.to_owned());
+            Ok(Box::new(self.remote.clone()))
+        }
+    }
+
+    async fn sync_backend() -> LocalBackend<SyncHost> {
+        let store = LibraryStore::open_in_memory().await.unwrap();
+        LocalBackend::new(compose_library_use_cases(store).use_cases, SyncHost::default())
+    }
+
+    impl LocalBackend<SyncHost> {
+        fn last_report(&self) -> Option<RemoteSyncReport> {
+            self.host().profiles.0.lock().unwrap().as_ref()?.last_report.clone()
+        }
+
+        /// Waits until the profile's last report came from `trigger`.
+        async fn report_from(&self, trigger: RemoteSyncTrigger) -> RemoteSyncReport {
+            for _ in 0..500 {
+                if let Some(report) = self.last_report().filter(|report| report.trigger == trigger)
+                {
+                    return report;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("no report from {trigger:?}");
+        }
+    }
+
+    /// Saving keeps the credentials but shows none; the start, a change and the user's upload
+    /// each synchronize with the saved endpoint and record their result; forgetting it ends
+    /// all of that.
+    #[tokio::test]
+    async fn a_saved_endpoint_synchronizes_at_start_after_a_change_and_on_demand() {
+        let backend = sync_backend().await;
+        let view = backend.load_remote_sync().await.unwrap();
+        assert!(view.available && view.profile.is_none());
+
+        let endpoint = "https://alice:s3cret@dav.example/base/";
+        let view = backend.save_remote_sync(endpoint, "rssr.json").await.unwrap();
+        let shown = view.profile.expect("saved");
+        assert_eq!(shown.endpoint, "https://alice@dav.example/base/", "no password shown");
+        assert!(!shown.has_base);
+
+        // The start: the remote is empty, so it uploads.
+        backend.ensure_auto_refresh_started();
+        let report = backend.startup_remote_sync().await.unwrap().expect("a report");
+        assert_eq!(report.trigger, RemoteSyncTrigger::Startup);
+        assert_eq!(report.outcome, RemoteSyncOutcome::Pushed { exported_feed_count: 0 });
+        assert_eq!(backend.host().endpoints.lock().unwrap()[0], endpoint, "with the credentials");
+        assert!(backend.load_remote_sync().await.unwrap().profile.unwrap().has_base);
+
+        // A change uploads a moment later.
+        let patch = rssr_application::SettingsPatch {
+            refresh_interval_minutes: Some(45),
+            ..Default::default()
+        };
+        backend.update_settings(patch).await.unwrap();
+        let report = backend.report_from(RemoteSyncTrigger::AfterChange).await;
+        assert_eq!(report.outcome, RemoteSyncOutcome::Pushed { exported_feed_count: 0 });
+        let uploaded = backend.host().remote.0.lock().unwrap().clone().unwrap();
+        assert!(uploaded.contains("\"refresh_interval_minutes\": 45"), "{uploaded}");
+
+        // The user's download from the saved endpoint is recorded as manual.
+        let pulled = backend.pull_remote_config(&RemoteTarget::Saved).await.unwrap();
+        assert!(pulled.found());
+        assert_eq!(backend.last_report().unwrap().trigger, RemoteSyncTrigger::Manual);
+
+        // New credentials for the same remote keep the base.
+        let view =
+            backend.save_remote_sync("https://alice:new@dav.example/base/", "rssr.json").await;
+        assert!(view.unwrap().profile.unwrap().has_base);
+        // Another remote starts over.
+        let view = backend.save_remote_sync("https://dav.example/other/", "rssr.json").await;
+        assert!(!view.unwrap().profile.unwrap().has_base);
+
+        backend.clear_remote_sync().await.unwrap();
+        assert!(backend.load_remote_sync().await.unwrap().profile.is_none());
+        let error = backend.push_remote_config(&RemoteTarget::Saved).await.unwrap_err();
+        assert_eq!(error.code, rssr_api::ErrorCode::InvalidInput);
+    }
+
+    /// Without a profile store (the Pages demo, a backend over no data directory) nothing is
+    /// available, nothing is saved, and the start reports nothing.
+    #[tokio::test]
+    async fn without_a_profile_store_there_is_no_automatic_synchronization() {
+        let backend = recording_backend(true).await;
+        let view = backend.load_remote_sync().await.unwrap();
+        assert!(!view.available && view.profile.is_none());
+        let error = backend.save_remote_sync("https://dav.example/", "r.json").await.unwrap_err();
+        assert_eq!(error.code, rssr_api::ErrorCode::InvalidInput);
+        backend.ensure_auto_refresh_started();
+        assert_eq!(backend.startup_remote_sync().await.unwrap(), None);
+        backend.clear_remote_sync().await.expect("nothing to forget is no error");
+    }
+
     #[tokio::test]
     async fn the_periodic_refresh_starts_once_and_not_where_the_host_does_not_run_it() {
         let backend = recording_backend(true).await;

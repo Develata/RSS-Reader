@@ -54,6 +54,7 @@ pub fn SettingsPage() -> Element {
     use_drop(move || shell.set_settings_page_open(false));
     use_reactive_task(shell.library_revision(), move |_| {
         session.load();
+        sync_session.load_remote_sync();
     });
 
     rsx! {

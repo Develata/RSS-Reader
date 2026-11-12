@@ -23,7 +23,7 @@ use rssr_api::{
     AddSubscriptionOutcome, Backend,
     protocol::{self, JobId, routes},
 };
-use rssr_application::{EntriesBootstrapInput, SettingsPatch};
+use rssr_application::{EntriesBootstrapInput, RemoteTarget, SettingsPatch};
 use rssr_domain::{
     EntriesWorkspaceState, EntryQuery, MAX_MARK_READ_SELECTION, MarkReadPreview, ReadFilter,
 };
@@ -766,15 +766,16 @@ async fn every_job_answers_what_the_backend_answers() {
     // Each side has its own remote file.
     let endpoint = feeds.url("dav/");
     for (kind, route) in [("push", routes::JOB_REMOTE_PUSH), ("pull", routes::JOB_REMOTE_PULL)] {
-        let body = json!({ "endpoint": endpoint, "remote_path": "served.json" });
+        let body =
+            json!({ "kind": "endpoint", "endpoint": endpoint, "remote_path": "served.json" });
         let status = client.job(route, Some(body)).await;
+        let own = RemoteTarget::Endpoint {
+            endpoint: endpoint.clone(),
+            remote_path: "direct.json".to_owned(),
+        };
         let expected = match kind {
-            "push" => serde_json::to_value(
-                direct.push_remote_config(&endpoint, "direct.json").await.unwrap(),
-            ),
-            _ => serde_json::to_value(
-                direct.pull_remote_config(&endpoint, "direct.json").await.unwrap(),
-            ),
+            "push" => serde_json::to_value(direct.push_remote_config(&own).await.unwrap()),
+            _ => serde_json::to_value(direct.pull_remote_config(&own).await.unwrap()),
         }
         .unwrap();
         same(outcome(&status, &format!("remote_config_{kind}")), expected, kind);

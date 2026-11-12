@@ -24,6 +24,8 @@ pub struct ConfigReplacementOutcome {
     pub settings_updated: bool,
     /// The settings committed by the replacement.
     pub settings: UserSettings,
+    /// The configuration's fingerprint after the replacement, read in its transaction.
+    pub fingerprint: ConfigFingerprint,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

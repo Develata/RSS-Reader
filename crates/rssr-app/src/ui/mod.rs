@@ -5,6 +5,7 @@ mod helpers;
 pub(crate) mod reader_shortcuts;
 pub(crate) mod reading_position;
 pub(crate) mod recovery;
+pub(crate) mod remote_sync_text;
 pub(crate) mod runtime;
 mod shell;
 pub(crate) mod shell_browser;

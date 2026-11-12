@@ -134,6 +134,16 @@ SettingsPage(SettingsLoaded(UserSettings { theme: System, list_density: Comforta
 SettingsPage(SetStatus { message: "已从 WebDAV 下载并导入配置：导入 3 个订阅，清理 0 个缺失订阅，设置未变化。", tone: "info" })
 ## pull missing config
 SettingsPage(SetStatus { message: "远端配置不存在。", tone: "info" })
+## load remote sync
+RemoteSyncLoaded(RemoteSyncView { available: false, profile: None })
+## save remote sync, unavailable
+Failed(UiFailure { action: "记住 WebDAV 端点", error: BackendError { code: InvalidInput, message: "此处不能保存 WebDAV 自动同步", request_id: None, reason: None } })
+## clear remote sync
+RemoteSyncLoaded(RemoteSyncView { available: false, profile: None })
+SettingsPage(SetStatus { message: "已停用 WebDAV 自动同步，并删除保存的凭据。", tone: "info" })
+## push to the saved endpoint, none
+Failed(UiFailure { action: "上传配置", error: BackendError { code: InvalidInput, message: "还没有保存 WebDAV 自动同步的端点", request_id: None, reason: None } })
+## await startup sync, none
 ## startup route, last feed
 StartupRouteResolved(StartupRouteSnapshot { route: EntriesPage })
 ## remove feed 2

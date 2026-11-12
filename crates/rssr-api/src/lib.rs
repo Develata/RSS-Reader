@@ -20,7 +20,8 @@ pub use rssr_application::{
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
     EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch, StartupTarget,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteSyncReport, RemoteSyncView,
+    RemoteTarget, SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -50,18 +51,25 @@ pub trait Backend {
     /// Starts periodic refreshing where this backend runs it (once; later calls do nothing).
     fn ensure_auto_refresh_started(&self);
     async fn resolve_startup_target(&self) -> Result<StartupTarget>;
-    async fn push_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> Result<RemoteConfigPushOutcome>;
+    /// Uploads the configuration to `target`; to the saved endpoint, a success becomes the base
+    /// of automatic synchronization.
+    async fn push_remote_config(&self, target: &RemoteTarget) -> Result<RemoteConfigPushOutcome>;
     /// Downloads the configuration and replaces the local one with it; the outcome carries the
-    /// settings now stored. A local change made during the download makes it a conflict.
-    async fn pull_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> Result<RemoteConfigPullOutcome>;
+    /// settings now stored. A local change made during the download makes it a conflict. From
+    /// the saved endpoint, a success becomes the base of automatic synchronization.
+    async fn pull_remote_config(&self, target: &RemoteTarget) -> Result<RemoteConfigPullOutcome>;
+    /// Automatic synchronization (`docs/design/webdav-auto-sync.md`): whether this backend can
+    /// keep a profile, and the saved one without its password.
+    async fn load_remote_sync(&self) -> Result<RemoteSyncView>;
+    /// Saves the endpoint for automatic synchronization (credentials included, kept by the
+    /// backend); a profile for another remote starts without a base.
+    async fn save_remote_sync(&self, endpoint: &str, remote_path: &str) -> Result<RemoteSyncView>;
+    /// Forgets the saved endpoint and its credentials.
+    async fn clear_remote_sync(&self) -> Result<()>;
+    /// Waits for the synchronization this process runs after its first periodic refresh, where
+    /// this backend runs it in process; `None` when it ran none (no profile, nothing to report,
+    /// or not this backend's to run: the server's start is not the page's).
+    async fn startup_remote_sync(&self) -> Result<Option<RemoteSyncReport>>;
 
     /// Applies only the selected IDs, with one atomic write.
     async fn apply_entry_batch(&self, request: rssr_domain::EntryBatchRequest) -> Result<u64>;

@@ -26,8 +26,8 @@ use rssr_api::{
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
     EntryFlagOutcome, FeedsSnapshotOutcome, MAX_MESSAGE_BYTES, OpmlImportOutcome,
-    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch,
-    StartupTarget, TRUNCATION_MARK,
+    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteSyncReport,
+    RemoteSyncView, RemoteTarget, SettingsPatch, StartupTarget, TRUNCATION_MARK,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -269,14 +269,19 @@ async fn every_job_through_the_client_answers_what_the_backend_answers() {
     same(added, direct.add_subscription(&feeds.url("c.xml"), None).await.unwrap(), "add");
 
     let endpoint = feeds.url("dav/");
+    let served = RemoteTarget::Endpoint {
+        endpoint: endpoint.clone(),
+        remote_path: "served.json".to_owned(),
+    };
+    let own = RemoteTarget::Endpoint { endpoint, remote_path: "direct.json".to_owned() };
     same(
-        client.push_remote_config(&endpoint, "served.json").await.unwrap(),
-        direct.push_remote_config(&endpoint, "direct.json").await.unwrap(),
+        client.push_remote_config(&served).await.unwrap(),
+        direct.push_remote_config(&own).await.unwrap(),
         "push",
     );
     same(
-        client.pull_remote_config(&endpoint, "served.json").await.unwrap(),
-        direct.pull_remote_config(&endpoint, "direct.json").await.unwrap(),
+        client.pull_remote_config(&served).await.unwrap(),
+        direct.pull_remote_config(&own).await.unwrap(),
         "pull",
     );
 
@@ -388,20 +393,42 @@ impl Backend for Observed {
 
     async fn push_remote_config(
         &self,
-        endpoint: &str,
-        remote_path: &str,
+        target: &RemoteTarget,
     ) -> rssr_api::Result<RemoteConfigPushOutcome> {
         self.note("push_remote_config");
-        self.library.push_remote_config(endpoint, remote_path).await
+        self.library.push_remote_config(target).await
     }
 
     async fn pull_remote_config(
         &self,
-        endpoint: &str,
-        remote_path: &str,
+        target: &RemoteTarget,
     ) -> rssr_api::Result<RemoteConfigPullOutcome> {
         self.note("pull_remote_config");
-        self.library.pull_remote_config(endpoint, remote_path).await
+        self.library.pull_remote_config(target).await
+    }
+
+    async fn load_remote_sync(&self) -> rssr_api::Result<RemoteSyncView> {
+        self.note("load_remote_sync");
+        self.library.load_remote_sync().await
+    }
+
+    async fn save_remote_sync(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> rssr_api::Result<RemoteSyncView> {
+        self.note("save_remote_sync");
+        self.library.save_remote_sync(endpoint, remote_path).await
+    }
+
+    async fn clear_remote_sync(&self) -> rssr_api::Result<()> {
+        self.note("clear_remote_sync");
+        self.library.clear_remote_sync().await
+    }
+
+    async fn startup_remote_sync(&self) -> rssr_api::Result<Option<RemoteSyncReport>> {
+        self.note("startup_remote_sync");
+        self.library.startup_remote_sync().await
     }
 
     async fn bootstrap_entries(

@@ -1,11 +1,12 @@
 //! The host of the desktop app, Android and (later) the server: tokio, WebDAV, and image
 //! localization into the library.
 
+use std::path::Path;
 use std::time::Duration;
 
 use rssr_application::{
     DEFAULT_REFRESH_CONCURRENCY, RefreshLocalizationCandidate, RemoteConfigStore,
-    SERIAL_REFRESH_CONCURRENCY,
+    RemoteSyncProfileStore, SERIAL_REFRESH_CONCURRENCY,
 };
 use time::OffsetDateTime;
 
@@ -14,6 +15,7 @@ use super::{LocalBackend, LocalHost, LocalTask};
 use crate::composition::{
     LibraryComposition, compose_library_use_cases, compose_library_use_cases_with,
 };
+use crate::config_sync::profile_file::FileRemoteSyncProfiles;
 use crate::config_sync::webdav::WebDavConfigSync;
 use crate::fetch::BodyAssetLocalizer;
 use crate::outbound::OutboundPolicy;
@@ -22,14 +24,7 @@ use crate::store::LibraryStore;
 /// The backend over an opened library, with this host; outbound requests are unrestricted (the
 /// desktop app, Android, an ordinary CLI).
 pub fn native_local_backend(store: LibraryStore) -> LocalBackend<NativeHost> {
-    let refresh_concurrency = refresh_concurrency(&store);
-    let composition = compose_library_use_cases(store);
-    let worker = ImageLocalizationWorker::new(
-        composition.entries.clone(),
-        BodyAssetLocalizer::new(),
-        BodyAssetLocalizer::for_reader_entry(),
-    );
-    backend(composition, worker, refresh_concurrency, OutboundPolicy::Unrestricted)
+    backend(unrestricted_parts(store), OutboundPolicy::Unrestricted, None)
 }
 
 /// [`native_local_backend`] whose every outbound request (feeds, subscriptions, images, WebDAV)
@@ -38,28 +33,56 @@ pub fn native_local_backend_with(
     store: LibraryStore,
     policy: OutboundPolicy,
 ) -> anyhow::Result<LocalBackend<NativeHost>> {
-    if policy == OutboundPolicy::Unrestricted {
-        return Ok(native_local_backend(store));
+    Ok(backend(parts(store, &policy)?, policy, None))
+}
+
+/// [`native_local_backend_with`] for the library of `data_dir`, whose WebDAV synchronization
+/// profile it keeps there (`remote-sync.json`): the desktop app, Android and the server.
+pub fn native_local_backend_in(
+    store: LibraryStore,
+    policy: OutboundPolicy,
+    data_dir: &Path,
+) -> anyhow::Result<LocalBackend<NativeHost>> {
+    let profiles = FileRemoteSyncProfiles::new(data_dir);
+    Ok(backend(parts(store, &policy)?, policy, Some(profiles)))
+}
+
+/// The use cases, the image localization worker and the refresh concurrency over `store`.
+type Parts = (LibraryComposition, ImageLocalizationWorker, usize);
+
+fn unrestricted_parts(store: LibraryStore) -> Parts {
+    let refresh_concurrency = refresh_concurrency(&store);
+    let composition = compose_library_use_cases(store);
+    let worker = ImageLocalizationWorker::new(
+        composition.entries.clone(),
+        BodyAssetLocalizer::new(),
+        BodyAssetLocalizer::for_reader_entry(),
+    );
+    (composition, worker, refresh_concurrency)
+}
+
+fn parts(store: LibraryStore, policy: &OutboundPolicy) -> anyhow::Result<Parts> {
+    if *policy == OutboundPolicy::Unrestricted {
+        return Ok(unrestricted_parts(store));
     }
     let refresh_concurrency = refresh_concurrency(&store);
-    let composition = compose_library_use_cases_with(store, &policy)?;
+    let composition = compose_library_use_cases_with(store, policy)?;
     let worker = ImageLocalizationWorker::new(
         composition.entries.clone(),
         BodyAssetLocalizer::background(policy.clone())?,
         BodyAssetLocalizer::reader(policy.clone())?,
     );
-    Ok(backend(composition, worker, refresh_concurrency, policy))
+    Ok((composition, worker, refresh_concurrency))
 }
 
 fn backend(
-    composition: LibraryComposition,
-    image_localization_worker: ImageLocalizationWorker,
-    refresh_concurrency: usize,
+    (composition, image_localization_worker, refresh_concurrency): Parts,
     policy: OutboundPolicy,
+    remote_sync_profiles: Option<FileRemoteSyncProfiles>,
 ) -> LocalBackend<NativeHost> {
     LocalBackend::new(
         composition.use_cases,
-        NativeHost { image_localization_worker, refresh_concurrency, policy },
+        NativeHost { image_localization_worker, refresh_concurrency, policy, remote_sync_profiles },
     )
 }
 
@@ -89,6 +112,7 @@ pub struct NativeHost {
     image_localization_worker: ImageLocalizationWorker,
     refresh_concurrency: usize,
     policy: OutboundPolicy,
+    remote_sync_profiles: Option<FileRemoteSyncProfiles>,
 }
 
 #[async_trait::async_trait]
@@ -114,10 +138,17 @@ impl LocalHost for NativeHost {
         endpoint: &str,
         remote_path: &str,
     ) -> anyhow::Result<Box<dyn RemoteConfigStore>> {
-        // An endpoint that cannot be used is the user's to correct.
+        // An endpoint or a path that cannot be used is the user's to correct.
+        let invalid =
+            |error: anyhow::Error| rssr_domain::DomainError::InvalidInput(format!("{error:#}"));
         let store = WebDavConfigSync::with_policy(endpoint, remote_path, self.policy.clone())
-            .map_err(|error| rssr_domain::DomainError::InvalidInput(format!("{error:#}")))?;
+            .map_err(invalid)?;
+        store.remote_url().map_err(invalid)?;
         Ok(Box::new(store))
+    }
+
+    fn remote_sync_profiles(&self) -> Option<&dyn RemoteSyncProfileStore> {
+        self.remote_sync_profiles.as_ref().map(|profiles| profiles as &dyn RemoteSyncProfileStore)
     }
 
     fn feed_refreshed(&self, feed_id: i64, entries: Vec<RefreshLocalizationCandidate>) {

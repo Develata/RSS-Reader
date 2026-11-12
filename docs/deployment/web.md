@@ -121,7 +121,7 @@ Compose 的端口发布默认不限制宿主监听地址。对外部署时应由
 
 ## 备份与恢复
 
-数据目录（容器内 `/data`）里有三样东西：资料库 `library.sqlite3`（订阅、文章、正文与设置，连同 SQLite 的 `-wal`、`-shm`）、认证库 `auth.sqlite3` 与出站策略 `outbound.json`。
+数据目录（容器内 `/data`）里有三样东西：资料库 `library.sqlite3`（订阅、文章、正文与设置，连同 SQLite 的 `-wal`、`-shm`）、认证库 `auth.sqlite3` 与出站策略 `outbound.json`。在设置页记住 WebDAV 端点后还有 `remote-sync.json`：端点、明文凭据和自动同步的基准，仅所有者可读写，备份时按凭据对待；不备份它只是需要重新记住端点。
 
 备份资料库用 `rssr-cli backup`，服务器运行时也可以做：
 

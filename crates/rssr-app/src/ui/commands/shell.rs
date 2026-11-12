@@ -5,4 +5,6 @@ pub(crate) enum ShellCommand {
     LoadSettings,
     ResolveStartupRoute,
     ManualRefresh,
+    /// Waits for the synchronization after this process's first periodic refresh.
+    AwaitStartupSync,
 }

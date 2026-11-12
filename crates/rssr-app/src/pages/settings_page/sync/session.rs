@@ -49,10 +49,8 @@ impl SettingsPageSyncSession {
     ) {
         let snapshot = self.snapshot();
         self.state.with_mut(|state| state.clear_pending_remote_pull());
-        let pushing = execute(UiCommand::Settings(SettingsCommand::PushConfig {
-            endpoint: snapshot.endpoint,
-            remote_path: snapshot.remote_path,
-        }));
+        let pushing =
+            execute(UiCommand::Settings(SettingsCommand::PushConfig { target: snapshot.target() }));
         self.shell.spawn_in_shell(async move {
             let intents = pushing.await;
             self.finish(intents, false);
@@ -97,13 +95,54 @@ impl SettingsPageSyncSession {
         self.page.invalidate_theme_import();
         let snapshot = self.snapshot();
         self.state.with_mut(|state| state.clear_pending_remote_pull());
-        let pulling = execute(UiCommand::Settings(SettingsCommand::PullConfig {
-            endpoint: snapshot.endpoint,
-            remote_path: snapshot.remote_path,
-        }));
+        let pulling =
+            execute(UiCommand::Settings(SettingsCommand::PullConfig { target: snapshot.target() }));
         self.shell.spawn_in_shell(async move {
             let intents = pulling.await;
             self.finish(intents, true);
+        });
+    }
+
+    /// Reads automatic synchronization's state (at start and on every re-read).
+    pub(crate) fn load_remote_sync(self) {
+        self.run_profile_command(SettingsCommand::LoadRemoteSync);
+    }
+
+    /// Remembers the endpoint typed on the page for automatic synchronization.
+    pub(crate) fn save_remote_sync(self) {
+        let snapshot = self.snapshot();
+        self.run_profile_command(SettingsCommand::SaveRemoteSync {
+            endpoint: snapshot.endpoint,
+            remote_path: snapshot.remote_path,
+        });
+    }
+
+    /// Forgets the saved endpoint and its credentials.
+    pub(crate) fn clear_remote_sync(self) {
+        self.run_profile_command(SettingsCommand::ClearRemoteSync);
+    }
+
+    /// Runs a command about the saved endpoint while the page is open: its view updates the
+    /// card, the rest is the page's status.
+    fn run_profile_command(mut self, command: SettingsCommand) {
+        let page = self.page;
+        spawn(async move {
+            let intents = run_ui_command(UiCommand::Settings(command)).await;
+            if !page.is_open() {
+                return;
+            }
+            for intent in intents {
+                match intent {
+                    UiIntent::RemoteSyncLoaded(view) => {
+                        self.state.with_mut(|state| state.set_remote_sync(view));
+                    }
+                    other => {
+                        if let Some(intent) = other.into_settings_page_intent() {
+                            page.dispatch(intent);
+                        }
+                    }
+                }
+            }
         });
     }
 

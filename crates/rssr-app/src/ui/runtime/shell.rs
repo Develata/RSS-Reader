@@ -51,6 +51,13 @@ pub(super) async fn execute(command: ShellCommand) -> Vec<UiIntent> {
                 Err(error) => vec![UiIntent::Failed(UiFailure::new("读取设置", error))],
             }
         }
+        ShellCommand::AwaitStartupSync => {
+            match async { backend().await?.startup_remote_sync().await }.await {
+                Ok(Some(report)) => vec![UiIntent::StartupSyncFinished(report)],
+                Ok(None) => Vec::new(),
+                Err(error) => vec![UiIntent::Unshown(UiFailure::new("启动同步", error))],
+            }
+        }
         ShellCommand::ResolveStartupRoute => {
             match async { backend().await?.resolve_startup_target().await }.await {
                 Ok(target) => {

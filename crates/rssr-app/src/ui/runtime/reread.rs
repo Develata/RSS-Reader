@@ -20,7 +20,7 @@ use crate::ui::failure::TONE_UNKNOWN;
 use crate::ui::runtime::backend::test_host;
 
 /// Every backend operation that writes, or starts something.
-const WRITES: [&str; 18] = [
+const WRITES: [&str; 20] = [
     "update_settings",
     "apply_entry_batch",
     "update_subscription",
@@ -37,6 +37,8 @@ const WRITES: [&str; 18] = [
     "import_opml",
     "push_remote_config",
     "pull_remote_config",
+    "save_remote_sync",
+    "clear_remote_sync",
     "localize_entry_assets",
     "ensure_auto_refresh_started",
 ];
@@ -50,6 +52,7 @@ fn rereads() -> Vec<UiCommand> {
         UiCommand::Entries(EntriesCommand::LoadEntries { query: EntryQuery::default() }),
         UiCommand::Feeds(FeedsCommand::LoadSnapshot),
         UiCommand::Settings(SettingsCommand::Load),
+        UiCommand::Settings(SettingsCommand::LoadRemoteSync),
         UiCommand::Reader(ReaderCommand::RereadEntry { entry_id: 1 }),
     ]
 }

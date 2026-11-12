@@ -14,7 +14,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
-use rssr_application::SettingsPatch;
+use rssr_application::{RemoteTarget, SettingsPatch};
 use rssr_domain::{EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter, StartupView};
 use rssr_infra::store::LibraryStore;
 
@@ -694,33 +694,41 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run("import config with other settings", import(config_before_settings, &expected))
         .await;
+    let at = |remote_path: &str| RemoteTarget::Endpoint {
+        endpoint: server.url("/dav/"),
+        remote_path: remote_path.into(),
+    };
     transcript
-        .run(
-            "push config",
-            settings(SettingsCommand::PushConfig {
-                endpoint: server.url("/dav/"),
-                remote_path: "rssr.json".into(),
-            }),
-        )
+        .run("push config", settings(SettingsCommand::PushConfig { target: at("rssr.json") }))
         .await;
     transcript
-        .run(
-            "pull config",
-            settings(SettingsCommand::PullConfig {
-                endpoint: server.url("/dav/"),
-                remote_path: "rssr.json".into(),
-            }),
-        )
+        .run("pull config", settings(SettingsCommand::PullConfig { target: at("rssr.json") }))
         .await;
     transcript
         .run(
             "pull missing config",
-            settings(SettingsCommand::PullConfig {
+            settings(SettingsCommand::PullConfig { target: at("missing.json") }),
+        )
+        .await;
+    // This library keeps no synchronization profile (no data directory): none is available.
+    transcript.run("load remote sync", settings(SettingsCommand::LoadRemoteSync)).await;
+    transcript
+        .run(
+            "save remote sync, unavailable",
+            settings(SettingsCommand::SaveRemoteSync {
                 endpoint: server.url("/dav/"),
-                remote_path: "missing.json".into(),
+                remote_path: "rssr.json".into(),
             }),
         )
         .await;
+    transcript.run("clear remote sync", settings(SettingsCommand::ClearRemoteSync)).await;
+    transcript
+        .run(
+            "push to the saved endpoint, none",
+            settings(SettingsCommand::PushConfig { target: RemoteTarget::Saved }),
+        )
+        .await;
+    transcript.run("await startup sync, none", shell(ShellCommand::AwaitStartupSync)).await;
 
     transcript.run("startup route, last feed", shell(ShellCommand::ResolveStartupRoute)).await;
     transcript

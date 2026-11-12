@@ -1,6 +1,13 @@
+mod remote_sync;
 mod rules;
 #[cfg(test)]
 mod tests;
+
+pub use remote_sync::{
+    RemoteContentHash, RemoteSyncBase, RemoteSyncOutcome, RemoteSyncProfile,
+    RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport, RemoteSyncStep,
+    RemoteSyncTrigger, RemoteSyncView, RemoteTarget, display_endpoint,
+};
 
 use std::sync::Arc;
 
@@ -32,6 +39,51 @@ pub struct ImportExportService {
 pub trait RemoteConfigStore: Send + Sync {
     async fn upload_config(&self, raw: &str) -> Result<()>;
     async fn download_config(&self) -> Result<Option<String>>;
+
+    /// The document and the validator (ETag) its server gave it; a store without validators
+    /// gives none.
+    async fn download_document(&self) -> Result<Option<RemoteConfigDocument>> {
+        Ok(self.download_config().await?.map(|raw| RemoteConfigDocument { raw, etag: None }))
+    }
+
+    /// Uploads `raw` only while the remote still matches `precondition`. A store that cannot
+    /// check a precondition uploads unconditionally.
+    async fn upload_config_if(
+        &self,
+        raw: &str,
+        precondition: &UploadPrecondition,
+    ) -> Result<ConditionalUpload> {
+        let _ = precondition;
+        self.upload_config(raw).await?;
+        Ok(ConditionalUpload::Stored)
+    }
+}
+
+/// A configuration document as the remote holds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteConfigDocument {
+    pub raw: String,
+    /// The server's entity tag, when it sent one.
+    pub etag: Option<String>,
+}
+
+/// What the remote must still hold for a conditional upload to replace it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UploadPrecondition {
+    /// Upload whatever the remote holds.
+    None,
+    /// Only while there is no document (`If-None-Match: *`).
+    Absent,
+    /// Only while the document still has this entity tag (`If-Match`).
+    Matches(String),
+}
+
+/// The result of a conditional upload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionalUpload {
+    Stored,
+    /// The remote changed since it was read; nothing was uploaded.
+    PreconditionFailed,
 }
 
 pub trait OpmlCodecPort: Send + Sync {
@@ -139,6 +191,16 @@ impl ImportExportService {
         package: &ConfigPackage,
         expected: &ConfigFingerprint,
     ) -> Result<ConfigImportOutcome> {
+        Ok(self.replace_with_package(package, expected).await?.0)
+    }
+
+    /// [`Self::import_config_package`], also giving the configuration's fingerprint after the
+    /// replacement (read in its transaction).
+    async fn replace_with_package(
+        &self,
+        package: &ConfigPackage,
+        expected: &ConfigFingerprint,
+    ) -> Result<(ConfigImportOutcome, ConfigFingerprint)> {
         validate_config_package(package)?;
 
         // Parse the complete desired state before any write. Production mutation ports derive the
@@ -164,12 +226,13 @@ impl ImportExportService {
                 expected: expected.clone(),
             })
             .await?;
-        Ok(ConfigImportOutcome {
+        let imported = ConfigImportOutcome {
             imported_feed_count: package.feeds.len() as u64,
             removed_feed_count: outcome.removed_feed_count as u64,
             settings_updated: outcome.settings_updated,
             settings: outcome.settings,
-        })
+        };
+        Ok((imported, outcome.fingerprint))
     }
 
     pub async fn export_config_json(&self) -> Result<String> {

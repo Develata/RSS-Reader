@@ -115,10 +115,31 @@ impl WebDavConfigSync {
     }
 
     pub async fn upload_text(&self, body: &str) -> Result<()> {
-        let response = self
+        anyhow::ensure!(
+            self.upload_text_if(body, None).await?,
+            "WebDAV 上传失败: {}",
+            StatusCode::PRECONDITION_FAILED
+        );
+        Ok(())
+    }
+
+    /// Uploads `body` only while the remote matches `precondition` (a header and its value:
+    /// `If-Match` with an entity tag, or `If-None-Match: *`); `false` when the server answered
+    /// `412`, so nothing was stored.
+    pub async fn upload_text_if(
+        &self,
+        body: &str,
+        precondition: Option<(header::HeaderName, &str)>,
+    ) -> Result<bool> {
+        let mut request = self
             .authenticated(self.client.put(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
-            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some((name, value)) = precondition {
+            let value = header::HeaderValue::from_str(value).context("WebDAV 条件头无效")?;
+            request = request.header(name, value);
+        }
+        let response = request
             .body(body.to_string())
             .send()
             .await
@@ -126,13 +147,21 @@ impl WebDavConfigSync {
             .context("上传配置到 WebDAV 失败")?;
 
         if response.status().is_success() {
-            return Ok(());
+            return Ok(true);
+        }
+        if response.status() == StatusCode::PRECONDITION_FAILED {
+            return Ok(false);
         }
 
         anyhow::bail!("WebDAV 上传失败: {}", unauthorized_hint(response.status()));
     }
 
     pub async fn download_text(&self) -> Result<Option<String>> {
+        Ok(self.download_text_with_etag().await?.map(|(text, _)| text))
+    }
+
+    /// The document and its strong entity tag (`ETag`), when the server sent one.
+    pub async fn download_text_with_etag(&self) -> Result<Option<(String, Option<String>)>> {
         let mut response = self
             .authenticated(self.client.get(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
@@ -148,6 +177,13 @@ impl WebDavConfigSync {
         if !response.status().is_success() {
             anyhow::bail!("WebDAV 下载失败: {}", unauthorized_hint(response.status()));
         }
+        // A weak tag cannot serve `If-Match`, which compares strongly (RFC 9110, 13.1.1).
+        let etag = response
+            .headers()
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .filter(|tag| tag.starts_with('"'))
+            .map(str::to_owned);
 
         // 边下边累计，不把任意大小的远端响应整个读进内存。
         let mut buffered = Vec::new();
@@ -164,7 +200,8 @@ impl WebDavConfigSync {
             buffered.extend_from_slice(&chunk);
         }
 
-        Ok(Some(String::from_utf8(buffered).context("WebDAV 配置响应不是有效 UTF-8")?))
+        let text = String::from_utf8(buffered).context("WebDAV 配置响应不是有效 UTF-8")?;
+        Ok(Some((text, etag)))
     }
 
     /// The remote URL, checked against the outbound policy before it is requested.

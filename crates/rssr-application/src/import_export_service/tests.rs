@@ -28,7 +28,15 @@ impl ConfigReplacementPort for RecordingConfigReplacement {
     ) -> anyhow::Result<ConfigReplacementOutcome> {
         let settings = plan.settings.clone();
         self.plans.lock().expect("lock plans").push(plan);
-        Ok(ConfigReplacementOutcome { removed_feed_count: 1, settings_updated: true, settings })
+        Ok(ConfigReplacementOutcome {
+            removed_feed_count: 1,
+            settings_updated: true,
+            settings,
+            fingerprint: rssr_domain::ConfigFingerprint::compute(
+                Vec::new(),
+                &UserSettings::default(),
+            ),
+        })
     }
 }
 

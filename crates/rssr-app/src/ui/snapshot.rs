@@ -1,3 +1,4 @@
+use rssr_application::{RemoteSyncReport, RemoteSyncView};
 use rssr_domain::UserSettings;
 
 use crate::pages::entries_page::intent::EntriesPageIntent;
@@ -38,6 +39,10 @@ pub(crate) enum UiIntent {
     /// A failure no page shows (the reader's image localization): only what it asks of the whole
     /// app applies (sign in again, reload).
     Unshown(UiFailure),
+    /// Automatic synchronization as the settings page shows it.
+    RemoteSyncLoaded(RemoteSyncView),
+    /// The synchronization after the start ended with this report.
+    StartupSyncFinished(RemoteSyncReport),
 }
 
 impl UiIntent {
@@ -59,6 +64,8 @@ impl UiIntent {
             UiIntent::SettingsPage(intent) => intent.failure(),
             UiIntent::AuthenticatedShellLoaded(_)
             | UiIntent::AutoRefreshStarted
+            | UiIntent::RemoteSyncLoaded(_)
+            | UiIntent::StartupSyncFinished(_)
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::SetStatus { .. } => None,
         }
@@ -74,6 +81,8 @@ impl UiIntent {
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
             | UiIntent::AutoRefreshStarted
+            | UiIntent::RemoteSyncLoaded(_)
+            | UiIntent::StartupSyncFinished(_)
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::FeedsPage(_)
             | UiIntent::ReaderPage(_)
@@ -91,6 +100,8 @@ impl UiIntent {
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
             | UiIntent::AutoRefreshStarted
+            | UiIntent::RemoteSyncLoaded(_)
+            | UiIntent::StartupSyncFinished(_)
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::EntriesPage(_)
             | UiIntent::FeedsPage(_)
@@ -108,6 +119,8 @@ impl UiIntent {
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
             | UiIntent::AutoRefreshStarted
+            | UiIntent::RemoteSyncLoaded(_)
+            | UiIntent::StartupSyncFinished(_)
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::EntriesPage(_)
             | UiIntent::ReaderPage(_)
@@ -125,6 +138,8 @@ impl UiIntent {
             UiIntent::Unshown(_) => None,
             UiIntent::AuthenticatedShellLoaded(_)
             | UiIntent::AutoRefreshStarted
+            | UiIntent::RemoteSyncLoaded(_)
+            | UiIntent::StartupSyncFinished(_)
             | UiIntent::StartupRouteResolved(_)
             | UiIntent::EntriesPage(_)
             | UiIntent::FeedsPage(_)

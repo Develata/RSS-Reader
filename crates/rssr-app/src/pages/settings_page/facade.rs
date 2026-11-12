@@ -194,6 +194,41 @@ impl SettingsPageFacade {
         self.sync.push();
     }
 
+    /// Whether this backend can keep an endpoint for automatic synchronization.
+    pub(crate) fn remote_sync_available(&self) -> bool {
+        self.sync_snapshot.remote_sync.as_ref().is_some_and(|view| view.available)
+    }
+
+    /// The saved endpoint (without its password), its path, and the line about the last
+    /// synchronization.
+    pub(crate) fn saved_remote_sync(&self) -> Option<(String, String, String)> {
+        let profile = self.sync_snapshot.remote_sync.as_ref()?.profile.as_ref()?;
+        let status = match &profile.last_report {
+            Some(report) => crate::ui::remote_sync_text::report_text(report),
+            None if profile.has_base => String::new(),
+            None => "尚未同步：请先手动上传或下载一次，之后会自动同步。".to_string(),
+        };
+        Some((profile.endpoint.clone(), profile.remote_path.clone(), status))
+    }
+
+    /// Whether the last synchronization needs the user (choose a direction, or it failed).
+    pub(crate) fn remote_sync_needs_attention(&self) -> bool {
+        self.sync_snapshot
+            .remote_sync
+            .as_ref()
+            .and_then(|view| view.profile.as_ref())
+            .and_then(|profile| profile.last_report.as_ref())
+            .is_some_and(|report| crate::ui::remote_sync_text::needs_attention(&report.outcome))
+    }
+
+    pub(crate) fn save_remote_sync(&self) {
+        self.sync.save_remote_sync();
+    }
+
+    pub(crate) fn clear_remote_sync(&self) {
+        self.sync.clear_remote_sync();
+    }
+
     pub(crate) fn pull(&self) {
         self.sync.pull();
     }

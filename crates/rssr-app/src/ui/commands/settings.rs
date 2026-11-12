@@ -1,4 +1,4 @@
-use rssr_application::SettingsPatch;
+use rssr_application::{RemoteTarget, SettingsPatch};
 
 #[derive(Debug, Clone)]
 pub(crate) enum SettingsCommand {
@@ -9,11 +9,18 @@ pub(crate) enum SettingsCommand {
         success_message: String,
     },
     PushConfig {
-        endpoint: String,
-        remote_path: String,
+        target: RemoteTarget,
     },
     PullConfig {
+        target: RemoteTarget,
+    },
+    /// Reads whether automatic synchronization is available and its saved endpoint.
+    LoadRemoteSync,
+    /// Keeps the endpoint for automatic synchronization.
+    SaveRemoteSync {
         endpoint: String,
         remote_path: String,
     },
+    /// Forgets the saved endpoint and its credentials.
+    ClearRemoteSync,
 }
