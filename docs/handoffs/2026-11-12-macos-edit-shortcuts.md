@@ -4,7 +4,7 @@
 - 作者 / Agent：Claude Code (Opus 5.5)
 - 分支：claude/macos-shortcut-compat-e1c799
 - 当前 HEAD：20521b8f（改动前）
-- 相关 commit：见本分支提交 `fix: restore macOS edit shortcuts via the menu bar`
+- 相关 commit：341bb388
 - 相关 tag / release：N/A
 - 状态：`draft`（自动化通过；macOS 实机按键未验收）
 
