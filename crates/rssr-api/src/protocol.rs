@@ -203,11 +203,7 @@ pub struct AddSubscription {
 pub type RemoteConfig = rssr_application::RemoteTarget;
 
 /// `PUT routes::REMOTE_SYNC`: the endpoint to keep for automatic synchronization.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SaveRemoteSync {
-    pub endpoint: String,
-    pub remote_path: String,
-}
+pub type SaveRemoteSync = rssr_application::RemoteEndpoint;
 
 /// A background job: 128 random bits as 32 lowercase hex digits.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -50,11 +50,13 @@ pub struct FeedsOverview {
     pub fingerprint: ConfigFingerprint,
 }
 
-/// The configuration as exported: the active subscriptions and the settings.
+/// The configuration as exported: the active subscriptions and the settings, with the
+/// fingerprint of exactly this configuration (read in the same snapshot).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigSnapshot {
     pub feeds: Vec<Feed>,
     pub settings: UserSettings,
+    pub fingerprint: ConfigFingerprint,
 }
 
 #[async_trait::async_trait]
@@ -174,7 +176,17 @@ pub(crate) mod test_support {
         /// Repositories hold no generations or raw names: the display name stands in for the
         /// custom one, generation 0 for all.
         async fn config_fingerprint(&self) -> rssr_domain::Result<ConfigFingerprint> {
-            let ConfigSnapshot { feeds, settings } = self.config_snapshot().await?;
+            Ok(self.config_snapshot().await?.fingerprint)
+        }
+
+        async fn config_snapshot(&self) -> rssr_domain::Result<ConfigSnapshot> {
+            let feeds: Vec<rssr_domain::Feed> = needed(&self.feeds)
+                .list_feeds()
+                .await?
+                .into_iter()
+                .filter(|feed| !feed.is_deleted)
+                .collect();
+            let settings = needed(&self.settings).load().await?;
             let projection = feeds
                 .iter()
                 .map(|feed| FingerprintFeed {
@@ -185,17 +197,8 @@ pub(crate) mod test_support {
                     folder: feed.folder.as_deref(),
                 })
                 .collect();
-            Ok(ConfigFingerprint::compute(projection, &settings))
-        }
-
-        async fn config_snapshot(&self) -> rssr_domain::Result<ConfigSnapshot> {
-            let feeds = needed(&self.feeds)
-                .list_feeds()
-                .await?
-                .into_iter()
-                .filter(|feed| !feed.is_deleted)
-                .collect();
-            Ok(ConfigSnapshot { feeds, settings: needed(&self.settings).load().await? })
+            let fingerprint = ConfigFingerprint::compute(projection, &settings);
+            Ok(ConfigSnapshot { feeds, settings, fingerprint })
         }
     }
 }

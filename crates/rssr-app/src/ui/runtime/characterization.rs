@@ -14,7 +14,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
-use rssr_application::{RemoteTarget, SettingsPatch};
+use rssr_application::{RemoteEndpoint, RemoteTarget, SavedRemote, SettingsPatch};
 use rssr_domain::{EntryGroupingPreference, EntryQuery, ReadFilter, StarredFilter, StartupView};
 use rssr_infra::store::LibraryStore;
 
@@ -694,9 +694,11 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run("import config with other settings", import(config_before_settings, &expected))
         .await;
-    let at = |remote_path: &str| RemoteTarget::Endpoint {
-        endpoint: server.url("/dav/"),
-        remote_path: remote_path.into(),
+    let at = |remote_path: &str| {
+        RemoteTarget::Endpoint(RemoteEndpoint {
+            endpoint: server.url("/dav/"),
+            remote_path: remote_path.into(),
+        })
     };
     transcript
         .run("push config", settings(SettingsCommand::PushConfig { target: at("rssr.json") }))
@@ -715,17 +717,22 @@ async fn ui_commands_produce_the_recorded_intents() {
     transcript
         .run(
             "save remote sync, unavailable",
-            settings(SettingsCommand::SaveRemoteSync {
+            settings(SettingsCommand::SaveRemoteSync(RemoteEndpoint {
                 endpoint: server.url("/dav/"),
                 remote_path: "rssr.json".into(),
-            }),
+            })),
         )
         .await;
     transcript.run("clear remote sync", settings(SettingsCommand::ClearRemoteSync)).await;
     transcript
         .run(
             "push to the saved endpoint, none",
-            settings(SettingsCommand::PushConfig { target: RemoteTarget::Saved }),
+            settings(SettingsCommand::PushConfig {
+                target: RemoteTarget::Saved(SavedRemote {
+                    endpoint: server.url("/dav/"),
+                    remote_path: "rssr.json".into(),
+                }),
+            }),
         )
         .await;
     transcript.run("await startup sync, none", shell(ShellCommand::AwaitStartupSync)).await;

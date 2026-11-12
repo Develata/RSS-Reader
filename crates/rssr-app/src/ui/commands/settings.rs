@@ -1,4 +1,4 @@
-use rssr_application::{RemoteTarget, SettingsPatch};
+use rssr_application::{RemoteEndpoint, RemoteTarget, SettingsPatch};
 
 #[derive(Debug, Clone)]
 pub(crate) enum SettingsCommand {
@@ -17,10 +17,7 @@ pub(crate) enum SettingsCommand {
     /// Reads whether automatic synchronization is available and its saved endpoint.
     LoadRemoteSync,
     /// Keeps the endpoint for automatic synchronization.
-    SaveRemoteSync {
-        endpoint: String,
-        remote_path: String,
-    },
+    SaveRemoteSync(RemoteEndpoint),
     /// Forgets the saved endpoint and its credentials.
     ClearRemoteSync,
 }

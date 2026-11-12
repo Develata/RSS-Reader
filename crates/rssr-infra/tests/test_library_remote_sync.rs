@@ -15,12 +15,16 @@ use rssr_application::{
     RemoteSyncTrigger, UploadPrecondition,
 };
 use rssr_domain::{SettingsRepository, UserSettings};
+use rssr_infra::store::LibrarySettings;
 use rssr_infra::{application_adapters::InfraOpmlCodec, opml::OpmlCodec};
 
 /// One remote document with a version-counting entity tag; counts the requests it answers.
 #[derive(Default)]
 struct Remote {
     state: Mutex<RemoteState>,
+    /// Saves these settings in that library while the next download is in flight, as the user
+    /// would meanwhile.
+    edit_during_download: Mutex<Option<(LibrarySettings, UserSettings)>>,
 }
 
 #[derive(Default)]
@@ -46,6 +50,10 @@ impl Remote {
     fn change_after_next_download(&self, raw: String) {
         self.state.lock().unwrap().change_after_download = Some(raw);
     }
+
+    fn edit_during_next_download(&self, library: &Library, settings: UserSettings) {
+        *self.edit_during_download.lock().unwrap() = Some((library.settings.clone(), settings));
+    }
 }
 
 impl RemoteState {
@@ -69,6 +77,10 @@ impl RemoteConfigStore for Remote {
     }
 
     async fn download_document(&self) -> anyhow::Result<Option<RemoteConfigDocument>> {
+        let edit = self.edit_during_download.lock().unwrap().take();
+        if let Some((library, settings)) = edit {
+            library.save(&settings).await.expect("edit during the download");
+        }
         let mut state = self.state.lock().unwrap();
         state.downloads += 1;
         let document = state.document.as_ref().map(|(raw, version)| RemoteConfigDocument {
@@ -260,6 +272,69 @@ async fn a_change_on_one_device_reaches_the_other_and_a_change_on_both_is_a_conf
         second.sync(&remote, RemoteSyncTrigger::Startup).await,
         Some(RemoteSyncOutcome::UpToDate)
     );
+}
+
+/// An edit while the remote is read, undone after the upload: the base must describe what was
+/// uploaded, so undoing the edit is a change that is uploaded too (independent review, finding
+/// 1: 40 -> 50 -> 40 left 50 on the remote and 40 here, both "in sync").
+#[tokio::test]
+async fn an_edit_during_a_transfer_and_its_undo_both_reach_the_remote() {
+    let remote = Remote::default();
+    let mut device = Device::new().await;
+    device.sync(&remote, RemoteSyncTrigger::Startup).await;
+
+    device.set_interval(40).await;
+    let fifty = UserSettings { refresh_interval_minutes: 50, ..UserSettings::default() };
+    remote.edit_during_next_download(&device.library, fifty);
+    assert_eq!(
+        device.sync(&remote, RemoteSyncTrigger::AfterChange).await,
+        Some(RemoteSyncOutcome::Pushed { exported_feed_count: 0 })
+    );
+    assert!(remote.raw().unwrap().contains("\"refresh_interval_minutes\": 50"));
+
+    device.set_interval(40).await;
+    assert_eq!(
+        device.sync(&remote, RemoteSyncTrigger::AfterChange).await,
+        Some(RemoteSyncOutcome::Pushed { exported_feed_count: 0 }),
+        "undoing the edit is a change"
+    );
+    assert!(remote.raw().unwrap().contains("\"refresh_interval_minutes\": 40"));
+
+    // The same through the user's upload.
+    let fifty = UserSettings { refresh_interval_minutes: 50, ..UserSettings::default() };
+    remote.edit_during_next_download(&device.library, fifty);
+    device.sync(&remote, RemoteSyncTrigger::Startup).await;
+    device.set_interval(40).await;
+    let (_, base) = device.service.push_remote_config_tracked(&remote).await.expect("push");
+    device.base = Some(base);
+    device.set_interval(50).await;
+    assert_eq!(
+        device.sync(&remote, RemoteSyncTrigger::AfterChange).await,
+        Some(RemoteSyncOutcome::Pushed { exported_feed_count: 0 })
+    );
+}
+
+/// A download replaces this library only if it did not change after the decision was read.
+#[tokio::test]
+async fn an_edit_during_a_download_is_not_overwritten() {
+    let remote = Remote::default();
+    let mut first = Device::new().await;
+    first.sync(&remote, RemoteSyncTrigger::Startup).await;
+    let mut second = Device::new().await;
+    second.sync(&remote, RemoteSyncTrigger::Startup).await;
+    assert!(second.base.is_some(), "equal content");
+
+    first.set_interval(45).await;
+    first.sync(&remote, RemoteSyncTrigger::AfterChange).await;
+    // The decision is read after the download: the edit made during it counts as a local
+    // change, so both changed and nothing is replaced.
+    let edit = UserSettings { refresh_interval_minutes: 55, ..UserSettings::default() };
+    remote.edit_during_next_download(&second.library, edit);
+    assert_eq!(
+        second.sync(&remote, RemoteSyncTrigger::Startup).await,
+        Some(RemoteSyncOutcome::Conflict)
+    );
+    assert_eq!(second.interval().await, 55);
 }
 
 #[tokio::test]

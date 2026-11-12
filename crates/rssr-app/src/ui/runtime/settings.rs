@@ -67,8 +67,12 @@ pub(super) async fn execute(command: SettingsCommand) -> Vec<UiIntent> {
                 Err(error) => settings_failed("读取 WebDAV 自动同步", error),
             }
         }
-        SettingsCommand::SaveRemoteSync { endpoint, remote_path } => {
-            match async { backend().await?.save_remote_sync(&endpoint, &remote_path).await }.await {
+        SettingsCommand::SaveRemoteSync(remote) => {
+            let saved = async {
+                backend().await?.save_remote_sync(&remote.endpoint, &remote.remote_path).await
+            }
+            .await;
+            match saved {
                 Ok(view) => vec![
                     UiIntent::RemoteSyncLoaded(view),
                     UiIntent::SettingsPage(SettingsPageIntent::SetStatus {

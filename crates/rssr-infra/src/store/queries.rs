@@ -123,7 +123,11 @@ impl LibraryQueryPort for LibraryQueries {
             .store
             .read(|conn| {
                 let feeds = list_active(conn)?.into_iter().map(|row| row.feed).collect();
-                Ok(ConfigSnapshot { feeds, settings: load(conn, USER_SETTINGS_KEY)? })
+                Ok(ConfigSnapshot {
+                    feeds,
+                    settings: load(conn, USER_SETTINGS_KEY)?,
+                    fingerprint: config_fingerprint(conn)?,
+                })
             })
             .await?)
     }

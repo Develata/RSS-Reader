@@ -62,6 +62,9 @@ impl WebDavConfigSync {
                 .timeout(WEBDAV_REQUEST_TIMEOUT)
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
                 .referer(false)
+                // A configuration is small; a server (or a proxy such as nginx) that compresses
+                // the answer weakens its entity tag, which then cannot guard an upload.
+                .no_gzip()
                 .redirect(policy.redirect(|attempt| {
                     // reqwest 0.12.28 preserves GET/PUT on 301/302/307/308, but
                     // 303 turns PUT into GET. Reject 303 for this shared client.

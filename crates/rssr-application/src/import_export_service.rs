@@ -4,9 +4,9 @@ mod rules;
 mod tests;
 
 pub use remote_sync::{
-    RemoteContentHash, RemoteSyncBase, RemoteSyncOutcome, RemoteSyncProfile,
+    RemoteContentHash, RemoteEndpoint, RemoteSyncBase, RemoteSyncOutcome, RemoteSyncProfile,
     RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport, RemoteSyncStep,
-    RemoteSyncTrigger, RemoteSyncView, RemoteTarget, display_endpoint,
+    RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SavedRemote, display_endpoint,
 };
 
 use std::sync::Arc;
@@ -161,7 +161,16 @@ impl ImportExportService {
 
     /// 订阅与设置来自同一个读快照，导出的配置不会是两个时刻拼起来的。
     pub async fn export_config(&self) -> Result<ConfigPackage> {
-        let ConfigSnapshot { feeds, settings } = self.queries.config_snapshot().await?;
+        Ok(self.export_config_with_fingerprint().await?.0)
+    }
+
+    /// [`Self::export_config`] with the fingerprint of exactly the exported configuration (the
+    /// same read snapshot): what a synchronization keeps as its base after uploading it.
+    pub(crate) async fn export_config_with_fingerprint(
+        &self,
+    ) -> Result<(ConfigPackage, ConfigFingerprint)> {
+        let ConfigSnapshot { feeds, settings, fingerprint } =
+            self.queries.config_snapshot().await?;
         let feeds = feeds
             .into_iter()
             .map(|feed| ConfigFeed {
@@ -171,12 +180,13 @@ impl ImportExportService {
             })
             .collect();
 
-        Ok(ConfigPackage {
+        let package = ConfigPackage {
             version: rssr_domain::CONFIG_PACKAGE_VERSION,
             exported_at: self.clock.now_utc(),
             feeds,
             settings,
-        })
+        };
+        Ok((package, fingerprint))
     }
 
     /// The fingerprint of the configuration as stored now; a replacement expects it.

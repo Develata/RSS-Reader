@@ -4,9 +4,9 @@
 - 作者 / Agent：Claude（Opus）
 - 分支：`claude/webdav-auto-sync`
 - 当前 HEAD：见分支
-- 相关 commit：`fcd356fa`（实现）
+- 相关 commit：`fcd356fa`（实现）、`b39e3729`（交接）、评审修复见下一提交
 - 相关 tag / release：N/A
-- 状态：`draft`（独立评审进行中）
+- 状态：`draft`（第一轮独立评审的修复已完成，待复审）
 
 ## 工作摘要
 
@@ -36,13 +36,32 @@
 - 同一后端内的同步、保存 / 清除档案、手动上传下载经同一把锁串行。
 - 原生 GUI 启动同步结束后：下载了配置则重读页面与设置并提示；冲突、需选择、失败给一条提示；上传与无变化不提示。正式 Web 的启动属于服务器，页面加载不提示。
 
+## 独立评审（Codex，第一轮，`fcd356fa`）
+
+结论“不通过”。逐条核对源码后处理如下：
+
+| # | 结论 | 处理 |
+| --- | --- | --- |
+| 1 指纹与上传内容不是同一快照（40→50→40 后两边各留一值却显示已同步） | 成立（blocker） | `ConfigSnapshot` 带同一读事务的指纹；下载后再取（包, 指纹）。回归 `an_edit_during_a_transfer_and_its_undo_both_reach_the_remote`；去掉修复后该测试失败（变异检查） |
+| 2 未保存端点的手动操作绕过锁 | 成立 | 两种目标都进同一把锁 |
+| 3 下载确认未绑定档案身份 | 成立 | `RemoteTarget::Saved` 携带页面看到的端点与路径，锁内比对不符即冲突；页面在端点变化时取消确认 |
+| 4 `Debug` 输出密码 | 成立 | `RemoteEndpoint` / `RemoteSyncProfile` 自定义 `Debug`；`SaveRemoteSync`、`SettingsCommand` 改用 `RemoteEndpoint` |
+| 5 无强 ETag 时有覆盖窗口 | 成立，属规格取舍 | 不声明 gzip（避免代理把强 ETag 变弱）；规格与指南写明限制；是否停用无强 ETag 时的自动上传留给 Develata 决定 |
+| 6 旧读取覆盖新写入后的卡片 | 成立 | 页面档案读写分代：写一次一个，写开始后旧读取作废 |
+| 7 修改后同步结果不回到打开的页面 | 成立 | 视图带 `syncing`；页面保存设置后读一次，进行中每 2 秒再读 |
+| 8 档案损坏时无法停用 | 成立 | 视图带 `problem`，卡片显示原因并提供停用 |
+| 9 基线写入失败仍报成功 | 成立 | 自动同步记为失败；手动操作返回 `storage` 错误 |
+| 10 缺交接 | 已由 `b39e3729` 补 | — |
+| 11 多实例共用数据目录 | 不在支持范围 | 规格与指南写明 |
+| 12 测试覆盖 | 部分采纳 | 新增上列回归、失败路径、`Debug` 脱敏、`/api/v1/remote-sync` 经 `HttpBackend` 的往返（含保存端点上传、身份不符拒绝、停用后文件删除） |
+
 ## 验证与验收
 
 ### 自动化验证
 
 - `cargo fmt --all --check`：通过
 - `cargo clippy --workspace --all-targets --locked -- -D warnings`：通过
-- `cargo test --workspace --locked`：通过（67 个测试目标，0 失败）；新增 `test_library_remote_sync`（6）、`local_backend::tests` 两例、`webdav_conditional_*` / `webdav_weak_entity_tags_are_not_used`、`profile_file` 两例、`remote_sync_text` 两例、同步状态一例；UI 特征转录只新增条目
+- `cargo test --workspace --locked`：通过（67 个测试目标，0 失败）；新增 `test_library_remote_sync`（8）、`local_backend::tests` 四例、`webdav_conditional_*` / `webdav_weak_entity_tags_are_not_used`、`profile_file` 两例、`remote_sync_text` 两例、同步页状态两例、`client_tests::the_saved_endpoint_through_the_client`；UI 特征转录只新增条目（视图字段随修复增加）
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --locked`：通过
 - `cargo check -p rssr-app --target wasm32-unknown-unknown --features pages-demo --locked`：通过
 - `cargo check -p rssr-app --target aarch64-linux-android --locked`：未执行（本机无 Android NDK，`ring` 找不到 `aarch64-linux-android-clang`）；CI 的 Android job 覆盖
@@ -54,7 +73,7 @@
 
 ## 结果
 
-- 待独立评审结论后再判断是否可合并。
+- 第一轮评审问题已修复并验证；复审通过后可开 PR。
 
 ## 风险与后续事项
 

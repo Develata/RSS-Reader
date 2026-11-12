@@ -23,10 +23,44 @@ use super::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RemoteTarget {
-    /// The endpoint saved for automatic synchronization; a success becomes the new base.
-    Saved,
+    /// The endpoint saved for automatic synchronization, as the user saw it: refused when the
+    /// saved one is another by now. A success becomes the new base.
+    Saved(SavedRemote),
     /// An endpoint given for this operation only; the saved profile is not touched.
-    Endpoint { endpoint: String, remote_path: String },
+    Endpoint(RemoteEndpoint),
+}
+
+/// An endpoint as the user typed it (credentials included) and the document's path in it.
+/// `Debug` shows no password.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteEndpoint {
+    pub endpoint: String,
+    pub remote_path: String,
+}
+
+impl std::fmt::Debug for RemoteEndpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemoteEndpoint")
+            .field("endpoint", &display_endpoint(&self.endpoint))
+            .field("remote_path", &self.remote_path)
+            .finish()
+    }
+}
+
+/// Which saved endpoint the user meant: the endpoint without its password (as
+/// [`RemoteSyncProfileView::endpoint`] shows it) and the path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedRemote {
+    pub endpoint: String,
+    pub remote_path: String,
+}
+
+impl SavedRemote {
+    /// Whether `profile` is still the endpoint the user saw.
+    pub fn is(&self, profile: &RemoteSyncProfile) -> bool {
+        display_endpoint(&profile.endpoint) == self.endpoint
+            && profile.remote_path == self.remote_path
+    }
 }
 
 /// The SHA-256 of a configuration package's content, in lower-case hex.
@@ -109,8 +143,8 @@ pub struct RemoteSyncReport {
 }
 
 /// The endpoint saved for automatic synchronization, kept by the host next to the library and
-/// never inside it, nor in a configuration package.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// never inside it, nor in a configuration package. `Debug` shows no password.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteSyncProfile {
     /// As the user entered it, credentials included.
     pub endpoint: String,
@@ -132,6 +166,14 @@ impl RemoteSyncProfile {
         }
     }
 
+    /// Which saved endpoint this is, as the user sees it.
+    pub fn saved_remote(&self) -> SavedRemote {
+        SavedRemote {
+            endpoint: display_endpoint(&self.endpoint),
+            remote_path: self.remote_path.clone(),
+        }
+    }
+
     /// What the user interface may see: no password.
     pub fn view(&self) -> RemoteSyncProfileView {
         RemoteSyncProfileView {
@@ -140,6 +182,17 @@ impl RemoteSyncProfile {
             has_base: self.base.is_some(),
             last_report: self.last_report.clone(),
         }
+    }
+}
+
+impl std::fmt::Debug for RemoteSyncProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemoteSyncProfile")
+            .field("endpoint", &display_endpoint(&self.endpoint))
+            .field("remote_path", &self.remote_path)
+            .field("base", &self.base)
+            .field("last_report", &self.last_report)
+            .finish()
     }
 }
 
@@ -155,11 +208,17 @@ pub struct RemoteSyncProfileView {
 }
 
 /// Automatic synchronization as the user interface sees it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct RemoteSyncView {
     /// Whether this backend can keep a profile (not the Pages demo).
     pub available: bool,
     pub profile: Option<RemoteSyncProfileView>,
+    /// A synchronization is scheduled or running: its result is not in `profile` yet.
+    #[serde(default)]
+    pub syncing: bool,
+    /// The saved profile cannot be read; forgetting it is the way out.
+    #[serde(default)]
+    pub problem: Option<String>,
 }
 
 /// `endpoint` without the password of its user information; empty when it is no URL.
@@ -231,14 +290,17 @@ impl ImportExportService {
         base: Option<&RemoteSyncBase>,
         trigger: RemoteSyncTrigger,
     ) -> Result<Option<RemoteSyncStep>> {
-        // Read before the export: a change made in between is at worst uploaded once more.
-        let local = self.config_fingerprint().await?;
-        if trigger == RemoteSyncTrigger::AfterChange && base.is_none_or(|base| base.local == local)
-        {
-            return Ok(None);
+        // Only to skip the network: the decision below uses the snapshot read after the download.
+        if trigger == RemoteSyncTrigger::AfterChange {
+            let local = self.config_fingerprint().await?;
+            if base.is_none_or(|base| base.local == local) {
+                return Ok(None);
+            }
         }
         let document = remote.download_document().await?;
-        let package = self.export_config().await?;
+        // The package and its fingerprint from one read: a base never pairs the fingerprint of
+        // one configuration with the content of another (independent review, finding 1).
+        let (package, local) = self.export_config_with_fingerprint().await?;
         let local_content = RemoteContentHash::of(&package);
         let Some(document) = document else {
             let step = self
@@ -277,8 +339,7 @@ impl ImportExportService {
         &self,
         remote: &dyn RemoteConfigStore,
     ) -> Result<(RemoteConfigPushOutcome, RemoteSyncBase)> {
-        let local = self.config_fingerprint().await?;
-        let package = self.export_config().await?;
+        let (package, local) = self.export_config_with_fingerprint().await?;
         let raw = serde_json::to_string_pretty(&package)?;
         remote.upload_config(&raw).await?;
         let base = RemoteSyncBase { local, remote: RemoteContentHash::of(&package) };

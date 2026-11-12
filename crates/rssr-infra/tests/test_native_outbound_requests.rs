@@ -329,6 +329,8 @@ async fn webdav_conditional_upload_sends_its_precondition_and_reports_a_refusal(
     assert!(format!("{error:#}").contains("412"), "{error:#}");
 
     let requests = server.requests();
+    let encoding = requests[0].header("accept-encoding").unwrap_or_default();
+    assert!(!encoding.contains("gzip"), "no compression that would weaken the tag: {encoding}");
     assert_eq!(requests[1].header("if-match"), Some("\"v1\""));
     assert_eq!(requests[2].header("if-match"), Some("\"v0\""));
     assert_eq!(requests[3].header("if-none-match"), Some("*"));

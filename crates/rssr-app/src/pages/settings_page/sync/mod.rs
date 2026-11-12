@@ -15,14 +15,34 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
     let save_sync_facade = facade.clone();
     let clear_sync_facade = facade.clone();
     let saved = facade.saved_remote_sync();
+    let problem = facade.remote_sync_problem();
     let attention = if facade.remote_sync_needs_attention() { "invalid" } else { "idle" };
+    let clear_damaged_facade = facade.clone();
 
     rsx! {
         div { "data-layout": "settings-card", "data-section": "webdav-sync",
             div { "data-slot": "settings-card-header",
                 h2 { "data-slot": "card-title", "WebDAV 配置交换" }
             }
-            if let Some((endpoint, remote_path, status)) = saved {
+            if let Some(problem) = problem {
+                div { "data-layout": "settings-card-section", "data-section": "webdav-auto-sync",
+                    div { "data-slot": "settings-card-section-header",
+                        h3 { "data-slot": "settings-card-section-title", "自动同步" }
+                    }
+                    p { "data-slot": "page-intro", "data-state": "invalid", "data-field": "webdav-sync-status",
+                        "保存的自动同步设置无法读取：{problem}。停用后可重新记住端点。"
+                    }
+                    div { class: "inline-actions", "data-layout": "settings-card-actions",
+                        button {
+                            class: "button inline-actions__item",
+                            "data-variant": "secondary",
+                            "data-action": "clear-webdav-sync",
+                            onclick: move |_| clear_damaged_facade.clear_remote_sync(),
+                            "停用自动同步"
+                        }
+                    }
+                }
+            } else if let Some((endpoint, remote_path, status)) = saved {
                 div { "data-layout": "settings-card-section", "data-section": "webdav-auto-sync",
                     div { "data-slot": "settings-card-section-header",
                         h3 { "data-slot": "settings-card-section-title", "自动同步" }

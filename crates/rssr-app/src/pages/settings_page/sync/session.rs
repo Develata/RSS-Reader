@@ -7,6 +7,9 @@ use crate::pages::settings_page::intent::SettingsPageIntent;
 use crate::ui::{AppShellState, SettingsCommand, UiCommand, UiIntent, run_ui_command};
 use crate::{pages::settings_page::session::SettingsPageSession, status::set_status_info};
 
+/// How often the open page reads a synchronization in progress again.
+const SYNC_FOLLOW_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// WebDAV upload and download: jobs of the app (C4b item 3). They run in the shell's task, so
 /// leaving the page does not stop the wait; their results reach this page instance only, while it
 /// is open, else the shell shows them; the settings a download stored apply either way, and its
@@ -103,38 +106,29 @@ impl SettingsPageSyncSession {
         });
     }
 
-    /// Reads automatic synchronization's state (at start and on every re-read).
+    /// Reads automatic synchronization's state (at start, on every re-read, after a save of
+    /// the settings, and again while a synchronization is in progress). Its answer applies only
+    /// if no write started since (independent review, finding 6).
     pub(crate) fn load_remote_sync(self) {
-        self.run_profile_command(SettingsCommand::LoadRemoteSync);
-    }
-
-    /// Remembers the endpoint typed on the page for automatic synchronization.
-    pub(crate) fn save_remote_sync(self) {
-        let snapshot = self.snapshot();
-        self.run_profile_command(SettingsCommand::SaveRemoteSync {
-            endpoint: snapshot.endpoint,
-            remote_path: snapshot.remote_path,
-        });
-    }
-
-    /// Forgets the saved endpoint and its credentials.
-    pub(crate) fn clear_remote_sync(self) {
-        self.run_profile_command(SettingsCommand::ClearRemoteSync);
-    }
-
-    /// Runs a command about the saved endpoint while the page is open: its view updates the
-    /// card, the rest is the page's status.
-    fn run_profile_command(mut self, command: SettingsCommand) {
+        let Some(epoch) = self.state.peek().begin_profile_read() else {
+            return;
+        };
+        let mut state = self.state;
         let page = self.page;
         spawn(async move {
-            let intents = run_ui_command(UiCommand::Settings(command)).await;
+            let intents =
+                run_ui_command(UiCommand::Settings(SettingsCommand::LoadRemoteSync)).await;
             if !page.is_open() {
                 return;
             }
             for intent in intents {
                 match intent {
                     UiIntent::RemoteSyncLoaded(view) => {
-                        self.state.with_mut(|state| state.set_remote_sync(view));
+                        let applied =
+                            state.with_mut(|state| state.accept_profile_read(epoch, view));
+                        if applied {
+                            self.follow_sync_in_progress();
+                        }
                     }
                     other => {
                         if let Some(intent) = other.into_settings_page_intent() {
@@ -142,6 +136,66 @@ impl SettingsPageSyncSession {
                         }
                     }
                 }
+            }
+        });
+    }
+
+    /// Remembers the endpoint typed on the page for automatic synchronization.
+    pub(crate) fn save_remote_sync(self) {
+        let remote = self.snapshot().typed_endpoint();
+        self.write_profile(SettingsCommand::SaveRemoteSync(remote));
+    }
+
+    /// Forgets the saved endpoint and its credentials.
+    pub(crate) fn clear_remote_sync(self) {
+        self.write_profile(SettingsCommand::ClearRemoteSync);
+    }
+
+    /// Saving or forgetting the endpoint: one at a time; its view is the card's from then on.
+    fn write_profile(mut self, command: SettingsCommand) {
+        if !self.state.with_mut(|state| state.begin_profile_write()) {
+            set_status_info(
+                self.page.status_signal(),
+                self.page.status_tone_signal(),
+                "上一次 WebDAV 自动同步设置仍在处理，完成后再试。",
+            );
+            return;
+        }
+        let mut state = self.state;
+        let page = self.page;
+        spawn(async move {
+            let intents = run_ui_command(UiCommand::Settings(command)).await;
+            let mut view = None;
+            let mut rest = Vec::new();
+            for intent in intents {
+                match intent {
+                    UiIntent::RemoteSyncLoaded(loaded) => view = Some(loaded),
+                    other => rest.extend(other.into_settings_page_intent()),
+                }
+            }
+            state.with_mut(|state| state.finish_profile_write(view));
+            if !page.is_open() {
+                return;
+            }
+            for intent in rest {
+                page.dispatch(intent);
+            }
+            self.follow_sync_in_progress();
+        });
+    }
+
+    /// While a synchronization is scheduled or running, reads its state again shortly, so its
+    /// result reaches the open page (independent review, finding 7).
+    fn follow_sync_in_progress(self) {
+        let syncing = self.state.peek().remote_sync.as_ref().is_some_and(|view| view.syncing);
+        if !syncing {
+            return;
+        }
+        let page = self.page;
+        spawn(async move {
+            crate::ui::shell_browser::sleep(SYNC_FOLLOW_INTERVAL).await;
+            if page.is_open() {
+                self.load_remote_sync();
             }
         });
     }

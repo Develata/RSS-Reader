@@ -56,6 +56,12 @@ pub fn SettingsPage() -> Element {
         session.load();
         sync_session.load_remote_sync();
     });
+    // A saved change schedules a synchronization: follow it (independent review, finding 7).
+    use_reactive_task(save_session.snapshot().pending_save, move |pending| {
+        if !pending {
+            sync_session.load_remote_sync();
+        }
+    });
 
     rsx! {
         section { "data-page": "settings",

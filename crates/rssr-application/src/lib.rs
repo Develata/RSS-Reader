@@ -43,10 +43,10 @@ pub use feeds_snapshot_service::{FeedsSnapshotOutcome, FeedsSnapshotService};
 pub use import_export_service::{
     ClockPort, ConditionalUpload, ConfigImportOutcome, ImportExportService, OpmlCodecPort,
     OpmlImportOutcome, RemoteConfigDocument, RemoteConfigPullOutcome, RemoteConfigPushOutcome,
-    RemoteConfigStore, RemoteContentHash, RemoteSyncBase, RemoteSyncOutcome, RemoteSyncProfile,
-    RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport, RemoteSyncStep,
-    RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SystemClock, UploadPrecondition,
-    display_endpoint,
+    RemoteConfigStore, RemoteContentHash, RemoteEndpoint, RemoteSyncBase, RemoteSyncOutcome,
+    RemoteSyncProfile, RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport,
+    RemoteSyncStep, RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SavedRemote, SystemClock,
+    UploadPrecondition, display_endpoint,
 };
 pub use library_queries::{
     ConfigSnapshot, EntriesPage, EntriesStart, FeedsOverview, LibraryQueryPort, ReaderSnapshot,

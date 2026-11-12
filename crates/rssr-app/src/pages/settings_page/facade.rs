@@ -221,6 +221,11 @@ impl SettingsPageFacade {
             .is_some_and(|report| crate::ui::remote_sync_text::needs_attention(&report.outcome))
     }
 
+    /// Why the saved profile cannot be read, if it cannot.
+    pub(crate) fn remote_sync_problem(&self) -> Option<String> {
+        self.sync_snapshot.remote_sync.as_ref()?.problem.clone()
+    }
+
     pub(crate) fn save_remote_sync(&self) {
         self.sync.save_remote_sync();
     }
