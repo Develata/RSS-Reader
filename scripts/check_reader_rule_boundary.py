@@ -21,6 +21,7 @@ def main():
          "--message-format=json"], cwd=root, text=True, stdout=subprocess.PIPE, check=True,
     )
     libraries = {}
+    artifact_dirs = set()
     compiled = set()
     for line in build.stdout.splitlines():
         message = json.loads(line)
@@ -29,6 +30,7 @@ def main():
         name = message["target"]["name"]
         compiled.add(name)
         for filename in message["filenames"]:
+            artifact_dirs.add(str(Path(filename).parent))
             if filename.endswith(".rlib"):
                 libraries[name] = Path(filename)
     forbidden = {name for name in compiled if name.startswith(("dioxus", "web_sys", "wry", "tao"))}
@@ -41,7 +43,10 @@ def main():
                "-o", str(executable)]
     for name in required:
         command.extend(["--extern", f"{name}={libraries[name]}"])
-    for directory in sorted({str(libraries[name].parent) for name in required}):
+    # Every artifact's directory, proc-macro libraries included: since Rust 1.100 Cargo keeps
+    # each crate's artifacts in a directory of its own (target/<profile>/build/<crate>/<hash>/out),
+    # so the transitive dependencies are no longer next to the crates named above.
+    for directory in sorted(artifact_dirs):
         command.extend(["-L", f"dependency={directory}"])
     subprocess.run(command, cwd=root, check=True)
     tests = subprocess.run([str(executable)], cwd=root, text=True, stdout=subprocess.PIPE, check=True)

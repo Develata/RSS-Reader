@@ -5,6 +5,7 @@ Artifacts remain under target/release-ui-acceptance for diagnosis.
 """
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -92,8 +93,13 @@ k.FreeConsole()
 
 class Acceptance(unittest.TestCase):
     def setUp(self):
-        self.root = RUN / (self._testMethodName + " 中文 space")
+        # A short, Unicode, spaced name: the full method name pushed Cargo's build paths (one
+        # directory per crate since Rust 1.100) past Windows' 260-character limit. The name is
+        # kept beside the artifacts for diagnosis.
+        digest = hashlib.sha1(self._testMethodName.encode("utf-8")).hexdigest()[:8]
+        self.root = RUN / (digest + " 中文 space")
         self.root.mkdir()
+        (self.root / "TEST_NAME").write_text(self._testMethodName + "\n", encoding="utf-8")
         (self.root / "scripts").mkdir()
         (self.root / "scripts/run_server_web_regression.sh").touch()
         tools = self.root / "tools"
