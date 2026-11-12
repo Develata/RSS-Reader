@@ -283,8 +283,14 @@ pub(crate) mod test_support {
                 .unwrap()
                 .as_nanos();
             let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let path = std::env::temp_dir()
-                .join(format!("rssr-web-{label}-{}-{nonce}-{sequence}", std::process::id()));
+            let base = std::env::temp_dir();
+            // `AuthStore::open` refuses symlinked paths; macOS `TMPDIR` lives under the
+            // `/var -> /private/var` symlink, so start from the resolved temp directory.
+            // Unix only: on Windows `canonicalize` yields a verbatim `\\?\` path.
+            #[cfg(unix)]
+            let base = base.canonicalize().unwrap();
+            let path =
+                base.join(format!("rssr-web-{label}-{}-{nonce}-{sequence}", std::process::id()));
             std::fs::create_dir_all(&path).unwrap();
             Self(path)
         }

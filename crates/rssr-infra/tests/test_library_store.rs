@@ -951,7 +951,7 @@ fn lock_state_child() {
     // SAFETY: a valid descriptor and a valid, initialised flock.
     let result = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETLK, &mut lock) };
     assert_eq!(result, 0);
-    std::process::exit(if libc::c_int::from(lock.l_type) == libc::F_UNLCK { 10 } else { 20 });
+    std::process::exit(if lock.l_type == libc::F_UNLCK as libc::c_short { 10 } else { 20 });
 }
 
 #[cfg(unix)]

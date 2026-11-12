@@ -25,6 +25,7 @@
 | Reader 规则独立性与 PR #49 整合 | [无 Dioxus 编译、读取归属及宿主回归](./2026-10-30-reader-rule-boundary.md) |
 | Android 主题文件导入与 PR #48 整合 | [实现和实际系统选择器验收](./2026-10-30-android-theme-import.md)、[首 BOM 呈现问题的独立复现与修复](./2026-10-30-css-leading-bom-render.md) |
 | 列表密度退役、0.3.x 参数删除与 `.agents/` 清理 | [实现、兼容与实际宿主验收](./2026-10-30-density-retirement.md) |
+| macOS 本地测试 | [锁探测类型与认证库临时目录的符号链接](./2026-11-12-macos-local-tests.md) |
 | CI 算力与时长 | [纯文档跳过、wasm 契约合并、web-ui 重分配与 apt 缓存](./2026-11-12-ci-cost.md) |
 | 当前阶段、分支与文档收口 | [13 个已合并本地分支清理](./2026-10-31-local-branch-cleanup.md)、[此前分支与工作树清理](./2026-10-30-branch-consolidation.md)、[前一轮文档整合](./2026-10-29-consolidation.md)、[当前待办](../maintenance-backlog.md) |
 | 当前原生控件评估与 PR #47 整合 | [主题选择实际宿主评估](./2026-10-30-native-theme-selector-assessment.md)、[App 设置读取生命周期与 PR #46](./2026-10-30-shell-settings-lifecycle.md) |
