@@ -94,7 +94,8 @@
 
 ### 手工验收
 
-- 真实 WebDAV 服务（坚果云 / Nextcloud）的 ETag 与条件请求：未执行
+- OpenList（`openlist.develata.me`，后端百度网盘）实测：Develata 报告“测试完美成功”（2026-11-13，桌面两台模拟设备，用户名／密码分栏、固定 `rss-reader.json`）；ETag 与条件请求的具体行为未单独记录
+- 坚果云 / Nextcloud：未执行
 - 桌面 / Android / 正式 Web 界面上的记住、停用、启动提示：未执行
 
 ## 结果
