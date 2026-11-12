@@ -4951,7 +4951,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-api"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4964,7 +4964,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-app"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5003,7 +5003,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-application"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5019,7 +5019,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-cli"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5037,7 +5037,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-domain"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "serde",
@@ -5050,7 +5050,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-infra"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "ammonia",
  "anyhow",
@@ -5090,7 +5090,7 @@ dependencies = [
 
 [[package]]
 name = "rssr-web"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "argon2",
