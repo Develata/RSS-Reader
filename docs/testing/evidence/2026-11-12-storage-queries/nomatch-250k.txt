@@ -1,0 +1,4 @@
+list ('all', 'all', 'excl_auto', 'all', False) rows=0: 195.3 -> 191.7 ms
+count ('all', 'all', 'excl_auto', 'all', False) rows=0: 193.0 -> 7.8 ms
+list ('all', 'all', 'only_auto', 'all', False) rows=2001: 15.1 -> 2.9 ms
+count ('all', 'all', 'only_auto', 'all', False) rows=243853: 199.9 -> 8.2 ms

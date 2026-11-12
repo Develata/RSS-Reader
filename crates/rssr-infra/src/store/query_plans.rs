@@ -1,8 +1,10 @@
 //! Query plans the library relies on, checked against the bundled SQLite.
 //!
 //! Libraries never run `ANALYZE`, so the planner works from default estimates and an empty
-//! library is planned exactly like a large one. Each test pins a plan whose loss turns a bounded
-//! read back into a read of every entry row (measured on 50k- and 250k-entry libraries).
+//! library is planned exactly like a large one. Each test pins a plan whose loss brings back a
+//! sort of every entry for one page or a read of every entry row (measured on 50k- and
+//! 250k-entry libraries). Plans are checked on the bundled native SQLite only; the Pages build
+//! links a different SQLite and is covered by the result tests in the browser harness.
 
 use rssr_domain::{ArchiveFilter, EntryQuery, ReadFilter, StarredFilter};
 use rusqlite::{Connection, params_from_iter, types::Value};

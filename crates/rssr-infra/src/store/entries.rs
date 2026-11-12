@@ -125,16 +125,20 @@ const ACTIVE_ENTRIES: &str =
 // read / starred / archive / scope / search combination on 50k- and 250k-entry libraries.
 
 /// The order of a list over every subscription: from `entries`, so it walks
-/// `idx_entries_sort_key` and stops at its limit. Left to itself the planner starts from `feeds`
-/// and sorts every entry of every subscription for one page. A subscription scope keeps the
+/// `idx_entries_sort_key` in list order and stops once the limit is filled; when few entries
+/// match it still walks the whole index, but never sorts. Left to itself the planner starts from
+/// `feeds` and sorts every entry of every subscription for one page. A subscription scope keeps the
 /// planner's order ([`ACTIVE_ENTRIES`]): starting from those subscriptions is cheaper there, and
 /// forcing `entries` first measured several times slower for a multi-subscription scope.
 const LISTED_FROM_ENTRIES: &str =
     " FROM entries CROSS JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0";
 
 /// The order of every count: from `feeds`, so each subscription's entries are counted in
-/// `idx_entries_feed_flags` alone (covering unless a title search needs the row). Left to itself
-/// the planner often counts through a sort-key index and reads every matching entry row.
+/// `idx_entries_feed_flags` alone (covering unless a title search needs the row). A count still
+/// visits every index entry it may match, but no entry row. Left to itself the planner often
+/// counts through a sort-key index and reads every matching entry row. The cost of the fixed
+/// order: a starred-only count scans the flag index instead of the few rows the starred index
+/// finds (a few milliseconds at 250k entries).
 const COUNTED_FROM_FEEDS: &str =
     " FROM feeds CROSS JOIN entries ON entries.feed_id = feeds.id WHERE feeds.is_deleted = 0";
 
