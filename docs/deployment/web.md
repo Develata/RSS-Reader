@@ -1,6 +1,6 @@
 # Web / Docker 部署
 
-本文对应已发布的 [v0.2.2](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.2)。正式 Web 页面由匹配构建的 `rssr-web` 托管，经同源 `/api/v1` 使用服务器上的 `LocalBackend`。单独托管正式 Web 静态文件不能提供可用的阅读器；仅 [Pages 演示](./github-pages.md) 可独立静态托管。
+本文对应已发布的 [v0.2.3](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.3)。正式 Web 页面由匹配构建的 `rssr-web` 托管，经同源 `/api/v1` 使用服务器上的 `LocalBackend`。单独托管正式 Web 静态文件不能提供可用的阅读器；仅 [Pages 演示](./github-pages.md) 可独立静态托管。
 
 服务器的数据目录（容器内 `/data`）保存 `library.sqlite3`（订阅、文章、正文、已读/收藏与设置）、`auth.sqlite3`（凭据与会话）和 `outbound.json`（出站策略）。多个浏览器与同数据目录的 CLI 直接访问同一资料库；浏览器不保存文章副本。浏览器仍可保存设备偏好，以及重新加载或登录前的本标签页草稿（`sessionStorage`）。
 
@@ -68,7 +68,7 @@ docker compose up -d
 printf '%s\n' '新的强密码' | docker compose exec -T rss-reader rssr-web passwd
 ```
 
-需要固定本版时，设置 `RSS_READER_IMAGE=ghcr.io/develata/rss-reader:v0.2.2`。该镜像复用 v0.2.2 发布流程中经容器验收的 Linux 服务包；`latest` 会随主线镜像构建或后续发布变化。公开附件与镜像的本次核对结果见 [发布记录](../handoffs/2026-11-02-v0.2.2-release.md)。从 v0.2.0 升级服务器前应停止服务并备份资料库；回退到旧程序时需恢复升级前备份。
+需要固定本版时，设置 `RSS_READER_IMAGE=ghcr.io/develata/rss-reader:v0.2.3`。该镜像复用 v0.2.3 发布流程中经容器验收的 Linux 服务包；`latest` 会随主线镜像构建或后续发布变化。公开附件与镜像的本次核对结果见 [发布记录](../handoffs/2026-11-12-v0.2.3-release.md)。从 v0.2.0 升级服务器前应停止服务并备份资料库；回退到旧程序时需恢复升级前备份。
 
 ## 会话与退出登录
 
