@@ -64,6 +64,8 @@ CLI 可以用 `cargo binstall --git https://github.com/Develata/RSS-Reader rssr-
   - `--manifest-path` dry-run，`--targets` 依次为 aarch64-apple-darwin、x86_64-apple-darwin、x86_64-unknown-linux-gnu、x86_64-pc-windows-msvc：四个都找到附件并解析出 `rssr-cli` / `rssr-cli.exe`。
   - 对照：版本 0.1.0 时下载的是 v0.1.0 附件（见上）。
   - 仓库 scratch clone 加同样改动后，`cargo binstall --git file://<clone> rssr-cli --disable-strategies compile` 真实安装，`rssr-cli --version` 输出 `rssr 0.2.2`；macOS 上直接运行，未被 Gatekeeper 拦截。
+- 提交后在本机仓库运行 `cargo binstall --git file:///…/RSS-Reader rssr-cli --disable-strategies compile`（HEAD 为本分支）：下载 `releases/download/v0.2.2/rssr-cli-macos-aarch64.tar.gz`，安装后 `--version` 为 `rssr 0.2.2`。
+- 目标设为 `--targets x86_64-unknown-linux-musl` 时请求的是 `rssr-cli-linux-x86_64-musl.tar.gz`；该附件不存在，在禁用编译的情况下报 “Fallback to cargo-install is disabled”，没有拿到 glibc 构建。
 - `check-version` 的脚本在本机以 `RELEASE_TAG=v0.2.2` 运行通过；`RELEASE_TAG=v0.2.3` 时列出七个 crate 并以 1 退出。
 
 ## 结果
