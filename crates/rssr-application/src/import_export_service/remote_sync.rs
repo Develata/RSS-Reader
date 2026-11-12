@@ -19,6 +19,10 @@ use super::{
     RemoteConfigStore, UploadPrecondition,
 };
 
+/// The configuration's file in the WebDAV folder the endpoint names: the settings page and the
+/// CLI use only this name, so every device of one endpoint shares one file (decided 2026-11-13).
+pub const REMOTE_CONFIG_FILE: &str = "rss-reader.json";
+
 /// Where an upload or a download goes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

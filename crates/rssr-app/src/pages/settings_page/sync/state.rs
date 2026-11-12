@@ -8,7 +8,6 @@ pub(crate) struct SettingsPageSyncState {
     pub(crate) password: String,
     /// The password field shows its text (the eye toggle); session-only.
     pub(crate) password_visible: bool,
-    pub(crate) remote_path: String,
     pub(crate) pending_remote_pull: bool,
     /// Automatic synchronization as last read; `None` before the first read.
     pub(crate) remote_sync: Option<RemoteSyncView>,
@@ -30,7 +29,6 @@ impl std::fmt::Debug for SettingsPageSyncState {
             .field("username", &self.username)
             .field("password", &(!self.password.is_empty()).then_some("<redacted>"))
             .field("password_visible", &self.password_visible)
-            .field("remote_path", &self.remote_path)
             .field("pending_remote_pull", &self.pending_remote_pull)
             .field("remote_sync", &self.remote_sync)
             .field("profile_write_pending", &self.profile_write_pending)
@@ -47,7 +45,6 @@ impl SettingsPageSyncState {
             username: String::new(),
             password: String::new(),
             password_visible: false,
-            remote_path: "config/rss-reader.json".to_string(),
             pending_remote_pull: false,
             remote_sync: None,
             profile_write_pending: false,
@@ -135,7 +132,11 @@ impl SettingsPageSyncState {
             &self.username,
             &self.password,
         )?;
-        Ok(RemoteEndpoint { endpoint, remote_path: self.remote_path.clone() })
+        // One file per endpoint folder, whatever the device (decided 2026-11-13).
+        Ok(RemoteEndpoint {
+            endpoint,
+            remote_path: rssr_application::REMOTE_CONFIG_FILE.to_owned(),
+        })
     }
 
     pub(crate) fn set_username(&mut self, username: String) {
@@ -167,11 +168,6 @@ impl SettingsPageSyncState {
         self.pending_remote_pull = false;
     }
 
-    pub(crate) fn set_remote_path(&mut self, remote_path: String) {
-        self.remote_path = remote_path;
-        self.pending_remote_pull = false;
-    }
-
     pub(crate) fn request_remote_pull_confirmation(&mut self) -> bool {
         if self.pending_remote_pull {
             return false;
@@ -198,17 +194,6 @@ mod tests {
         state.set_endpoint("https://dav.example.com/base/".to_string());
 
         assert_eq!(state.endpoint, "https://dav.example.com/base/");
-        assert!(!state.pending_remote_pull);
-    }
-
-    #[test]
-    fn remote_path_change_clears_pending_remote_pull() {
-        let mut state = SettingsPageSyncState::new();
-        state.pending_remote_pull = true;
-
-        state.set_remote_path("other/config.json".to_string());
-
-        assert_eq!(state.remote_path, "other/config.json");
         assert!(!state.pending_remote_pull);
     }
 
@@ -316,7 +301,9 @@ mod tests {
         state.pending_remote_pull = true;
         state.set_username("Develata".into());
         assert!(!state.pending_remote_pull, "other credentials: confirm again");
-        let endpoint = state.typed_endpoint().unwrap().endpoint;
+        let typed = state.typed_endpoint().unwrap();
+        assert_eq!(typed.remote_path, "rss-reader.json", "one file per endpoint folder");
+        let endpoint = typed.endpoint;
         let url = url::Url::parse(&endpoint).unwrap();
         // Every character but letters and digits encoded, `%` included (the decoding that gives
         // the password back is the WebDAV client's, tested there).

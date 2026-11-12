@@ -190,14 +190,6 @@ impl SettingsPageFacade {
         self.sync.toggle_password_visible();
     }
 
-    pub(crate) fn remote_path(&self) -> &str {
-        &self.sync_snapshot.remote_path
-    }
-
-    pub(crate) fn set_remote_path(&self, remote_path: String) {
-        self.sync.set_remote_path(remote_path);
-    }
-
     pub(crate) fn is_remote_pull_pending(&self) -> bool {
         self.sync_snapshot.pending_remote_pull
     }
@@ -223,16 +215,15 @@ impl SettingsPageFacade {
         self.sync_snapshot.remote_sync.as_ref().is_some_and(|view| view.available)
     }
 
-    /// The saved endpoint (without its password), its path, and the line about the last
-    /// synchronization.
-    pub(crate) fn saved_remote_sync(&self) -> Option<(String, String, String)> {
+    /// The saved endpoint (without its password) and the line about the last synchronization.
+    pub(crate) fn saved_remote_sync(&self) -> Option<(String, String)> {
         let profile = self.sync_snapshot.remote_sync.as_ref()?.profile.as_ref()?;
         let status = match &profile.last_report {
             Some(report) => crate::ui::remote_sync_text::report_text(report),
             None if profile.has_base => String::new(),
             None => "尚未同步：请先手动上传或下载一次，之后会自动同步。".to_string(),
         };
-        Some((profile.endpoint.clone(), profile.remote_path.clone(), status))
+        Some((profile.endpoint.clone(), status))
     }
 
     /// Whether the last synchronization needs the user (choose a direction, or it failed).

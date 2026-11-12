@@ -38,7 +38,6 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
     let password_facade = facade.clone();
     let toggle_password_facade = facade.clone();
     let password_visible = facade.is_password_visible();
-    let remote_path_facade = facade.clone();
     let push_facade = facade.clone();
     let save_sync_facade = facade.clone();
     let clear_sync_facade = facade.clone();
@@ -70,13 +69,13 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                         }
                     }
                 }
-            } else if let Some((endpoint, remote_path, status)) = saved {
+            } else if let Some((endpoint, status)) = saved {
                 div { "data-layout": "settings-card-section", "data-section": "webdav-auto-sync",
                     div { "data-slot": "settings-card-section-header",
                         h3 { "data-slot": "settings-card-section-title", "自动同步" }
                     }
                     p { "data-slot": "page-intro", "data-field": "webdav-saved-endpoint",
-                        "已记住 {endpoint} · {remote_path}。启动后和修改配置后自动同步；两边都改过时不会自动处理，需要手动上传或下载。"
+                        "已记住 {endpoint}。启动后和修改配置后自动同步；两边都改过时不会自动处理，需要手动上传或下载。"
                     }
                     if !status.is_empty() {
                         p {
@@ -102,7 +101,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                         h3 { "data-slot": "settings-card-section-title", "远端配置端点" }
                     }
                     div { "data-layout": "settings-form-grid",
-                        div { "data-slot": "settings-form-grid-item",
+                        div { "data-slot": "settings-form-grid-item", "data-span": "full",
                             label { class: "field-label", r#for: "settings-webdav-endpoint", "Endpoint" }
                             input {
                                 id: "settings-webdav-endpoint",
@@ -114,19 +113,7 @@ pub(crate) fn WebDavSettingsCard(facade: SettingsPageFacade) -> Element {
                                 oninput: move |event| endpoint_facade.set_endpoint(event.value())
                             }
                             p { "data-slot": "page-intro",
-                                "Endpoint 只填地址；需要登录的 WebDAV 服务，在下面填写用户名和密码，任何字符都不必转义。不记住时只保存在当前会话；记住后以明文保存在本机数据目录（自托管 Web 为服务器数据目录），不会写入配置包。"
-                            }
-                        }
-                        div { "data-slot": "settings-form-grid-item",
-                            label { class: "field-label", r#for: "settings-webdav-remote-path", "Remote Path" }
-                            input {
-                                id: "settings-webdav-remote-path",
-                                name: "webdav_remote_path",
-                                class: "text-input",
-                                "data-field": "webdav-remote-path",
-                                value: "{facade.remote_path()}",
-                                placeholder: "config/rss-reader.json",
-                                oninput: move |event| remote_path_facade.set_remote_path(event.value())
+                                "Endpoint 只填文件夹地址，配置保存为其中的 rss-reader.json；需要登录的 WebDAV 服务，在下面填写用户名和密码，任何字符都不必转义。不记住时只保存在当前会话；记住后以明文保存在本机数据目录（自托管 Web 为服务器数据目录），不会写入配置包。"
                             }
                         }
                         div { "data-slot": "settings-form-grid-item",

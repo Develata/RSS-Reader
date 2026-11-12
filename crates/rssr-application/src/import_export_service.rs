@@ -4,9 +4,9 @@ mod rules;
 mod tests;
 
 pub use remote_sync::{
-    RemoteContentHash, RemoteEndpoint, RemoteSyncBase, RemoteSyncOutcome, RemoteSyncProfile,
-    RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport, RemoteSyncStep,
-    RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SavedRemote, display_endpoint,
+    REMOTE_CONFIG_FILE, RemoteContentHash, RemoteEndpoint, RemoteSyncBase, RemoteSyncOutcome,
+    RemoteSyncProfile, RemoteSyncProfileStore, RemoteSyncProfileView, RemoteSyncReport,
+    RemoteSyncStep, RemoteSyncTrigger, RemoteSyncView, RemoteTarget, SavedRemote, display_endpoint,
     endpoint_with_credentials,
 };
 

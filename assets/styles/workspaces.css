@@ -138,6 +138,10 @@
   min-width: 0;
 }
 
+[data-slot="settings-form-grid-item"][data-span="full"] {
+  grid-column: 1 / -1;
+}
+
 [data-layout="exchange-card-actions"] {
   margin-top: 12px;
 }

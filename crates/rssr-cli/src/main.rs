@@ -155,6 +155,8 @@ struct ReadInputArgs {
 #[derive(Args, Debug)]
 struct WebDavArgs {
     endpoint: String,
+    /// The file in the endpoint's folder; the app always uses `rss-reader.json`.
+    #[arg(default_value = rssr_application::REMOTE_CONFIG_FILE)]
     remote_path: String,
 }
 

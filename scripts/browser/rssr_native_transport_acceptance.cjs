@@ -132,7 +132,7 @@ async function eventually(read, expected, label) {
       'refresh-interval': String(original.refresh_interval_minutes), 'archive-after-months': String(original.archive_after_months),
       'entries-page-size': String(original.entries_page_size), 'reader-font-scale': String(original.reader_font_scale),
       'custom-css': normalize(css),
-      'webdav-endpoint': '', 'webdav-remote-path': 'config/rss-reader.json',
+      'webdav-endpoint': '', 'webdav-username': '', 'webdav-password': '',
     });
     const apply = async raw => {
       const css = normalize(raw);

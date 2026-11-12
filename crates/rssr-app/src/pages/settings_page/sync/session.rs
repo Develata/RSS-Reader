@@ -41,10 +41,6 @@ impl SettingsPageSyncSession {
         self.state.with_mut(|state| state.set_endpoint(endpoint));
     }
 
-    pub(crate) fn set_remote_path(mut self, remote_path: String) {
-        self.state.with_mut(|state| state.set_remote_path(remote_path));
-    }
-
     pub(crate) fn set_username(mut self, username: String) {
         self.state.with_mut(|state| state.set_username(username));
     }

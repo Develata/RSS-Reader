@@ -282,7 +282,8 @@ Reader 的操作成功信息保留在 `sr-only` live region 中，由按钮状�
 - `data-field="webdav-endpoint"`
 - `data-field="webdav-username"`
 - `data-field="webdav-password"`：默认 `type="password"`，切换显示时为 `type="text"`
-- `data-field="webdav-remote-path"`
+- `[data-slot="settings-form-grid-item"][data-span="full"]`：占满设置表单两列（WebDAV 的 Endpoint）
+- `data-field="webdav-remote-path"`（2026-11-13 退役：配置固定为 Endpoint 文件夹里的 `rss-reader.json`）
 - `data-field="webdav-saved-endpoint"`：已记住的端点（不含密码）
 - `data-field="webdav-sync-status"`：最近一次同步结果；需要处理时 `data-state="invalid"`
 
