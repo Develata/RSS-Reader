@@ -44,7 +44,7 @@ macOS 桌面端里 Cmd+C / V / X / Z / A 和 Cmd+Q / W / M / H 都不起作用�
 - `cargo clippy -p rssr-app --all-targets --locked -- -D warnings`：通过
 - `cargo test -p rssr-app --locked`：通过（409 + 37 + 18 + 7 + 5 + 1，1 ignored）
 - 启动冒烟：在隔离的 `HOME` 下运行 `target/debug/rssr-app` 12 秒。资料库正常打开，没有 panic，也没有菜单 warn。进程最后被 SIGALRM 结束，所以留下的 `-wal` 不能作为 Cmd+Q 的证据。
-- 未执行：wasm32 / Android / Windows / Linux target 检查。本机只装了 `aarch64-apple-darwin`。改动全部在桌面 `main` 的 cfg 之内，非 macOS 分支只是返回 `None`，交给 CI 覆盖。
+- 本机未跑 wasm32 / Android / Windows / Linux 目标检查，本机只装了 `aarch64-apple-darwin`。这些由 PR #72 的 CI 覆盖：17 项检查中 16 项通过、1 项跳过（deploy），其中包括 release-ui-runner（Windows、Ubuntu）、android-smoke、wasm-browser-contract、web-smoke 和 web-ui。
 
 ### macOS 虚拟机按键验收
 
