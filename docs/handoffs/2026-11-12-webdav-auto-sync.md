@@ -5,8 +5,8 @@
 - 分支：`claude/webdav-auto-sync`
 - 当前 HEAD：见分支
 - 相关 commit：`fcd356fa`（实现）、`b39e3729`（交接）、`dfebd297`（首轮评审修复）、复审修复见下一提交
-- 相关 tag / release：N/A
-- 状态：`validated`（自动化验证；真实网盘与界面手工验收未做）
+- 相关 tag / release：`v0.2.4`
+- 状态：`released`（PR [#74](https://github.com/Develata/RSS-Reader/pull/74)，随 v0.2.4 发布；真实网盘只在 OpenList 上验收，界面手工验收未做）
 
 ## 工作摘要
 
@@ -59,7 +59,7 @@
 | 2 未保存端点的手动操作绕过锁 | 成立 | 两种目标都进同一把锁 |
 | 3 下载确认未绑定档案身份 | 成立 | `RemoteTarget::Saved` 携带页面看到的端点与路径，锁内比对不符即冲突；页面在端点变化时取消确认 |
 | 4 `Debug` 输出密码 | 成立 | `RemoteEndpoint` / `RemoteSyncProfile` 自定义 `Debug`；`SaveRemoteSync`、`SettingsCommand` 改用 `RemoteEndpoint` |
-| 5 无强 ETag 时有覆盖窗口 | 成立，属规格取舍 | 不声明 gzip（避免代理把强 ETag 变弱）；规格与指南写明限制；是否停用无强 ETag 时的自动上传留给 Develata 决定 |
+| 5 无强 ETag 时有覆盖窗口 | 成立，属规格取舍 | 不声明 gzip（避免代理把强 ETag 变弱）；规格与指南写明限制；是否停用无强 ETag 时的自动上传留给 Develata 决定（2026-11-13：不停用，见下方“风险与后续事项”） |
 | 6 旧读取覆盖新写入后的卡片 | 成立 | 页面档案读写分代：写一次一个，写开始后旧读取作废 |
 | 7 修改后同步结果不回到打开的页面 | 成立 | 视图带 `syncing`；页面保存设置后读一次，进行中每 2 秒再读 |
 | 8 档案损坏时无法停用 | 成立 | 视图带 `problem`，卡片显示原因并提供停用 |
@@ -108,7 +108,7 @@
 
 ## 风险与后续事项
 
-- 服务器不返回强 ETag 时，从读取远端到上传完成之间另一设备的上传可能被覆盖；返回强 ETag 的服务器会识别为冲突。是否在此时停用自动上传，待 Develata 在真实网盘验收后决定。
+- 服务器不返回强 ETag，或不执行 `If-Match` / `If-None-Match` 时，从读取远端到上传完成之间另一设备的上传可能被覆盖。原先写的“返回强 ETag 的服务器会识别为冲突”不准确：2026-11-13 核对源码，golang.org/x/net/webdav 与 OpenList 的 PUT 都不执行这两个条件头（TODO），已在设计、指南与 v0.2.4 发布说明中更正。2026-11-13 Develata 采纳建议：不因缺少强 ETag 停用自动上传，理由见[设计](../design/webdav-auto-sync.md)“已知限制”。
 - 凭据明文保存（Develata 决定）；以后可换系统钥匙串，档案接口不变。
 - 同一数据目录只应由一个带档案的进程使用（桌面与服务器不要共用数据目录）。
 - 下一步：“备份 / 恢复”入口单独写设计文档，第一步做本地整库文件导出与恢复（GUI + `rssr-cli restore`）。

@@ -5,8 +5,8 @@
 - 分支：`claude/storage-linear-queries`（基于 `origin/main` `7d60a59c`）
 - 当前 HEAD：见分支
 - 相关 commit：`b011acb1`（实现）及其后的评审修正提交
-- 相关 tag / release：N/A（未发布）
-- 状态：`validated`（PR [#73](https://github.com/Develata/RSS-Reader/pull/73)，CI 通过，未合并）
+- 相关 tag / release：`v0.2.4`
+- 状态：`released`（PR [#73](https://github.com/Develata/RSS-Reader/pull/73) 已合并，随 v0.2.4 发布）
 
 ## 工作摘要
 

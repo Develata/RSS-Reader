@@ -5,7 +5,7 @@
 - 分支：claude/macos-shortcut-compat-e1c799
 - 当前 HEAD：20521b8f（改动前）
 - 相关 commit：341bb388
-- 相关 tag / release：N/A
+- 相关 tag / release：`v0.2.4`（PR [#72](https://github.com/Develata/RSS-Reader/pull/72)）
 - 状态：`validated`（macOS 虚拟机里修复前复现、修复后通过）
 
 ## 工作摘要
