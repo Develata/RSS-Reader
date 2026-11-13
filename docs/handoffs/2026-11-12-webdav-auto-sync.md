@@ -47,7 +47,7 @@
 
 - WebDAV 状态画板：08 页新增 6 张（已记住、需要处理、显示密码、档案无法读取；手机 2 张），rev 498，命名版本 `WebDAV state boards · 012ee973 · 2026-11-13`。采集中发现并修复：需要处理时结果行虽带 `data-state="invalid"` 却无样式（新增 `[data-field="webdav-sync-status"][data-state="invalid"]` 用 `--status-error-fg`；数值提示同名属性一直无样式，未改动）；档案无法读取的提示去掉重复的后半句。网络失败的结果行显示原始连接错误文本（如 `Connection refused (os error 61)`），未改。
 
-- CI 于 2026-11-12 起用 rustc 1.100.0（2026-11-09 发布；此前 main 绿灯为 1.99.1）。1.100 的 Cargo 把每个 crate 的产物放进各自的 `target/<profile>/build/<crate>/<hash>/out`：两份规则边界脚本只给三个直接依赖加 `-L`，过程宏（`serde_derive` 等）与传递依赖找不到；Windows 发布 UI 验收的测试目录名太长，链接路径正好 260 字符（`LNK1104`）。修复：脚本对 Cargo 报告的每个产物目录加 `-L`（1.100.0 与 1.99.1 下两份脚本本地均通过）；验收测试目录改为“方法名哈希 8 位 + ` 中文 space`”，全名写入 `TEST_NAME`（macOS 本地 27 项中 26 项通过，余下 1 项 web-auth 进程回收超时在未改动的版本上同样失败，属既有问题；Windows 待 CI 验证）。这是工具链变化，main 下次运行也会遇到。
+- CI 于 2026-11-12 起用 rustc 1.100.0（2026-11-09 发布；此前 main 绿灯为 1.99.1）。1.100 的 Cargo 把每个 crate 的产物放进各自的 `target/<profile>/build/<crate>/<hash>/out`：两份规则边界脚本只给三个直接依赖加 `-L`，过程宏（`serde_derive` 等）与传递依赖找不到；Windows 发布 UI 验收的测试目录名太长，链接路径正好 260 字符（`LNK1104`）。修复：脚本对 Cargo 报告的每个产物目录加 `-L`（1.100.0 与 1.99.1 下两份脚本本地均通过）；验收测试目录改为“方法名哈希 8 位 + ` 中文 space`”，全名写入 `TEST_NAME`（macOS 本地 27 项中 26 项通过，余下 1 项 web-auth 进程回收超时在未改动的版本上同样失败，属既有问题；Windows 由 CI 在 8db81c3d 验证通过，`release-ui-runner (windows-latest)` 绿灯）。这是工具链变化，main 下次运行也会遇到。
 
 ## 独立评审（Codex，第一轮，`fcd356fa`）
 
