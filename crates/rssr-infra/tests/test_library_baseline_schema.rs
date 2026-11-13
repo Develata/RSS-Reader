@@ -132,7 +132,7 @@ async fn indexes_and_triggers_differ_only_by_the_decided_changes() {
             "index idx_entry_contents_updated_at ON entry_contents",
             "trigger entries_title_search_stale ON entries",
         ],
-        &[],
+        &["index idx_entries_feed_flags ON entries"],
     );
 }
 

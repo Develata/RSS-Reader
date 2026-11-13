@@ -23,9 +23,9 @@ use super::executor::LibraryStore;
 const SORT_KEY: &str = "COALESCE(entries.published_at, entries.created_at)";
 
 /// SQL text plus its positional parameters (`?` placeholders, in order).
-struct Filtered {
-    sql: String,
-    params: Vec<Value>,
+pub(super) struct Filtered {
+    pub(super) sql: String,
+    pub(super) params: Vec<Value>,
 }
 
 impl Filtered {
@@ -87,14 +87,14 @@ impl Filtered {
                 self.push(" AND entries.is_archived = 1");
             }
             ArchiveFilter::ExcludeArchived { cutoff } => {
-                self.push(" AND entries.is_archived = 0 AND (entries.published_at IS NULL OR entries.published_at >= ")
-                    .bind(format_time(cutoff)?)
-                    .push(")");
+                self.push(" AND ").not_archived(cutoff)?;
             }
+            // The exact complement (`is_archived` is 0 or 1, never NULL), written as a negation
+            // rather than `is_archived = 1 OR published_at < cutoff`: SQLite can split that OR
+            // into a union of index scans, which next to `idx_entries_feed_flags` it chose for
+            // some read / starred / multi-feed combinations at several times the cost.
             ArchiveFilter::OnlyArchived { cutoff } => {
-                self.push(" AND (entries.is_archived = 1 OR (entries.published_at IS NOT NULL AND entries.published_at < ")
-                    .bind(format_time(cutoff)?)
-                    .push("))");
+                self.push(" AND NOT (").not_archived(cutoff)?.push(")");
             }
         }
         // Literal substring of the folded title (`%` and `_` are not wildcards), matching the
@@ -106,10 +106,49 @@ impl Filtered {
         }
         Ok(self)
     }
+
+    /// Neither manually archived nor published before `cutoff` (an undated entry never ages).
+    fn not_archived(&mut self, cutoff: time::OffsetDateTime) -> StoreResult<&mut Self> {
+        Ok(self
+            .push("entries.is_archived = 0 AND (entries.published_at IS NULL OR entries.published_at >= ")
+            .bind(format_time(cutoff)?)
+            .push(")"))
+    }
 }
 
 const ACTIVE_ENTRIES: &str =
     " FROM entries JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0";
+
+// The library runs no `ANALYZE`, so the planner picks join orders from default estimates. Lists
+// and counts fix theirs with `CROSS JOIN`, SQLite's documented way to keep the left table as the
+// outer loop; the result is the same inner join. The orders below were chosen by timing every
+// read / starred / archive / scope / search combination on 50k- and 250k-entry libraries.
+
+/// The order of a list over every subscription: from `entries`, so it walks
+/// `idx_entries_sort_key` in list order and stops once the limit is filled; when few entries
+/// match it still walks the whole index, but never sorts. Left to itself the planner starts from
+/// `feeds` and sorts every entry of every subscription for one page. A subscription scope keeps the
+/// planner's order ([`ACTIVE_ENTRIES`]): starting from those subscriptions is cheaper there, and
+/// forcing `entries` first measured several times slower for a multi-subscription scope.
+const LISTED_FROM_ENTRIES: &str =
+    " FROM entries CROSS JOIN feeds ON feeds.id = entries.feed_id WHERE feeds.is_deleted = 0";
+
+/// The order of every count: from `feeds`, so each subscription's entries are counted in
+/// `idx_entries_feed_flags` alone (covering unless a title search needs the row). A count still
+/// visits every index entry it may match, but no entry row. Left to itself the planner often
+/// counts through a sort-key index and reads every matching entry row. The cost of the fixed
+/// order: a starred-only count scans the flag index instead of the few rows the starred index
+/// finds (a few milliseconds at 250k entries).
+const COUNTED_FROM_FEEDS: &str =
+    " FROM feeds CROSS JOIN entries ON entries.feed_id = feeds.id WHERE feeds.is_deleted = 0";
+
+fn listed_entries(query: &EntryQuery) -> &'static str {
+    if query.feed_id.is_none() && query.feed_ids.is_none() {
+        LISTED_FROM_ENTRIES
+    } else {
+        ACTIVE_ENTRIES
+    }
+}
 
 /// `expression` (text) as a list shows it: the `listed_title` function of every library
 /// connection (`connection::configure`), which runs `rssr_domain::listed_title` on the stored
@@ -118,21 +157,32 @@ pub(crate) fn listed_title_sql(expression: &str) -> String {
     format!("listed_title({expression})")
 }
 
-pub(crate) fn list_entries(
-    conn: &Connection,
-    query: &EntryQuery,
-) -> StoreResult<Vec<EntrySummary>> {
+pub(super) fn list_statement(query: &EntryQuery) -> StoreResult<Filtered> {
     let mut sql = Filtered::new(&format!(
         "SELECT entries.id, entries.feed_id, {}, {},
                 entries.published_at, entries.is_read, entries.is_starred",
         listed_title_sql("entries.title"),
         listed_title_sql("COALESCE(feeds.custom_title, feeds.title, feeds.url)"),
     ));
-    sql.push(ACTIVE_ENTRIES).entry_filters(query)?;
+    sql.push(listed_entries(query)).entry_filters(query)?;
     sql.push(" ORDER BY ").push(SORT_KEY).push(" DESC, entries.id DESC");
     if let Some(limit) = query.limit {
         sql.push(" LIMIT ").bind(i64::from(limit));
     }
+    Ok(sql)
+}
+
+pub(super) fn count_statement(query: &EntryQuery) -> StoreResult<Filtered> {
+    let mut sql = Filtered::new("SELECT COUNT(*)");
+    sql.push(COUNTED_FROM_FEEDS).entry_filters(query)?;
+    Ok(sql)
+}
+
+pub(crate) fn list_entries(
+    conn: &Connection,
+    query: &EntryQuery,
+) -> StoreResult<Vec<EntrySummary>> {
+    let sql = list_statement(query)?;
     let mut statement = conn.prepare_cached(&sql.sql)?;
     let mut rows = statement.query(params_from_iter(&sql.params))?;
     let mut entries = Vec::new();
@@ -151,8 +201,7 @@ pub(crate) fn list_entries(
 }
 
 pub(crate) fn count_entries(conn: &Connection, query: &EntryQuery) -> StoreResult<u64> {
-    let mut sql = Filtered::new("SELECT COUNT(*)");
-    sql.push(ACTIVE_ENTRIES).entry_filters(query)?;
+    let sql = count_statement(query)?;
     let count: i64 = conn
         .prepare_cached(&sql.sql)?
         .query_row(params_from_iter(&sql.params), |row| row.get(0))?;

@@ -235,9 +235,10 @@ pub(crate) fn config_fingerprint(conn: &Connection) -> StoreResult<ConfigFingerp
     Ok(fingerprint_of(&config_rows(conn)?, &settings))
 }
 
-pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>> {
+/// Unread and total counts read `idx_entries_feed_flags` (covering), not every entry row.
+pub(super) fn summaries_sql() -> String {
     // Ordered by the whole title, shown cut (`rssr_domain::listed_title`), as in the browser.
-    let mut statement = conn.prepare_cached(&format!(
+    format!(
         "SELECT feeds.id,
                 {},
                 feeds.url,
@@ -253,7 +254,11 @@ pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>>
          GROUP BY feeds.id
          ORDER BY COALESCE(feeds.custom_title, feeds.title, feeds.url) ASC",
         super::entries::listed_title_sql("COALESCE(feeds.custom_title, feeds.title, feeds.url)"),
-    ))?;
+    )
+}
+
+pub(crate) fn list_summaries(conn: &Connection) -> StoreResult<Vec<FeedSummary>> {
+    let mut statement = conn.prepare_cached(&summaries_sql())?;
     let mut rows = statement.query([])?;
     let mut summaries = Vec::new();
     while let Some(row) = rows.next()? {

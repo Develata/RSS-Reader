@@ -6,6 +6,7 @@
 
 | 主题 | 优先阅读 |
 | --- | --- |
+| 文章列表、归档计数与订阅摘要的查询计划 | [迁移 0003 覆盖索引、固定连接顺序与全组合测量](./2026-11-12-storage-linear-queries.md) |
 | 内置主题收敛与「外观」 | [默认主题并入 Midnight 深色、Amethyst 补全、三套预设下线](./2026-11-02-two-complete-themes.md) |
 | Linux 滚轮失效与滚动卡顿 | [根元素 overscroll、主题光晕与 WebKitGTK 平滑滚动](./2026-11-02-linux-wheel-scroll-lag.md) |
 | Settings 主题导入与预览宿主入口 | [只读评估：无实际复用阻碍，未改代码](./2026-11-02-settings-theme-host-assessment.md) |

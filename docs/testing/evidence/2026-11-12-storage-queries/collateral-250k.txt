@@ -1,0 +1,28 @@
+same    nav current: SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?)
+same    nav prev unread: SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?)
+same    nav next unread: SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?)
+same    nav prev feed: SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | SEARCH entries USING COVERING INDEX idx_entries_feed_sort_key (feed_id=?)
+same    nav next feed: SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | SEARCH entries USING COVERING INDEX idx_entries_feed_sort_key (feed_id=?)
+same    unread_selection all: SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | SEARCH feeds USING INTEGER PRIMARY KEY (rowid=?) | USE TEMP B-TREE FOR ORDER BY
+CHANGED unread_selection feed: 18.41 -> 0.03 ms
+   old SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | USE TEMP B-TREE FOR ORDER BY
+   new SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | SEARCH entries USING COVERING INDEX cand_w (feed_id=? AND is_read=?) | USE TEMP B-TREE FOR ORDER BY
+same    unread_selection excl_auto: SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | SEARCH feeds USING INTEGER PRIMARY KEY (rowid=?) | USE TEMP B-TREE FOR ORDER BY
+same    unread_selection only_auto(not): SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | USE TEMP B-TREE FOR ORDER BY
+CHANGED mark_read UPDATE feed: 23.35 -> 5.44 ms
+   old SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | LIST SUBQUERY 1 | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?)
+   new SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | LIST SUBQUERY 1 | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?) | SEARCH entries USING COVERING INDEX cand_w (feed_id=? AND is_read=?)
+same    mark_read UPDATE excl_auto: SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | LIST SUBQUERY 1 | SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=? AND rowid=?)
+same    batch mark read: SEARCH entries USING INDEX idx_entries_unread_sort_key (is_read=?) | LIST SUBQUERY 1 | SCAN json_each VIRTUAL TABLE INDEX 1: | CREATE BLOOM FILTER | LIST SUBQUERY 2 | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=?) | CREATE BLOOM FILTER
+same    batch archive: SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | LIST SUBQUERY 1 | SCAN json_each VIRTUAL TABLE INDEX 1: | LIST SUBQUERY 2 | SEARCH feeds USING COVERING INDEX idx_feeds_is_deleted (is_deleted=?) | CREATE BLOOM FILTER
+same    has_entries: SCAN CONSTANT ROW | SCALAR SUBQUERY 1 | SEARCH entries USING COVERING INDEX idx_entries_feed_sort_key (feed_id=?)
+same    entry_count(feed): SEARCH entries USING COVERING INDEX idx_entries_feed_sort_key (feed_id=?)
+same    promote exists: SCAN CONSTANT ROW | SCALAR SUBQUERY 1 | MULTI-INDEX OR | INDEX 1 | SEARCH entries USING INDEX idx_entries_feed_external (feed_id=? AND external_id=?) | INDEX 2 | SEARCH entries USING INDEX idx_entries_feed_dedup (feed_id=? AND dedup_key=?)
+same    promote update: SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | SCALAR SUBQUERY 1 | SEARCH entries USING INDEX idx_entries_feed_dedup (feed_id=? AND dedup_key=?)
+same    active_entry_generation: SEARCH entries USING INTEGER PRIMARY KEY (rowid=?) | SEARCH feeds USING INTEGER PRIMARY KEY (rowid=?)
+same    body_for_localization: SEARCH f USING INTEGER PRIMARY KEY (rowid=?) | SEARCH e USING COVERING INDEX idx_entries_feed_dedup (feed_id=? AND dedup_key=?) | SEARCH c USING INTEGER PRIMARY KEY (rowid=?)
+same    delete feed entries: SEARCH entries USING INDEX idx_entries_feed_sort_key (feed_id=?)
+write base: upsert 120 rows 9.39 ms, mark 2000 read 22.79 ms
+write w: upsert 120 rows 10.99 ms, mark 2000 read 35.99 ms
+CREATE INDEX at 250k: 384 ms
+file size: 293478400 bytes; with index: 301854720 bytes

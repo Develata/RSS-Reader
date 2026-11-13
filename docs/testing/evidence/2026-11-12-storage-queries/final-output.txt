@@ -1,0 +1,34 @@
+##### 50k
+[list] total 3756 -> 2914 ms over 270 shapes; median 3.7 -> 3.2 ms; >1 ms slower: 5, >1 ms faster: 66
+   worst +1.6 ms ('all', 'all', 'excl_auto', 'all', True): 33.7 -> 35.3
+   worst +2.2 ms ('all', 'unstarred', 'all', 'all', True): 43.7 -> 45.9
+   worst +2.5 ms ('all', 'all', 'only_manual', 'all', False): 35.1 -> 37.6
+[count] total 3858 -> 547 ms over 270 shapes; median 3.0 -> 0.1 ms; >1 ms slower: 4, >1 ms faster: 202
+   worst +1.2 ms ('all', 'starred', 'excl_manual', 'all', True): 0.5 -> 1.8
+   worst +1.2 ms ('all', 'starred', 'excl_auto', 'all', True): 0.0 -> 1.3
+   worst +1.3 ms ('all', 'starred', 'all', 'all', True): 0.6 -> 1.9
+list ('all', 'all', 'excl_auto', 'all', False): 26.7 -> 3.1 ms
+list ('all', 'all', 'all', 'all', False): 11.0 -> 2.6 ms
+list ('unread', 'all', 'excl_auto', 'all', False): 3.3 -> 3.6 ms
+count ('all', 'all', 'only_auto', 'all', False): 32.3 -> 1.5 ms
+count ('all', 'all', 'only_manual', 'all', False): 32.3 -> 0.8 ms
+count ('unread', 'all', 'only_auto', 'all', False): 3.0 -> 0.2 ms
+count ('read', 'all', 'only_auto', 'all', False): 32.7 -> 1.4 ms
+feed summaries: 32.9 -> 1.7 ms
+##### 250k
+[list] total 19900 -> 14768 ms over 270 shapes; median 20.8 -> 20.6 ms; >1 ms slower: 14, >1 ms faster: 89
+   worst +3.9 ms ('all', 'all', 'only_manual', 'all', True): 194.3 -> 198.2
+   worst +4.3 ms ('read', 'unstarred', 'all', 'feed', True): 204.2 -> 208.5
+   worst +25.6 ms ('read', 'starred', 'all', 'feed', True): 176.0 -> 201.7
+[count] total 23997 -> 3152 ms over 270 shapes; median 21.6 -> 0.8 ms; >1 ms slower: 8, >1 ms faster: 216
+   worst +5.4 ms ('all', 'starred', 'only_auto', 'all', True): 4.1 -> 9.6
+   worst +5.5 ms ('all', 'starred', 'all', 'all', True): 4.0 -> 9.6
+   worst +5.9 ms ('all', 'starred', 'excl_manual', 'all', True): 4.1 -> 10.0
+list ('all', 'all', 'excl_auto', 'all', False): 34.6 -> 3.2 ms
+list ('all', 'all', 'all', 'all', False): 17.2 -> 3.1 ms
+list ('unread', 'all', 'excl_auto', 'all', False): 18.6 -> 19.6 ms
+count ('all', 'all', 'only_auto', 'all', False): 195.1 -> 8.0 ms
+count ('all', 'all', 'only_manual', 'all', False): 193.4 -> 4.5 ms
+count ('unread', 'all', 'only_auto', 'all', False): 21.2 -> 0.8 ms
+count ('read', 'all', 'only_auto', 'all', False): 197.4 -> 7.6 ms
+feed summaries: 199.4 -> 8.2 ms
