@@ -182,14 +182,18 @@ Reader 的同种标记写入未完成时，该按钮禁用并显示 `aria-busy="
 - 恢复默认主题的预览
 - 上传 WebDAV 配置
 - 下载 WebDAV 配置
+- 记住 WebDAV 端点并启用自动同步；停用自动同步（删除保存的凭据）
+- 显示／隐藏 WebDAV 密码
 
 列表密度选择已移除：界面使用原默认间距，旧 `list_density` 仅为 0.2.x API/配置兼容字段，UI 不编辑、不预览、不提交该字段。旧标签页草稿恢复时丢弃该项，保留其他逐字段编辑；0.3.x 删除参数，见[退役计划](../maintenance-backlog.md#03x-移除旧列表密度参数)。
 
 设置页采用“本页预览 → 显式保存”的统一模型。主题卡片 `apply-theme-preset`、`apply-custom-css`、导入 CSS 和 `clear-custom-css` 都只修改草稿及本页预览，不写入资料库，也不顺带保存其他字段。浅色／深色与阅读字号的草稿修改可即时预览；CSS 文本输入本身不注入样式，须点击“预览当前 CSS”或显式保存。预览前校验 CSS，失败保留当前预览。
 
-内置主题入口合并为默认主题及四个预设的卡片；`aria-pressed` 与 `theme-card[data-state="active|inactive"]` 表示草稿选择，可访问名称包含可见按钮文字及主题名。CSS 编辑和文件操作位于可展开的 `theme-advanced`。旧 `apply-selected-theme`、`remove-theme-preset`、`preset-theme-select`、`theme-preset-selector` 与 `theme-preset-quick-actions` 已退役；恢复默认统一使用 `clear-custom-css`，不再为每个预设提供移除按钮。
+内置主题入口为默认主题与 Amethyst Glass 两张卡片（2026-11-02 收敛为两套完整主题）；`aria-pressed` 与 `theme-card[data-state="active|inactive"]` 表示草稿选择，可访问名称包含可见按钮文字及主题名。CSS 编辑和文件操作位于可展开的 `theme-advanced`。旧 `apply-selected-theme`、`remove-theme-preset`、`preset-theme-select`、`theme-preset-selector` 与 `theme-preset-quick-actions` 已退役；恢复默认统一使用 `clear-custom-css`，不再为每个预设提供移除按钮。
 
-`save-settings` 是上述草稿的统一保存入口，位于 `settings-save-region`，与未保存／保存中状态、结果 live region 和离页提示相邻。该区域的 `data-state` 为 `clean | dirty | pending`；结果的成功／失败色调仍由 `StatusBanner` 表达。保存共用同步 pending gate，一次只提交点击时已编辑字段的补丁；期间的新编辑继续留在草稿中，完成提示明确其尚未保存。失败保留草稿及当前预览。WebDAV 端点和远端路径仍是会话字段，不由这个按钮写入配置；上传／下载沿用独立命令。
+`save-settings` 是上述草稿的统一保存入口，位于 `settings-save-region`，与未保存／保存中状态、结果 live region 和离页提示相邻。该区域的 `data-state` 为 `clean | dirty | pending`；结果的成功／失败色调仍由 `StatusBanner` 表达。保存共用同步 pending gate，一次只提交点击时已编辑字段的补丁；期间的新编辑继续留在草稿中，完成提示明确其尚未保存。失败保留草稿及当前预览。WebDAV 的端点、用户名和密码不由这个按钮写入配置；上传／下载、记住／停用自动同步都是独立命令。
+
+WebDAV 卡片只接受一种填法：Endpoint 只填文件夹地址（带凭据即拒绝，提示改填两栏），用户名、密码分开填写且不需转义；配置固定为该文件夹里的 `rss-reader.json`，不再有远端路径字段。未记住时这三项只在本页会话中；`save-webdav-sync` 把它们交给后端保存为本机档案（Web 为服务器），之后卡片改为只读的“已记住 端点”、最近一次同步结果（需要处理时 `data-state="invalid"`）和 `clear-webdav-sync`，上传／下载改用保存的端点，并携带页面看到的端点与路径，后端发现档案已换成别的端点时以冲突拒绝。档案无法读取时卡片说明原因并只提供停用。档案的读写按请求序号只采纳最新一次，保存／停用一次只处理一个；读到同步进行中（`syncing`）时每 2 秒再读一次，保存设置后也读一次。`toggle-password-visibility` 只切换本页显示（`type` 在 `password` / `text` 间切换，`aria-pressed` 同步），不保存。自动同步的规则与触发见 [WebDAV 自动同步](./webdav-auto-sync.md)；原生 GUI 启动同步下载了配置或需要处理时由外壳提示一次，正式 Web 的启动属于服务器，页面加载不提示。
 
 预览与实际已存设置分离，不增加资料库写入版本。普通页内导航离开设置时丢弃该页草稿及预览，恢复实际已存外观；旧页面的迟到预览或清理不能覆盖新页面。正式 Web 的版本更新／重新登录恢复流程仍按既有规则暂存草稿，返回设置后待用户保存，不把该恢复流程改成普通导航丢弃。
 
@@ -239,8 +243,8 @@ Reader 的同种标记写入未完成时，该按钮禁用并显示 `aria-busy="
 - `rssr-cli import-config <file>`（读取当前配置指纹后立即替换；界面的导入则携带订阅页快照的指纹，配置在载入后被改过时拒绝并重新载入）
 - `rssr-cli export-opml [--output <path>]`
 - `rssr-cli import-opml <file>`
-- `rssr-cli push-webdav <endpoint> <remote-path>`
-- `rssr-cli pull-webdav <endpoint> <remote-path>`
+- `rssr-cli push-webdav <endpoint> [remote-path]`（`remote-path` 默认 `rss-reader.json`，与界面相同）
+- `rssr-cli pull-webdav <endpoint> [remote-path]`
 
 ### 设置相关
 
@@ -319,6 +323,9 @@ Reader 的同种标记写入未完成时，该按钮禁用并显示 `aria-busy="
 - `data-action="save-settings"`
 - `data-action="push-webdav"`
 - `data-action="pull-webdav"`
+- `data-action="save-webdav-sync"`
+- `data-action="clear-webdav-sync"`
+- `data-action="toggle-password-visibility"`
 - `data-action="open-original"`：原文外部打开入口（无 URL 时不渲染）
 - `data-action="mark-read"`
 - `data-action="toggle-starred"`
@@ -438,7 +445,10 @@ Reader 的同种标记写入未完成时，该按钮禁用并显示 `aria-busy="
 - `data-field="reader-font-scale"`
 - `data-field="custom-css"`
 - `data-field="webdav-endpoint"`
-- `data-field="webdav-remote-path"`
+- `data-field="webdav-username"`
+- `data-field="webdav-password"`
+- `data-field="webdav-saved-endpoint"`、`data-field="webdav-sync-status"`（已记住时）
+- `data-field="webdav-remote-path"`（2026-11-13 退役）
 
 ---
 

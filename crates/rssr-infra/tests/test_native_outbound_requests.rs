@@ -305,3 +305,65 @@ async fn webdav_download_keeps_four_mib_limit_and_not_found_semantics() {
     assert!(sync("oversize").download_text().await.is_err());
     assert_eq!(sync("missing").download_text().await.unwrap(), None);
 }
+
+/// A conditional upload sends its precondition and reports a `412` as refused; a download
+/// gives the strong entity tag the server sent (automatic synchronization's lost-update guard).
+#[tokio::test]
+async fn webdav_conditional_upload_sends_its_precondition_and_reports_a_refusal() {
+    use reqwest::header::{IF_MATCH, IF_NONE_MATCH};
+
+    let server = Server::start(|request| match request.method.as_str() {
+        "GET" => Response::new(200, "Content-Type: application/json\r\nETag: \"v1\"\r\n", CONFIG),
+        _ if request.header("if-match") == Some("\"v1\"") => Response::new(204, "", []),
+        _ => Response::new(412, "", []),
+    })
+    .await;
+    let sync = WebDavConfigSync::new(server.url.join("dav/").unwrap().as_str(), "c.json").unwrap();
+    let (text, etag) = sync.download_text_with_etag().await.unwrap().expect("a document");
+    assert_eq!((text.as_str(), etag.as_deref()), (CONFIG, Some("\"v1\"")));
+
+    assert!(sync.upload_text_if(CONFIG, Some((IF_MATCH, "\"v1\""))).await.unwrap());
+    assert!(!sync.upload_text_if(CONFIG, Some((IF_MATCH, "\"v0\""))).await.unwrap());
+    assert!(!sync.upload_text_if(CONFIG, Some((IF_NONE_MATCH, "*"))).await.unwrap());
+    let error = sync.upload_text(CONFIG).await.unwrap_err();
+    assert!(format!("{error:#}").contains("412"), "{error:#}");
+
+    let requests = server.requests();
+    for request in &requests {
+        assert_eq!(request.header("accept-encoding"), Some("identity"), "every request");
+    }
+    assert_eq!(requests[1].header("if-match"), Some("\"v1\""));
+    assert_eq!(requests[2].header("if-match"), Some("\"v0\""));
+    assert_eq!(requests[3].header("if-none-match"), Some("*"));
+    assert_eq!(requests[4].header("if-match"), None, "an unconditional upload sends none");
+}
+
+/// The client asks for the identity encoding and reads what a server that honours it sends;
+/// without the header a server may compress, which the client (without decompression) could
+/// not read (re-review N1).
+#[tokio::test]
+async fn webdav_asks_for_the_identity_encoding() {
+    let server = Server::start(|request| {
+        if request.header("accept-encoding") == Some("identity") {
+            Response::new(200, "Content-Type: application/json\r\n", CONFIG)
+        } else {
+            let gzip = b"\x1f\x8b\x08\x00not really gzip".to_vec();
+            Response::new(200, "Content-Type: application/json\r\nContent-Encoding: gzip\r\n", gzip)
+        }
+    })
+    .await;
+    let sync = WebDavConfigSync::new(server.url.join("dav/").unwrap().as_str(), "c.json").unwrap();
+    assert_eq!(sync.download_text().await.unwrap().as_deref(), Some(CONFIG));
+}
+
+/// A weak entity tag cannot serve `If-Match` (strong comparison): it is not used.
+#[tokio::test]
+async fn webdav_weak_entity_tags_are_not_used() {
+    let server = Server::start(|_| {
+        Response::new(200, "Content-Type: application/json\r\nETag: W/\"v1\"\r\n", CONFIG)
+    })
+    .await;
+    let sync = WebDavConfigSync::new(server.url.join("dav/").unwrap().as_str(), "c.json").unwrap();
+    let (_, etag) = sync.download_text_with_etag().await.unwrap().expect("a document");
+    assert_eq!(etag, None);
+}

@@ -789,8 +789,10 @@ define('restored-draft-then-sign-in', {}, async (s) => {
   await navigate(main.client, `${base}/settings`);
   await selectorExists(main.client, SETTINGS);
   await textShown(main.client, RESTORED);
-  // The session ends right then: the next read is refused and the page goes to sign in.
+  // The session ends right then: the next read is refused and the page goes to sign in. The
+  // settings page's re-read covers the settings and the WebDAV automatic synchronization.
   s.expectConsole({ status: 401, path: '/api/v1/settings' });
+  s.expectConsole({ status: 401, path: '/api/v1/remote-sync' });
   await main.client.send('Network.clearBrowserCookies');
   await triggerFocus(main);
   await waitUntil('the sign-in page', 20000, async () => (await location(main).catch(() => '')) === '/login');

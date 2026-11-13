@@ -48,6 +48,8 @@ pub(crate) struct AppShellState {
     /// must migrate the last selected source, including saves from a page just left.
     /// New page reads wait at this boundary before loading their preference baseline.
     workspace_write_order: Signal<Arc<tokio::sync::Mutex<()>>>,
+    /// The shell waits for the synchronization after the start (once per app).
+    startup_sync_awaited: Signal<bool>,
     owner: ScopeId,
 }
 
@@ -218,6 +220,7 @@ impl AppShellState {
                     match intent {
                         UiIntent::AutoRefreshStarted => {
                             self.settings_read.write().auto_refresh_started();
+                            self.await_startup_sync(theme);
                         }
                         UiIntent::AuthenticatedShellLoaded(snapshot) => {
                             let apply = self
@@ -239,6 +242,32 @@ impl AppShellState {
                     self.reread_settings(theme);
                 }
             });
+        });
+    }
+
+    /// Waits (once) for the WebDAV synchronization the backend runs after its first periodic
+    /// refresh: a download re-reads every page and the settings; it and what needs the user
+    /// are shown as a notice (`docs/design/webdav-auto-sync.md`).
+    fn await_startup_sync(mut self, theme: ThemeController) {
+        if *self.startup_sync_awaited.peek() {
+            return;
+        }
+        self.startup_sync_awaited.set(true);
+        self.spawn_in_shell(async move {
+            let intents = run_ui_command(UiCommand::Shell(ShellCommand::AwaitStartupSync)).await;
+            for intent in intents {
+                let UiIntent::StartupSyncFinished(report) = intent else {
+                    continue;
+                };
+                if matches!(report.outcome, rssr_application::RemoteSyncOutcome::Pulled { .. }) {
+                    self.reread_now();
+                    self.reread_settings(theme);
+                }
+                if let Some((message, tone)) = crate::ui::remote_sync_text::startup_notice(&report)
+                {
+                    self.report_job(message, tone.to_string());
+                }
+            }
         });
     }
 
@@ -305,6 +334,7 @@ pub(crate) fn use_app_shell_state() -> AppShellState {
         settings_read: use_signal(SettingsReadLifecycle::default),
         startup_failure: use_signal(|| None),
         workspace_write_order: use_signal(|| Arc::new(tokio::sync::Mutex::new(()))),
+        startup_sync_awaited: use_signal(|| false),
         owner: current_scope_id(),
     }
 }

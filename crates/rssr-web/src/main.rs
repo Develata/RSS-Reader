@@ -25,7 +25,7 @@ use axum::{
 };
 use clap::{Parser, Subcommand};
 use rssr_infra::{
-    local_backend::{LocalBackend, NativeHost, native_local_backend_with},
+    local_backend::{LocalBackend, NativeHost, native_local_backend_in},
     outbound::ensure_server_policy,
     store::{LibraryStore, StoreOptions, local::open_library_in},
 };
@@ -228,7 +228,7 @@ async fn open_backend(data_dir: &Path) -> Result<(LocalBackend<NativeHost>, Libr
     // Again for the files the open itself created (the umask of `main` covers them too).
     let backend = make_library_private(data_dir).and_then(|()| {
         info!(library = %opened.path.display(), "已打开资料库");
-        native_local_backend_with(opened.store, policy).context("建立后端失败")
+        native_local_backend_in(opened.store, policy, data_dir).context("建立后端失败")
     });
     match backend {
         Ok(backend) => Ok((backend, library)),

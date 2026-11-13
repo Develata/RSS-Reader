@@ -138,6 +138,15 @@
   min-width: 0;
 }
 
+[data-slot="settings-form-grid-item"][data-span="full"] {
+  grid-column: 1 / -1;
+}
+
+/* The last WebDAV synchronization needs the user (choose a direction, a failure, not recorded). */
+[data-field="webdav-sync-status"][data-state="invalid"] {
+  color: var(--status-error-fg);
+}
+
 [data-layout="exchange-card-actions"] {
   margin-top: 12px;
 }

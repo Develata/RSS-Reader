@@ -21,10 +21,20 @@ pub struct WebDavConfigSync {
     credentials: Option<WebDavCredentials>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct WebDavCredentials {
     username: String,
     password: Option<String>,
+}
+
+/// No password, decoded or not (re-review R1).
+impl std::fmt::Debug for WebDavCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebDavCredentials")
+            .field("username", &self.username)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 impl WebDavConfigSync {
@@ -62,6 +72,12 @@ impl WebDavConfigSync {
                 .timeout(WEBDAV_REQUEST_TIMEOUT)
                 .connect_timeout(WEBDAV_CONNECT_TIMEOUT)
                 .referer(false)
+                // A configuration is small; a server (or a proxy such as nginx) that compresses
+                // the answer weakens its entity tag, which then cannot guard an upload. Without
+                // decompression, every request asks for the identity encoding explicitly (no
+                // `Accept-Encoding` would allow any coding, RFC 9110 12.5.3).
+                .no_gzip()
+                .default_headers(identity_encoding())
                 .redirect(policy.redirect(|attempt| {
                     // reqwest 0.12.28 preserves GET/PUT on 301/302/307/308, but
                     // 303 turns PUT into GET. Reject 303 for this shared client.
@@ -115,10 +131,31 @@ impl WebDavConfigSync {
     }
 
     pub async fn upload_text(&self, body: &str) -> Result<()> {
-        let response = self
+        anyhow::ensure!(
+            self.upload_text_if(body, None).await?,
+            "WebDAV 上传失败: {}",
+            StatusCode::PRECONDITION_FAILED
+        );
+        Ok(())
+    }
+
+    /// Uploads `body` only while the remote matches `precondition` (a header and its value:
+    /// `If-Match` with an entity tag, or `If-None-Match: *`); `false` when the server answered
+    /// `412`, so nothing was stored.
+    pub async fn upload_text_if(
+        &self,
+        body: &str,
+        precondition: Option<(header::HeaderName, &str)>,
+    ) -> Result<bool> {
+        let mut request = self
             .authenticated(self.client.put(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
-            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some((name, value)) = precondition {
+            let value = header::HeaderValue::from_str(value).context("WebDAV 条件头无效")?;
+            request = request.header(name, value);
+        }
+        let response = request
             .body(body.to_string())
             .send()
             .await
@@ -126,13 +163,21 @@ impl WebDavConfigSync {
             .context("上传配置到 WebDAV 失败")?;
 
         if response.status().is_success() {
-            return Ok(());
+            return Ok(true);
+        }
+        if response.status() == StatusCode::PRECONDITION_FAILED {
+            return Ok(false);
         }
 
         anyhow::bail!("WebDAV 上传失败: {}", unauthorized_hint(response.status()));
     }
 
     pub async fn download_text(&self) -> Result<Option<String>> {
+        Ok(self.download_text_with_etag().await?.map(|(text, _)| text))
+    }
+
+    /// The document and its strong entity tag (`ETag`), when the server sent one.
+    pub async fn download_text_with_etag(&self) -> Result<Option<(String, Option<String>)>> {
         let mut response = self
             .authenticated(self.client.get(self.checked_remote_url()?))
             .header(header::CONNECTION, "close")
@@ -148,6 +193,13 @@ impl WebDavConfigSync {
         if !response.status().is_success() {
             anyhow::bail!("WebDAV 下载失败: {}", unauthorized_hint(response.status()));
         }
+        // A weak tag cannot serve `If-Match`, which compares strongly (RFC 9110, 13.1.1).
+        let etag = response
+            .headers()
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .filter(|tag| tag.starts_with('"'))
+            .map(str::to_owned);
 
         // 边下边累计，不把任意大小的远端响应整个读进内存。
         let mut buffered = Vec::new();
@@ -164,7 +216,8 @@ impl WebDavConfigSync {
             buffered.extend_from_slice(&chunk);
         }
 
-        Ok(Some(String::from_utf8(buffered).context("WebDAV 配置响应不是有效 UTF-8")?))
+        let text = String::from_utf8(buffered).context("WebDAV 配置响应不是有效 UTF-8")?;
+        Ok(Some((text, etag)))
     }
 
     /// The remote URL, checked against the outbound policy before it is requested.
@@ -182,6 +235,13 @@ impl WebDavConfigSync {
             None => request,
         }
     }
+}
+
+/// `Accept-Encoding: identity`: the configuration's bytes as stored.
+fn identity_encoding() -> header::HeaderMap {
+    let mut headers = header::HeaderMap::new();
+    headers.insert(header::ACCEPT_ENCODING, header::HeaderValue::from_static("identity"));
+    headers
 }
 
 fn same_webdav_origin(endpoint: &Url, target: &Url) -> bool {
@@ -211,9 +271,7 @@ fn percent_decode(raw: &str) -> String {
 fn unauthorized_hint(status: StatusCode) -> String {
     match status {
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-            format!(
-                "{status}（该端点需要认证，请在 endpoint 中带上 https://用户名:密码@主机/ 形式的凭据）"
-            )
+            format!("{status}（该端点需要认证，或用户名、密码不对，请检查）")
         }
         other => other.to_string(),
     }
@@ -334,6 +392,29 @@ mod tests {
             sync.remote_url().expect("resolve remote url").as_str(),
             "https://dav.example.com/base/config/state.json"
         );
+    }
+
+    /// Credentials typed apart from the endpoint come back exactly, whatever they hold.
+    #[test]
+    fn credentials_typed_apart_come_back_unchanged() {
+        for (username, password) in
+            [("Develata", "pwh2004@"), ("user@example.com", "p@ss/1?#%41:x 中文"), ("a:b", "")]
+        {
+            let endpoint = rssr_application::endpoint_with_credentials(
+                "https://openlist.example/dav/百度网盘/apps/rssr",
+                username,
+                password,
+            )
+            .unwrap();
+            let sync = WebDavConfigSync::new(endpoint, "r.json").unwrap();
+            let credentials = sync.credentials.as_ref().expect("credentials");
+            assert_eq!(credentials.username, username);
+            assert_eq!(credentials.password.as_deref().unwrap_or(""), password);
+            assert_eq!(
+                sync.endpoint.as_str(),
+                "https://openlist.example/dav/%E7%99%BE%E5%BA%A6%E7%BD%91%E7%9B%98/apps/rssr"
+            );
+        }
     }
 
     #[test]

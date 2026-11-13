@@ -15,7 +15,8 @@ use rssr_api::{
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
     EntryFlagOutcome, FeedsSnapshotOutcome, OpmlImportOutcome, ReaderEntrySnapshot,
-    RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch, StartupTarget,
+    RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteSyncReport, RemoteSyncView,
+    RemoteTarget, SettingsPatch, StartupTarget,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -177,24 +178,36 @@ impl Backend for Scripted {
         self.inner.resolve_startup_target().await
     }
 
-    async fn push_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> Result<RemoteConfigPushOutcome> {
+    async fn push_remote_config(&self, target: &RemoteTarget) -> Result<RemoteConfigPushOutcome> {
         self.enter("push_remote_config")?;
         self.held("push_remote_config").await?;
-        self.inner.push_remote_config(endpoint, remote_path).await
+        self.inner.push_remote_config(target).await
     }
 
-    async fn pull_remote_config(
-        &self,
-        endpoint: &str,
-        remote_path: &str,
-    ) -> Result<RemoteConfigPullOutcome> {
+    async fn pull_remote_config(&self, target: &RemoteTarget) -> Result<RemoteConfigPullOutcome> {
         self.enter("pull_remote_config")?;
         self.held("pull_remote_config").await?;
-        self.inner.pull_remote_config(endpoint, remote_path).await
+        self.inner.pull_remote_config(target).await
+    }
+
+    async fn load_remote_sync(&self) -> Result<RemoteSyncView> {
+        self.enter("load_remote_sync")?;
+        self.inner.load_remote_sync().await
+    }
+
+    async fn save_remote_sync(&self, endpoint: &str, remote_path: &str) -> Result<RemoteSyncView> {
+        self.enter("save_remote_sync")?;
+        self.inner.save_remote_sync(endpoint, remote_path).await
+    }
+
+    async fn clear_remote_sync(&self) -> Result<()> {
+        self.enter("clear_remote_sync")?;
+        self.inner.clear_remote_sync().await
+    }
+
+    async fn startup_remote_sync(&self) -> Result<Option<RemoteSyncReport>> {
+        self.enter("startup_remote_sync")?;
+        self.inner.startup_remote_sync().await
     }
 
     async fn bootstrap_entries(

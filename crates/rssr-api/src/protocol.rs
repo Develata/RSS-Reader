@@ -98,6 +98,8 @@ pub mod routes {
     pub const FEED: &str = "/api/v1/feeds/{feed_id}";
     pub const CONFIG_JSON: &str = "/api/v1/config/json";
     pub const CONFIG_OPML: &str = "/api/v1/config/opml";
+    /// `GET`: the automatic synchronization's view; `PUT`: save the endpoint; `DELETE`: forget it.
+    pub const REMOTE_SYNC: &str = "/api/v1/remote-sync";
     pub const JOB_REFRESH_ALL: &str = "/api/v1/jobs/refresh-all";
     pub const JOB_REFRESH_FEED: &str = "/api/v1/jobs/refresh-feed/{feed_id}";
     pub const JOB_ADD_SUBSCRIPTION: &str = "/api/v1/jobs/add-subscription";
@@ -197,12 +199,11 @@ pub struct AddSubscription {
     pub fallback_site_url: Option<url::Url>,
 }
 
-/// `POST routes::JOB_REMOTE_PUSH` and `routes::JOB_REMOTE_PULL`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RemoteConfig {
-    pub endpoint: String,
-    pub remote_path: String,
-}
+/// `POST routes::JOB_REMOTE_PUSH` and `routes::JOB_REMOTE_PULL`: where to.
+pub type RemoteConfig = rssr_application::RemoteTarget;
+
+/// `PUT routes::REMOTE_SYNC`: the endpoint to keep for automatic synchronization.
+pub type SaveRemoteSync = rssr_application::RemoteEndpoint;
 
 /// A background job: 128 random bits as 32 lowercase hex digits.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

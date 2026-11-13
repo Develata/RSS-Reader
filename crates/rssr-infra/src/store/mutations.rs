@@ -115,6 +115,7 @@ fn replace_config(
         removed_feed_count: removed_feed_ids.len(),
         settings_updated,
         settings: plan.settings.clone(),
+        fingerprint: feeds::config_fingerprint(conn)?,
     })
 }
 

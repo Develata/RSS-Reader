@@ -39,7 +39,7 @@ use rssr_api::{
     Backend, BackendError, ErrorCode,
     protocol::{
         self, AddSubscription, ImportConfigJson, ImportOpml, JobCreated, JobId, JobResult,
-        RemoteConfig, SetRead, SetStarred, routes,
+        RemoteConfig, SaveRemoteSync, SetRead, SetStarred, routes,
     },
 };
 use rssr_application::{EntriesBootstrapInput, MAX_MESSAGE_BYTES, SettingsPatch, truncate_marked};
@@ -173,6 +173,10 @@ pub(crate) fn routes<S: Clone + Send + Sync + 'static>(state: ApiState) -> Route
         .route(routes::FEED, delete(remove_feed).get(feed_edit_details).patch(update_subscription))
         .route(routes::CONFIG_JSON, get(export_config_json).put(import_config_json).layer(imports))
         .route(routes::CONFIG_OPML, get(export_opml).post(import_opml).layer(imports))
+        .route(
+            routes::REMOTE_SYNC,
+            get(load_remote_sync).put(save_remote_sync).delete(clear_remote_sync),
+        )
         .route(routes::JOB_REFRESH_ALL, post(start_refresh_all))
         .route(routes::JOB_REFRESH_FEED, post(start_refresh_feed))
         .route(routes::JOB_ADD_SUBSCRIPTION, post(start_add_subscription))
@@ -657,19 +661,40 @@ async fn start_add_subscription(ctx: Ctx, request: Request) -> Answer {
 }
 
 async fn start_remote_push(ctx: Ctx, request: Request) -> Answer {
-    let RemoteConfig { endpoint, remote_path } = ctx.job_input(request).await?;
+    let target: RemoteConfig = ctx.job_input(request).await?;
     Ok(ctx.start(move |backend| async move {
-        let outcome = backend.push_remote_config(&endpoint, &remote_path).await?;
+        let outcome = backend.push_remote_config(&target).await?;
         Ok(JobResult::RemoteConfigPush(outcome))
     }))
 }
 
 async fn start_remote_pull(ctx: Ctx, request: Request) -> Answer {
-    let RemoteConfig { endpoint, remote_path } = ctx.job_input(request).await?;
+    let target: RemoteConfig = ctx.job_input(request).await?;
     Ok(ctx.start(move |backend| async move {
-        let outcome = backend.pull_remote_config(&endpoint, &remote_path).await?;
+        let outcome = backend.pull_remote_config(&target).await?;
         Ok(JobResult::RemoteConfigPull(outcome))
     }))
+}
+
+async fn load_remote_sync(ctx: Ctx) -> Answer {
+    let slots = ctx.admit()?;
+    Ok(ctx.run(slots, |backend| async move { backend.load_remote_sync().await }).await)
+}
+
+async fn save_remote_sync(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    let SaveRemoteSync { endpoint, remote_path } = ctx.json(request).await?;
+    Ok(ctx
+        .run(slots, move |backend| async move {
+            backend.save_remote_sync(&endpoint, &remote_path).await
+        })
+        .await)
+}
+
+async fn clear_remote_sync(ctx: Ctx, request: Request) -> Answer {
+    let slots = ctx.admit()?;
+    ctx.no_body(request).await?;
+    Ok(ctx.run(slots, |backend| async move { backend.clear_remote_sync().await }).await)
 }
 
 /// A job's status, after waiting up to `wait_ms` (a plain integer, at most

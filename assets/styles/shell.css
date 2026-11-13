@@ -383,6 +383,43 @@
   color: var(--ink);
 }
 
+/* A password field: its show/hide toggle sits inside the input's end (44px hit target). */
+[data-slot="password-field"] {
+  position: relative;
+}
+
+[data-slot="password-field"] > .text-input {
+  padding-right: 52px;
+}
+
+[data-slot="password-field"] > [data-action="toggle-password-visibility"] {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+[data-slot="password-field"] > [data-action="toggle-password-visibility"]:hover,
+[data-slot="password-field"] > [data-action="toggle-password-visibility"][data-state="shown"] {
+  color: var(--ink);
+}
+
+[data-slot="password-field"] > [data-action="toggle-password-visibility"]:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
 .text-area,
 .select-input {
   width: 100%;

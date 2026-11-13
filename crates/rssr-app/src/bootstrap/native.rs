@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rssr_api::Backend;
 pub use rssr_domain::EntryNavigation as ReaderNavigation;
 use rssr_infra::{
-    local_backend::{LocalBackend, NativeHost, native_local_backend},
+    local_backend::{LocalBackend, NativeHost, native_local_backend, native_local_backend_in},
     store::{LibraryStore, local::open_local_library},
 };
 use tokio::sync::OnceCell;
@@ -46,7 +46,8 @@ impl AppServices {
                 if let Some(imported) = &opened.imported {
                     tracing::info!(?imported, "已从 v0.1 数据导入资料库");
                 }
-                Ok(Self::over(opened.store))
+                let data_dir = opened.path.parent().map(std::path::Path::to_path_buf);
+                Self::over_in(opened.store, data_dir.as_deref())
             })
             .await
             .map(Arc::clone)
@@ -56,6 +57,23 @@ impl AppServices {
     /// local library.
     pub(crate) fn over(store: LibraryStore) -> Arc<Self> {
         Arc::new(Self { backend: Arc::new(native_local_backend(store.clone())), store })
+    }
+
+    /// [`Self::over`], keeping the WebDAV synchronization profile in `data_dir` (none: no
+    /// automatic synchronization).
+    fn over_in(
+        store: LibraryStore,
+        data_dir: Option<&std::path::Path>,
+    ) -> anyhow::Result<Arc<Self>> {
+        let Some(data_dir) = data_dir else {
+            return Ok(Self::over(store));
+        };
+        let backend = native_local_backend_in(
+            store.clone(),
+            rssr_infra::outbound::OutboundPolicy::Unrestricted,
+            data_dir,
+        )?;
+        Ok(Arc::new(Self { backend: Arc::new(backend), store }))
     }
 
     pub(crate) fn backend(&self) -> Arc<dyn Backend> {

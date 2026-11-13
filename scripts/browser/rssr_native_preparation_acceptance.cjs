@@ -113,7 +113,6 @@ const action = name => `[data-action="${name}"]`;
 
       await record('download-merges-per-field-and-retains-edit-feedback-' + width, async () => {
         await page.locator(field('webdav-endpoint')).fill(`http://127.0.0.1:${dav.address().port}/`);
-        await page.locator(field('webdav-remote-path')).fill('settings.json');
         await page.locator(action('push-webdav')).click(); await status('配置已上传');
         const before = await settings();
         const target = { ...before, theme: 'dark', refresh_interval_minutes: 90, entries_page_size: 120 };

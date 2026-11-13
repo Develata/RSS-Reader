@@ -26,8 +26,8 @@ use rssr_api::{
 use rssr_application::{
     ConfigImportOutcome, EntriesBootstrapInput, EntriesBootstrapOutcome, EntriesListOutcome,
     EntryFlagOutcome, FeedsSnapshotOutcome, MAX_MESSAGE_BYTES, OpmlImportOutcome,
-    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, SettingsPatch,
-    StartupTarget, TRUNCATION_MARK,
+    ReaderEntrySnapshot, RemoteConfigPullOutcome, RemoteConfigPushOutcome, RemoteEndpoint,
+    RemoteSyncReport, RemoteSyncView, RemoteTarget, SettingsPatch, StartupTarget, TRUNCATION_MARK,
 };
 use rssr_domain::{
     ConfigFingerprint, EntriesWorkspaceState, EntryQuery, MarkReadOutcome, MarkReadPreview,
@@ -269,14 +269,20 @@ async fn every_job_through_the_client_answers_what_the_backend_answers() {
     same(added, direct.add_subscription(&feeds.url("c.xml"), None).await.unwrap(), "add");
 
     let endpoint = feeds.url("dav/");
+    let served = RemoteTarget::Endpoint(RemoteEndpoint {
+        endpoint: endpoint.clone(),
+        remote_path: "served.json".to_owned(),
+    });
+    let own =
+        RemoteTarget::Endpoint(RemoteEndpoint { endpoint, remote_path: "direct.json".to_owned() });
     same(
-        client.push_remote_config(&endpoint, "served.json").await.unwrap(),
-        direct.push_remote_config(&endpoint, "direct.json").await.unwrap(),
+        client.push_remote_config(&served).await.unwrap(),
+        direct.push_remote_config(&own).await.unwrap(),
         "push",
     );
     same(
-        client.pull_remote_config(&endpoint, "served.json").await.unwrap(),
-        direct.pull_remote_config(&endpoint, "direct.json").await.unwrap(),
+        client.pull_remote_config(&served).await.unwrap(),
+        direct.pull_remote_config(&own).await.unwrap(),
         "pull",
     );
 
@@ -388,20 +394,42 @@ impl Backend for Observed {
 
     async fn push_remote_config(
         &self,
-        endpoint: &str,
-        remote_path: &str,
+        target: &RemoteTarget,
     ) -> rssr_api::Result<RemoteConfigPushOutcome> {
         self.note("push_remote_config");
-        self.library.push_remote_config(endpoint, remote_path).await
+        self.library.push_remote_config(target).await
     }
 
     async fn pull_remote_config(
         &self,
-        endpoint: &str,
-        remote_path: &str,
+        target: &RemoteTarget,
     ) -> rssr_api::Result<RemoteConfigPullOutcome> {
         self.note("pull_remote_config");
-        self.library.pull_remote_config(endpoint, remote_path).await
+        self.library.pull_remote_config(target).await
+    }
+
+    async fn load_remote_sync(&self) -> rssr_api::Result<RemoteSyncView> {
+        self.note("load_remote_sync");
+        self.library.load_remote_sync().await
+    }
+
+    async fn save_remote_sync(
+        &self,
+        endpoint: &str,
+        remote_path: &str,
+    ) -> rssr_api::Result<RemoteSyncView> {
+        self.note("save_remote_sync");
+        self.library.save_remote_sync(endpoint, remote_path).await
+    }
+
+    async fn clear_remote_sync(&self) -> rssr_api::Result<()> {
+        self.note("clear_remote_sync");
+        self.library.clear_remote_sync().await
+    }
+
+    async fn startup_remote_sync(&self) -> rssr_api::Result<Option<RemoteSyncReport>> {
+        self.note("startup_remote_sync");
+        self.library.startup_remote_sync().await
     }
 
     async fn bootstrap_entries(
@@ -1265,4 +1293,55 @@ async fn a_wait_given_up_during_a_poll_sends_nothing_more() {
     until("the outstanding poll dropped", || server.abandoned() == 1).await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!((server.count("POST", REFRESH_ALL), server.count("GET", POLL)), (1, 1));
+}
+
+/// Automatic synchronization's endpoint through the client: saved with credentials and read
+/// back without the password, used by an upload to the saved endpoint (whose base the server
+/// keeps), refused for an endpoint the page did not see, and forgotten. The page's start does
+/// not wait for the server's synchronization.
+#[tokio::test]
+async fn the_saved_endpoint_through_the_client() {
+    use rssr_application::SavedRemote;
+
+    let feeds = FeedServer::start().await;
+    let dir = crate::auth::test_support::ScratchDir::new("remote-sync");
+    let served = rssr_infra::local_backend::native_local_backend_in(
+        rssr_infra::store::LibraryStore::open_in_memory().await.unwrap(),
+        rssr_infra::outbound::OutboundPolicy::Unrestricted,
+        dir.path(),
+    )
+    .unwrap();
+    let api = ApiState::with(Arc::new(served), TEST_BUILD, Duration::from_secs(60));
+    let server = Server::start_with(None, api).await;
+    let session = server.session().await;
+    let client = http_backend(&server, Some(&session), TEST_BUILD);
+
+    let view = client.load_remote_sync().await.unwrap();
+    assert!(view.available && view.profile.is_none() && view.problem.is_none());
+
+    let mut endpoint = Url::parse(&feeds.url("dav/")).unwrap();
+    endpoint.set_username("alice").unwrap();
+    endpoint.set_password(Some("s3cret")).unwrap();
+    let view = client.save_remote_sync(endpoint.as_str(), "served.json").await.unwrap();
+    assert!(!serde_json::to_string(&view).unwrap().contains("s3cret"), "{view:?}");
+    let profile = view.profile.expect("saved");
+    assert!(profile.endpoint.contains("alice@"), "{}", profile.endpoint);
+
+    let saved =
+        SavedRemote { endpoint: profile.endpoint.clone(), remote_path: "served.json".into() };
+    let pushed = client.push_remote_config(&RemoteTarget::Saved(saved)).await.unwrap();
+    assert_eq!(pushed.exported_feed_count, 0);
+    let view = client.load_remote_sync().await.unwrap();
+    let profile = view.profile.expect("still saved");
+    assert!(profile.has_base, "the upload is the base");
+    assert!(!serde_json::to_string(&profile).unwrap().contains("s3cret"));
+
+    let elsewhere = SavedRemote { endpoint: profile.endpoint, remote_path: "other.json".into() };
+    let error = client.push_remote_config(&RemoteTarget::Saved(elsewhere)).await.unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+
+    assert_eq!(client.startup_remote_sync().await.unwrap(), None);
+    client.clear_remote_sync().await.unwrap();
+    assert!(client.load_remote_sync().await.unwrap().profile.is_none());
+    assert!(!dir.path().join("remote-sync.json").exists(), "the credentials are gone");
 }

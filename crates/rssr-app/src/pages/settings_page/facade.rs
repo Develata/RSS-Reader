@@ -166,12 +166,28 @@ impl SettingsPageFacade {
         self.sync.set_endpoint(endpoint);
     }
 
-    pub(crate) fn remote_path(&self) -> &str {
-        &self.sync_snapshot.remote_path
+    pub(crate) fn username(&self) -> &str {
+        &self.sync_snapshot.username
     }
 
-    pub(crate) fn set_remote_path(&self, remote_path: String) {
-        self.sync.set_remote_path(remote_path);
+    pub(crate) fn set_username(&self, username: String) {
+        self.sync.set_username(username);
+    }
+
+    pub(crate) fn password(&self) -> &str {
+        &self.sync_snapshot.password
+    }
+
+    pub(crate) fn set_password(&self, password: String) {
+        self.sync.set_password(password);
+    }
+
+    pub(crate) fn is_password_visible(&self) -> bool {
+        self.sync_snapshot.password_visible
+    }
+
+    pub(crate) fn toggle_password_visible(&self) {
+        self.sync.toggle_password_visible();
     }
 
     pub(crate) fn is_remote_pull_pending(&self) -> bool {
@@ -192,6 +208,45 @@ impl SettingsPageFacade {
 
     pub(crate) fn push(&self) {
         self.sync.push();
+    }
+
+    /// Whether this backend can keep an endpoint for automatic synchronization.
+    pub(crate) fn remote_sync_available(&self) -> bool {
+        self.sync_snapshot.remote_sync.as_ref().is_some_and(|view| view.available)
+    }
+
+    /// The saved endpoint (without its password) and the line about the last synchronization.
+    pub(crate) fn saved_remote_sync(&self) -> Option<(String, String)> {
+        let profile = self.sync_snapshot.remote_sync.as_ref()?.profile.as_ref()?;
+        let status = match &profile.last_report {
+            Some(report) => crate::ui::remote_sync_text::report_text(report),
+            None if profile.has_base => String::new(),
+            None => "尚未同步：请先手动上传或下载一次，之后会自动同步。".to_string(),
+        };
+        Some((profile.endpoint.clone(), status))
+    }
+
+    /// Whether the last synchronization needs the user (choose a direction, or it failed).
+    pub(crate) fn remote_sync_needs_attention(&self) -> bool {
+        self.sync_snapshot
+            .remote_sync
+            .as_ref()
+            .and_then(|view| view.profile.as_ref())
+            .and_then(|profile| profile.last_report.as_ref())
+            .is_some_and(crate::ui::remote_sync_text::report_needs_attention)
+    }
+
+    /// Why the saved profile cannot be read, if it cannot.
+    pub(crate) fn remote_sync_problem(&self) -> Option<String> {
+        self.sync_snapshot.remote_sync.as_ref()?.problem.clone()
+    }
+
+    pub(crate) fn save_remote_sync(&self) {
+        self.sync.save_remote_sync();
+    }
+
+    pub(crate) fn clear_remote_sync(&self) {
+        self.sync.clear_remote_sync();
     }
 
     pub(crate) fn pull(&self) {
