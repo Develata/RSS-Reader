@@ -5,8 +5,8 @@
 - 分支：`claude/webdav-auto-sync`
 - 当前 HEAD：见分支
 - 相关 commit：`fcd356fa`（实现）、`b39e3729`（交接）、`dfebd297`（首轮评审修复）、复审修复见下一提交
-- 相关 tag / release：N/A
-- 状态：`validated`（自动化验证；真实网盘与界面手工验收未做）
+- 相关 tag / release：`v0.2.4`
+- 状态：`released`（PR [#74](https://github.com/Develata/RSS-Reader/pull/74)，随 v0.2.4 发布；真实网盘只在 OpenList 上验收，界面手工验收未做）
 
 ## 工作摘要
 

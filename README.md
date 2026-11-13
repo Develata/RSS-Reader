@@ -15,9 +15,9 @@ _2026-10-31 main 的 Web 版实际界面；订阅与文章使用演示数据。_
 
 RSS-Reader 是用 Rust 和 Dioxus 构建的本地优先 RSS 阅读器。它把订阅、刷新、筛选和阅读放在一条简短的使用路径上；桌面、Web、Android 和 CLI 复用同一套核心能力。桌面与 Android 的资料库留在设备上；自托管 Web 的资料库保存在服务器上，各浏览器登录后访问同一份数据。独立资料库之间可以通过 JSON、OPML 或可选的 WebDAV 交换配置。
 
-当前发布版本为 [v0.2.3](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.3)。Web 提供四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。从 v0.1.x 升级前，请先阅读下方的数据迁移说明，尤其是 macOS 的旧数据目录。
+当前发布版本为 [v0.2.4](https://github.com/Develata/RSS-Reader/releases/tag/v0.2.4)。Web 提供四个平台的 `rssr-web-<平台>` 服务与页面合包，见 [部署说明](./docs/deployment/web.md#服务与页面发布包)。从 v0.1.x 升级前，请先阅读下方的数据迁移说明，尤其是 macOS 的旧数据目录。
 
-v0.2.3 没有资料库 schema 变化，主要修正 macOS 应用包签名与名称，并支持用 cargo binstall 安装 CLI，见[发布说明](./docs/releases/v0.2.3.md)。v0.2.2 起内置主题收拢为默认与 Amethyst Glass 两套，已保存的旧主题 CSS 继续生效。从 v0.2.0 升级前请关闭程序并备份资料库。v0.2.1 增加手动归档字段，升级后的库不能直接由 v0.2.0 打开；回退时必须恢复升级前备份，不能只换回旧程序。
+v0.2.4 增加 WebDAV 自动同步（记住端点后，启动时与修改配置后自动上传或下载配置包），恢复 macOS 的系统编辑快捷键，并加快大资料库的文章列表与计数，见[发布说明](./docs/releases/v0.2.4.md)。升级前请关闭程序并备份资料库。v0.2.4 新增资料库迁移 0003（只加索引），升级后的库不能再由 v0.2.3 及更早版本打开；v0.2.1 增加的手动归档字段同样使 v0.2.0 无法打开升级后的库。回退时必须恢复升级前备份，不能只换回旧程序。v0.2.2 起内置主题收拢为默认与 Amethyst Glass 两套，已保存的旧主题 CSS 继续生效。
 
 Android 暂无应用内完整资料库备份和回退流程；配置导出不包含文章、已读和收藏状态，卸载会清除本地数据，不要用卸载重装来回退。首次启动检测到可迁移的旧目录时会复制、校验并保留旧目录；正式旧 Android 数据搬迁仍需专项验收。
 
@@ -38,7 +38,7 @@ Android 暂无应用内完整资料库备份和回退流程；配置导出不包
 2. 打开应用，点顶栏的订阅图标（RSS 波纹）进入订阅页，输入 RSS / Atom 地址或网站首页并添加订阅。
 3. 点击 **R**（Read / Home）查看文章；已在首页时再次点击 **R** 可手动刷新全部订阅。
 
-上表附件均在 `v0.2.3` 发布；另有四平台 CLI 包和 Android AAB，共 14 个公开附件。本版下载核对了 macOS 两种架构的应用与 CLI 附件（哈希、整包签名、名称与版本），Apple Silicon 包在隔离的 HOME 下实际启动；其他平台正式包未上手重验，Linux 附件核对是 v0.2.2 的结果，Android 证书、模拟器覆盖安装等核验仍是 v0.2.1 的结果，见[本版发布记录](./docs/handoffs/2026-11-12-v0.2.3-release.md)、[v0.2.2 发布记录](./docs/handoffs/2026-11-02-v0.2.2-release.md)与 [v0.2.1 发布核验](./docs/handoffs/2026-10-28-v0.2.1-release.md)。macOS 实机交互、系统输入法及其他设备覆盖仍有边界。Windows 程序未做 Authenticode 签名，macOS 应用未用 Developer ID 签名或公证。
+上表附件均在 `v0.2.4` 发布；另有四平台 CLI 包和 Android AAB，共 14 个公开附件。本版下载核对了 macOS 两种架构的应用与 CLI、Linux deb 与 CLI 的哈希，macOS 应用包的整包签名、名称与版本，Apple Silicon 包在隔离的 HOME 下实际启动，并用 v0.2.3 与 v0.2.4 的 CLI 实测了资料库升级与回退拒绝；Windows、Android 正式包未上手重验，Android 证书、模拟器覆盖安装等核验仍是 v0.2.1 的结果，见[本版发布记录](./docs/handoffs/2026-11-13-v0.2.4-release.md)与 [v0.2.1 发布核验](./docs/handoffs/2026-10-28-v0.2.1-release.md)。macOS 实机交互、系统输入法及其他设备覆盖仍有边界。Windows 程序未做 Authenticode 签名，macOS 应用未用 Developer ID 签名或公证。
 
 CLI 也可以用 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) 从最新 Release 安装（`rssr-cli` 未发布到 crates.io，所以要带 `--git`），没有对应附件的平台会退回源码编译：
 
@@ -48,9 +48,9 @@ cargo binstall --git https://github.com/Develata/RSS-Reader rssr-cli
 
 这样装的 CLI 在 `~/.cargo/bin`。macOS 上它与桌面版共用 `~/Library/Application Support/RSS-Reader/`；Windows 和 Linux 默认把数据放在可执行文件旁（即 `~/.cargo/bin/RSS-Reader/`），要操作桌面版的资料库请用 `--data-dir` 或 `RSSR_DATA_DIR` 指向它。
 
-macOS：v0.2.3 起应用包带整包 ad-hoc 签名，菜单栏名称为 `RSS-Reader`。它没有 Developer ID 签名与公证，从浏览器下载后首次打开若提示无法验证开发者，到“系统设置 → 隐私与安全性”选择“仍要打开”（这条界面路径尚未实测）。v0.2.2 的包缺少整包签名，从浏览器下载后会被判为“已损坏”；仍在用时可运行 `xattr -dr com.apple.quarantine /Applications/RSS-Reader.app`（按实际位置改路径）去掉下载标记，或换成 v0.2.3。
+macOS：v0.2.3 起应用包带整包 ad-hoc 签名，菜单栏名称为 `RSS-Reader`。它没有 Developer ID 签名与公证，从浏览器下载后首次打开若提示无法验证开发者，到“系统设置 → 隐私与安全性”选择“仍要打开”（这条界面路径尚未实测）。v0.2.2 的包缺少整包签名，从浏览器下载后会被判为“已损坏”；仍在用时可运行 `xattr -dr com.apple.quarantine /Applications/RSS-Reader.app`（按实际位置改路径）去掉下载标记，或换成新版。v0.2.4 起桌面端带系统菜单，Cmd+C / V / X / Z / A 等编辑快捷键和 Cmd+Q / W / M / H 可用；更早的版本在 macOS 上这些键不起作用。
 
-**Linux 安装包：** `v0.2.3` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
+**Linux 安装包：** `v0.2.4` 发布流水线在 Ubuntu 24.04 安装包后，以普通用户在 Xvfb 下两次启动，验证中文与空格路径中的单个 `library.sqlite3` 创建、完整性及数据复用。包的最低库版本来自 Ubuntu 24.04 构建环境；其它发行版应先核对 `.deb` 的 `Depends`，不能据此推定旧版发行版兼容。
 
 ## 日常使用
 

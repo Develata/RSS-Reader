@@ -12,7 +12,7 @@
 
 | 范围 | 当前事实 | 证据与边界 |
 | --- | --- | --- |
-| 已发布版本 | v0.2.3（2026-11-12），tag 固定在 `20521b8f` | [发布记录](./handoffs/2026-11-12-v0.2.3-release.md)：14 个附件；macOS 两种架构的应用与 CLI 附件哈希、整包签名、名称与版本已核对，GHCR `v0.2.3` 与 `latest` 摘要一致；Windows、Android、Linux 正式包本版未上手重验。Linux 附件核对见 [v0.2.2 发布记录](./handoffs/2026-11-02-v0.2.2-release.md)，此前平台验收见 [v0.2.1 发布记录](./handoffs/2026-10-28-v0.2.1-release.md) |
+| 已发布版本 | v0.2.4（2026-11-13），tag 固定在 `87ce46c6` | [发布记录](./handoffs/2026-11-13-v0.2.4-release.md)：14 个附件；macOS 应用与 CLI、Linux deb 与 CLI 附件哈希已核对，macOS 整包签名、名称与版本已核对，资料库升级与回退拒绝已用两版 CLI 实测，GHCR `v0.2.4` 与 `latest` 摘要一致；Windows、Android 正式包本版未上手重验，此前平台验收见 [v0.2.1 发布记录](./handoffs/2026-10-28-v0.2.1-release.md) |
 | main 的整合基线 | `2571f56a`，已合并 Settings 规则边界 PR #60；含此前 PR #57 修复与 PR #59 媒体更新 | PR 与新 main CI 均 36/36；main 正式 Web 26 个短场景、容器 9 项、Linux 包 6 项及 Pages 均通过，长场景和宿主边界见[整合回执](./handoffs/2026-10-31-settings-review-merge.md) |
 | 当前接续工作树 | E 盘既有工作树已切回 main 并快进；后续提交仅更新整合记录 | 普通 Rust、装配与实际 Windows 结果见[实现交接](./handoffs/2026-10-31-settings-rule-boundary.md)，本轮正式 Web 补验与合并核对见[复审记录](./handoffs/2026-10-31-settings-review-merge.md) |
 
