@@ -6,7 +6,7 @@
 - 当前 HEAD：见分支
 - 相关 commit：`b011acb1`（实现）及其后的评审修正提交
 - 相关 tag / release：N/A（未发布）
-- 状态：`validated`（本地；未推送、未建 PR）
+- 状态：`validated`（PR [#73](https://github.com/Develata/RSS-Reader/pull/73)，CI 通过，未合并）
 
 ## 工作摘要
 
@@ -52,7 +52,8 @@
 ### 手工验收
 
 - 真实界面打开大资料库：未执行（没有用户规模的真实库）
-- wasm 契约 harness 与 Pages 页面验收：本地未执行（缺 wasm-bindgen-cli 0.2.128、LLVM 与 Chrome for Testing），以 PR 的 CI 为准
+- wasm 契约 harness：本地未执行（缺 wasm-bindgen-cli 0.2.128、LLVM 与 Chrome for Testing）；PR #73 的 CI（run 43255358963，head `07480cea`）`wasm-browser-contract` 通过，`test_library_entry_state_and_search` 9 项在 Pages 的 sqlite-wasm 上通过，含 `every_filter_combination_lists_and_counts_exactly_its_entries`。同一 run 16 项检查通过、`deploy` 跳过
+- Pages 页面验收：未执行
 - Linux / Windows 上的测试：未执行（未改执行器或文件层）
 
 ## 结果

@@ -112,5 +112,5 @@
 - **范围外，仍然存在**：
   - 单订阅的“已读”列表走全局未读索引，25 万篇约 177 ms，两版相同。
   - 标题搜索是 `instr` 全扫。
-- **Pages**：sqlite-wasm 上的迁移与结果，由浏览器 harness 里的 `test_library_entry_state_and_search` 覆盖，其中包括全组合测试。本地没有运行这个 harness，以 CI 为准。
+- **Pages**：sqlite-wasm 上的迁移与结果，由浏览器 harness 里的 `test_library_entry_state_and_search` 覆盖，其中包括全组合测试。本地没有运行这个 harness；PR #73 的 CI（run 43255358963）中该文件 9 项在浏览器里全部通过，含全组合测试。sqlite-wasm 上仍未计时、未核对计划。
 - **未测**：真实提交和 WAL 下的写入等待、并发前台写入，以及真实用户资料库。
